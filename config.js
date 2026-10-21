@@ -1,1 +1,3 @@
 window.ATIC_CONFIG = { url: "https://qyzsxkuaxxomeasrjnby.supabase.co", key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5enN4a3VheHhvbWVhc3JqbmJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NjEwNzIsImV4cCI6MjEwODEzNzA3Mn0.HnNgqfWxZ-pRXIPA-962oCJrZwKBxhUZWvVnlyHtMxw" };
+
+document.head.insertAdjacentHTML("beforeend", "<style>[hidden]{display:none !important}</style>");
