@@ -1,0 +1,1595 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Line Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+
+.lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
+.lp .beta{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--on-accent);background:var(--plan);border-radius:4px;padding:2px 6px}
+.lp h2{font-size:17px;font-weight:700;margin:0;letter-spacing:.02em;text-wrap:balance}
+.lp h3{font-size:14px;font-weight:700;margin:0 0 6px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lp .ctrls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-left:auto}
+.lp label.l{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lp input,.lp select,.lp button,.lp textarea{font-family:var(--display);font-size:15px;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;min-width:0}
+.lp input[type=number]{font-family:var(--mono);font-size:14px}
+.lp textarea{width:100%;resize:vertical;min-height:54px}
+.lp button{cursor:pointer}
+.lp button:hover,.lp select:hover,.lp input:hover{border-color:var(--muted)}
+.lp :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lp button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
+.lp button.primary:disabled{opacity:.5;cursor:not-allowed}
+.lp button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}
+.lp .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.lp .seg button{border:0;border-radius:0;border-right:1px solid var(--line);padding:5px 9px;font-size:13.5px}
+.lp .seg button:last-child{border-right:0}
+.lp .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 9px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.lp .chip i{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--run)}
+.lp .chip.warn i{background:var(--plan)} .lp .chip.off i{background:var(--idle)}
+.lp .note{font-size:12.5px;color:var(--muted)}
+.lp .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.lp .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.lp .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.lp .card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.lp .card-h .sub{font-size:13px;color:var(--muted)}
+.lp .inputs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 10px}
+.lp .inputs .f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.lp .inputs .f.w2{grid-column:span 2}
+.lp .inputs .f select,.lp .inputs .f input{width:100%}
+.lp .prevsrc{font-size:12px;color:var(--dim);grid-column:1/-1;margin-top:-2px}
+.lp .result{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;align-items:start}
+.lp .big{display:flex;flex-direction:column;gap:2px}
+.lp .big .v{font-family:var(--mono);font-size:34px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.05}
+.lp .big .v small{font-family:var(--display);font-size:15px;color:var(--muted);font-weight:500;margin-left:4px}
+.lp .big .r{font-size:13px;color:var(--muted)}
+.lp .big .r b{color:var(--fg);font-family:var(--mono);font-weight:500}
+.lp .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lp .stat{background:var(--panel2);border-radius:6px;padding:6px 9px;min-width:0}
+.lp .stat span{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lp .stat strong{font-family:var(--mono);font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
+.lp .chips{display:flex;flex-wrap:wrap;gap:6px}
+.lp .tag2{font-size:12.5px;padding:3px 8px;border-radius:4px;border:1px solid var(--line);background:var(--panel2)}
+.lp .tag2.plan{border-color:var(--plan);color:var(--plan)} .lp .tag2.clean{border-color:var(--clean);color:var(--clean)} .lp .tag2.ok{border-color:var(--run);color:var(--run)} .lp .tag2.bad{border-color:var(--mach);color:var(--mach)}
+.lp .minibar{position:relative;height:14px;background:var(--runbg);border-radius:3px;overflow:hidden}
+.lp .minibar div{position:absolute;top:0;bottom:0}
+.lp .why{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.lp .why b{color:var(--fg);font-weight:600}
+.lp .cardfoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+
+.lp .viewer{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.lp .vbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.lp .clock{font-family:var(--mono);font-size:30px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1}
+.lp #stage{position:relative;height:clamp(300px,52vw,560px);background:#0f1418;overflow:hidden}
+.lp #stage canvas{display:block;width:100%;height:100%}
+.lp .s3d-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--muted);font-size:14px}
+.lp .slabel{position:absolute;transform:translate(-50%,-100%);pointer-events:none;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg);font-weight:700;text-shadow:0 1px 3px #000;white-space:nowrap}
+.lp .slabel.m{color:var(--muted);font-size:11px;font-weight:600}
+.lp .tag{position:absolute;transform:translate(-50%,-100%);pointer-events:none;background:rgba(15,20,24,.92);border:1px solid var(--line);border-left:3px solid var(--mach);padding:5px 8px;border-radius:4px;font-size:12.5px;max-width:220px;line-height:1.25}
+.lp .tag b{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lp .hud{position:absolute;top:10px;display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.lp .hud.l{left:12px} .lp .hud.r{right:12px;align-items:flex-end}
+.lp .hud .h1{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lp .hud .h2{font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums}
+.lp .hud .pill{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:var(--run);color:#062016;align-self:flex-start}
+.lp .hud.r .pill{align-self:flex-end}
+.lp .hint{position:absolute;left:12px;bottom:8px;font-size:12px;color:var(--muted);pointer-events:none}
+.lp .tls{padding:10px 14px 12px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line)}
+.lp .tlrow{display:grid;grid-template-columns:76px minmax(0,1fr) 92px;gap:10px;align-items:center}
+.lp .tlrow .nm{font-size:13px;font-weight:600}
+.lp .tlrow .cnt{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.lp .tl{position:relative;height:26px;background:var(--runbg);border-radius:4px;cursor:pointer;overflow:hidden}
+.lp .tl .b{position:absolute;top:0;bottom:0}
+.lp .tl .ph{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 6px #fff;pointer-events:none}
+.lp .axis{position:relative;height:14px;margin-left:86px;margin-right:102px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.lp .axis span{position:absolute;transform:translateX(-50%)}
+.lp .axis span:first-child{transform:none} .lp .axis span:last-child{transform:translateX(-100%)}
+.lp .legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted)}
+.lp .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.lp .crew{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;padding:10px 14px 14px;border-top:1px solid var(--line)}
+.lp .crew ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.lp .crew li{display:grid;grid-template-columns:10px 92px minmax(0,1fr);gap:7px;align-items:baseline}
+.lp .crew li i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.lp .crew li span{color:var(--muted)}
+
+.lp .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.lp .cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.lp .tw{overflow-x:auto;max-width:100%}
+.lp table{border-collapse:collapse;width:100%;font-size:13.5px}
+.lp th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.lp td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.lp td.n,.lp th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.lp tr.click{cursor:pointer} .lp tr.click:hover{background:var(--panel2)}
+.lp .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:0}
+.lp .form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 12px}
+.lp .form .f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.lp .form .f.w2{grid-column:span 2} .lp .form .f.w4{grid-column:1/-1}
+.lp .form input,.lp .form select{width:100%}
+.lp .form fieldset{grid-column:1/-1;border:1px solid var(--line);border-radius:6px;padding:8px 10px 10px;margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 12px}
+.lp .form legend{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:0 4px}
+.lp .msg{font-size:13.5px;min-height:18px}
+.lp .msg.err{color:var(--bad)} .lp .msg.ok{color:var(--good)}
+.lp .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.lp .tile{background:var(--panel2);border-radius:6px;padding:8px 10px}
+.lp .tile span{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lp .tile strong{font-family:var(--mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.lp .tile em{font-style:normal;font-size:12px;color:var(--muted);display:block}
+.lp .pos{color:var(--plan)} .lp .neg{color:var(--clean)}
+.lp .empty{border:1px dashed var(--line);border-radius:8px;padding:16px;color:var(--muted);font-size:14px;line-height:1.5}
+.lp .prose{max-width:72ch;font-size:15px;line-height:1.55;color:var(--fg)}
+.lp .prose p{margin:0 0 10px}
+.lp .how{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 22px}
+.lp .how section{min-width:0}
+.lp .how p{margin:0 0 8px;font-size:14.5px;line-height:1.5;color:var(--muted);max-width:68ch}
+.lp .how b{color:var(--fg)}
+.lp .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;font-size:13.5px}
+.lp .kv span:nth-child(odd){color:var(--muted)}
+.lp .kv span:nth-child(even){font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.lp details summary{cursor:pointer;color:var(--muted);font-size:13.5px}
+.lp code{font-family:var(--mono);font-size:12.5px;background:var(--panel2);padding:1px 5px;border-radius:3px}
+.lp pre{font-family:var(--mono);font-size:12px;background:var(--panel2);padding:10px;border-radius:6px;overflow-x:auto;max-width:100%;line-height:1.45}
+@media (max-width:980px){
+  .lp .cards,.lp .cols2,.lp .how{grid-template-columns:minmax(0,1fr)}
+  .lp .crew{grid-template-columns:minmax(0,1fr)}
+}
+
+@media (max-width:620px){
+  .lp .inputs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lp .result{grid-template-columns:minmax(0,1fr)}
+  .lp .form,.lp .form fieldset{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lp .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lp .tlrow{grid-template-columns:48px minmax(0,1fr) 70px;gap:6px}
+  .lp .axis{margin-left:54px;margin-right:76px}
+  .lp .ctrls{margin-left:0}
+  .lp .hud .h2{font-size:17px}
+  .lp .clock{font-size:24px}
+  .lp .big .v{font-size:28px}
+}
+
+@media (prefers-reduced-motion:reduce){.lp *{transition:none!important;animation:none!important}}
+
+
+
+.lp .runs{display:flex;flex-direction:column;gap:8px}
+.lp .run{border:1px solid var(--line);border-radius:6px;padding:8px 10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 10px;background:var(--bg)}
+.lp .run .rh{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lp .run .rh b{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lp .run .f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.lp .run .f.w2{grid-column:span 2}
+.lp .run .f input,.lp .run .f select{width:100%}
+.lp .run .hint2{grid-column:1/-1;font-size:12px;color:var(--dim);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.lp .linkbtn{background:transparent;border:0;color:var(--muted);padding:2px 4px;font-size:13px;text-decoration:underline;cursor:pointer}
+.lp .linkbtn:hover{color:var(--fg)}
+.lp .addrun{align-self:flex-start;font-size:14px}
+.lp .toggle{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lp .seg.sm button{padding:3px 10px;font-size:13px}
+.lp .runtbl td,.lp .runtbl th{padding:4px 6px}
+.lp .closing{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.lp .closing b{color:var(--fg);font-weight:600}
+.lp .tl .rb{width:2px;background:rgba(255,255,255,.75);z-index:2}
+
+.lp .arun input,.lp .arun select{width:100%;min-width:64px}
+
+.lp .rep{display:flex;flex-direction:column;gap:16px}
+.lp .rep h2{font-size:20px}
+.lp .rep h3{margin:0 0 8px}
+.lp .rsum{background:var(--panel2);border-radius:8px;padding:12px 14px;font-size:15px;line-height:1.55;max-width:88ch}
+.lp .rsum p{margin:0 0 6px} .lp .rsum p:last-child{margin:0}
+.lp .rgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lp .chart{background:var(--panel2);border-radius:8px;padding:10px 12px;min-width:0}
+.lp .chart h4{margin:0 0 2px;font-size:14px;font-weight:700}
+.lp .chart .sub{font-size:12px;color:var(--muted);margin:0 0 6px}
+.lp .chart svg{display:block;width:100%;height:auto;overflow:visible}
+.lp .chart svg text{fill:var(--muted);font-family:var(--mono);font-size:10.5px}
+.lp .chart svg .v{fill:var(--fg)}
+.lp .key{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-bottom:4px}
+.lp .key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.lp .tip{position:fixed;z-index:50;pointer-events:none;background:#0b1013;border:1px solid #2a353d;border-radius:6px;padding:6px 9px;font-size:12.5px;line-height:1.4;max-width:260px;color:#e6ecef}
+.lp tr.comb td{background:rgba(255,255,255,.03);font-weight:600}
+.lp td .tiny{font-size:11.5px;color:var(--muted);display:block;font-weight:400}
+.lp .biasbar{position:relative;height:10px;background:var(--line);border-radius:2px;min-width:80px}
+.lp .biasbar i{position:absolute;top:0;bottom:0;border-radius:2px}
+.lp .biasbar b{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted)}
+.lp .delta.up{color:var(--good)} .lp .delta.dn{color:var(--bad)} .lp .delta.nt{color:var(--muted)}
+@media (max-width:980px){ .lp .rgrid{grid-template-columns:minmax(0,1fr)} }
+
+@media (max-width:620px){ .lp .run{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
+
+/* Line Planner inside the shared design */
+.lp{--panel:var(--surface);--panel2:var(--surface-2);--panel3:var(--surface-2);--fg:var(--ink);--dim:var(--faint);--run:#2f9e6c;--runbg:var(--green-soft);--mach:#e5484d;--plan:#d9921c;--unpl:#8e6bd6;--clean:#2f8fd0;--idle:#8a978f;--accent:var(--brand);--on-accent:var(--brand-ink);--good:var(--green);--bad:var(--red);--display:var(--f-body);--mono:var(--f-mono);--s1:#3d8fd1;--s2:#c7742f;display:flex;flex-direction:column;gap:16px}
+.lp .wrap{max-width:none;padding:0;gap:16px}
+.lp .card,.lp .panel,.lp .viewer{border-radius:14px;box-shadow:var(--shadow)}
+.lp .card{background:var(--surface)}
+.lp input,.lp select,.lp textarea{border-radius:9px;background:var(--bg)}
+.lp button.primary{border-radius:9px}
+.lp #stage{--fg:#e6ecef;--muted:#8b9aa4;--line:#2a353d;--panel2:#1c252b;color:#e6ecef}
+.lp .beta{font:700 11px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:#1b1306;background:var(--gold);border-radius:6px;padding:2px 7px;vertical-align:4px;margin-left:6px}
+.lp .tabs{display:flex;gap:6px;flex-wrap:wrap;border:0}
+.lp .tabs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 15px;font-size:13.5px;font-weight:500;color:var(--ink)}
+.lp .tabs button[aria-selected=true]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.lp .ctrls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.lp .betalink{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(120deg,var(--brand),#1d6b53);color:var(--brand-ink);border-radius:14px;padding:14px 18px;text-decoration:none}
+.lp .betalink b{font:600 16px var(--f-display)}
+.lp .betalink span{opacity:.85;font-size:13.5px}
+.lp .result{grid-template-columns:minmax(0,1fr)}
+.lp .stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+.lp .stat strong{white-space:nowrap;font-size:15px}
+@media (max-width:620px){.lp .stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.lp .wordbtn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:6px 12px;font-size:14px}
+
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main">
+<nav class="subbar" id="subbar"></nav>
+<div id="lpBoot" class="boot"><div><i></i>Loading the Line Planner…</div></div>
+<div class="lp" id="lpRoot" hidden>
+<div class="top"><div><h1>Line Planner<span class="beta">Beta</span></h1><p class="sub" style="margin:4px 0 0">Daily forecast for Section 1 and Section 2 with stoppages. Enter what really happened and the model learns.</p></div><div class="ctrls">
+    <label class="l" for="date">Plan for</label>
+    <input type="date" id="date">
+    <span class="mono note" id="wday"></span>
+    <span class="chip off" id="saveChip" title="Shared saving status"><i></i><span>Connecting…</span></span>
+    <span class="chip" id="learnChip"><i></i><span>History model</span></span>
+  </div></div>
+
+
+<div class="wrap">
+  <div class="cards" id="cards"></div>
+
+  <section class="viewer" aria-label="Forecast replay">
+    <div class="vbar">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <h2>Forecast replay · both sections</h2>
+        <span class="note" id="replayNote">The forecast day, 07:00 to 17:00</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap">
+        <div class="clock" id="clk">07:00</div>
+        <button id="play" style="width:78px;font-weight:600">Pause</button>
+        <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><span class="note">Speed</span>
+        <div class="seg" id="speed" role="group" aria-label="Replay speed (simulated minutes per second)"><button data-s="1">1</button><button data-s="3">3</button><button data-s="6" class="on">6</button><button data-s="15">15</button></div>
+        <span class="note">min/s</span></span>
+      </div>
+    </div>
+    <div id="stage">
+      <div class="hud l"><span class="h1">Section 1 · boxes</span><span class="h2" id="hb1">0</span><span class="pill" id="hs1">Running</span></div>
+      <div class="hud r"><span class="h1">Section 2 · boxes</span><span class="h2" id="hb2">0</span><span class="pill" id="hs2">Running</span></div>
+      <div class="hint" id="hint">Drag to rotate · scroll or pinch to zoom</div>
+    </div>
+    <div class="tls">
+      <div class="tlrow"><span class="nm">Section 1</span><div class="tl" id="tl1" title="Click to jump to a time"><div class="ph"></div></div><span class="cnt" id="tc1">0 / 0</span></div>
+      <div class="tlrow"><span class="nm">Section 2</span><div class="tl" id="tl2" title="Click to jump to a time"><div class="ph"></div></div><span class="cnt" id="tc2">0 / 0</span></div>
+      <div class="axis" id="axis"></div>
+      <div class="legend">
+        <span><i style="background:var(--runbg);border:1px solid var(--run)"></i>Running</span>
+        <span><i style="background:var(--mach)"></i>Machine stop</span>
+        <span><i style="background:var(--clean)"></i>Cleaning</span>
+        <span><i style="background:var(--plan)"></i>Planned (start, changeover, batch prep)</span>
+        <span><i style="background:var(--unpl)"></i>Unplanned</span>
+        <span><i style="background:var(--idle)"></i>Idle (batches done)</span>
+      </div>
+    </div>
+    <div class="crew">
+      <div><h3>Section 1 crew</h3><ul id="crew1"></ul></div>
+      <div><h3>Section 2 crew</h3><ul id="crew2"></ul></div>
+      <div><h3>Shared</h3><ul id="crew0"></ul></div>
+    </div>
+  </section>
+
+  <a class="betalink" href="model.html"><div><b>How is the model doing?</b><br><span>See it learn day by day in 3D on ATIC BETA 2.0</span></div><span>Open →</span></a>
+  <div class="tabs" role="tablist" aria-label="Planner views">
+    <button role="tab" id="tab-timeline" aria-controls="p-timeline" aria-selected="true">Timeline</button>
+    <button role="tab" id="tab-actual" aria-controls="p-actual" aria-selected="false">Enter actual</button>
+    <button role="tab" id="tab-compare" aria-controls="p-compare" aria-selected="false">Compare</button>
+    <button role="tab" id="tab-how" aria-controls="p-how" aria-selected="false">How the model works</button>
+  </div>
+
+  <section class="panel" role="tabpanel" id="p-timeline" aria-labelledby="tab-timeline">
+    <div class="cols2" id="tlTables"></div>
+  </section>
+
+  <section class="panel" role="tabpanel" id="p-actual" aria-labelledby="tab-actual" hidden>
+    <form id="actForm" class="form" novalidate>
+      <div class="f"><label class="l" for="a_date">Date</label><input type="date" id="a_date" required></div>
+      <div class="f"><label class="l" for="a_sec">Section</label><select id="a_sec"><option value="S1">Section 1</option><option value="S2">Section 2</option></select></div>
+      <div class="f"><label class="l" for="a_pprod">Previous product (yesterday)</label><select id="a_pprod"></select></div>
+      <div class="f"><label class="l" for="a_psize">Previous size</label><select id="a_psize"></select></div>
+      <label class="f w4" style="flex-direction:row;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="a_norun" style="width:18px;height:18px"> <span><b>Line did not run today</b> (batches prepared in the tanks only, no boxes filled)</span></label>
+      <label class="f w4" style="flex-direction:row;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="a_excl" style="width:18px;height:18px"> <span><b>Unusual day: keep it on record, but don't learn from it</b> (e.g. one crew moved between the two lines)</span></label>
+      <fieldset>
+        <legend>Runs today · balances in batches</legend>
+        <div class="tw" style="grid-column:1/-1">
+          <table class="runtbl"><thead><tr><th>Run</th><th>Product</th><th>Size</th><th class="n">Batches prepared</th><th class="n">Opening balance</th><th class="n">Closing balance</th><th class="n">Prep only</th><th class="n">Boxes</th><th class="n">Filling min</th><th class="n">Changeover min</th><th></th></tr></thead><tbody id="a_runs"></tbody></table>
+        </div>
+        <div style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;align-items:center"><button type="button" id="a_addrun">+ Add run</button><span class="note" id="a_tot"></span></div>
+      </fieldset>
+      <div class="f"><label class="l" for="a_work">Working min</label><input type="number" id="a_work" min="0" max="900" step="1" value="600" inputmode="numeric"></div>
+      <div class="f"><label class="l" for="a_fill">Filling min (day)</label><input type="number" id="a_fill" min="0" max="900" step="1" inputmode="numeric" required></div>
+      <div class="f"><label class="l" for="a_stop">Stoppage min</label><input type="number" id="a_stop" min="0" max="900" step="1" inputmode="numeric" placeholder="working − filling"></div>
+      <div class="f"><label class="l" for="a_last">Last box at</label><input type="time" id="a_last" min="07:00" max="17:00"></div>
+      <div class="f"><label class="l" for="a_start">Start-up min</label><input type="number" id="a_start" min="0" max="300" step="1" inputmode="numeric" placeholder="morning start"></div>
+      <div class="f"><label class="l" for="a_prep">Line waited for heating (min, optional)</label><input type="number" id="a_prep" min="0" max="600" step="1" inputmode="numeric" placeholder="leave empty if not known"></div>
+      <div class="f"><label class="l" for="a_rc">Routine cleaning min</label><input type="number" id="a_rc" min="0" max="600" step="1" inputmode="numeric"></div>
+      <div class="f"><label class="l" for="a_deep">Deep cleaning / CIP min</label><input type="number" id="a_deep" min="0" max="600" step="1" inputmode="numeric"></div>
+      <div class="f"></div>
+      <div class="f w2"><label class="l" for="a_reasons">Main stop reasons</label><textarea id="a_reasons" maxlength="600" placeholder="e.g. Cap roller adjustment 45 min, no cartons 10 min"></textarea></div>
+      <div class="f w2"><label class="l" for="a_notes">Notes</label><textarea id="a_notes" maxlength="1000" placeholder="Anything that explains the day"></textarea></div>
+      <div class="f w4" style="flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px">
+        <button type="submit" class="primary" id="a_save">Save actual</button>
+        <label class="wordbtn" for="a_docx">Read daily report (Word)</label><input type="file" id="a_docx" accept=".docx" multiple hidden>
+        <span class="msg" id="a_msg" role="status"></span>
+      </div>
+      <p class="note f w4" id="a_hint" style="margin:0"></p>
+    </form>
+  </section>
+
+  <section class="panel" role="tabpanel" id="p-compare" aria-labelledby="tab-compare" hidden>
+    <div style="display:flex;flex-wrap:wrap;align-items:end;gap:10px 14px;margin-bottom:14px">
+      <div class="seg" id="c_mode" role="group" aria-label="Report period"><button data-m="week" class="on">Week</button><button data-m="day">Day</button></div>
+      <div style="display:flex;flex-direction:column;gap:4px"><label class="l" for="c_end" id="c_endl">Week ending</label><input type="date" id="c_end"></div>
+      <div class="seg" id="c_scope" role="group" aria-label="Sections"><button data-s="all" class="on">Both sections</button><button data-s="S1">Section 1</button><button data-s="S2">Section 2</button></div>
+      <button id="c_last">Latest data</button>
+      <button id="c_csv" hidden>Export weekly report (CSV)</button>
+      <span class="msg" id="c_msg" role="status"></span>
+    </div>
+    <div id="cmp"></div>
+  </section>
+
+  <section class="panel" role="tabpanel" id="p-how" aria-labelledby="tab-how" hidden>
+    <div id="how"></div>
+  </section>
+</div>
+<div class="tip" id="tip" hidden></div>
+</div>
+</main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/word.js"></script>
+<script src="js/line-engine.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+// The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
+
+const ATICCTX = await ATIC.boot({ page: 'line', subs: [{ id: 'timeline', label: 'Plan the day' }, { id: 'actual', label: 'Enter actual' }, { id: 'compare', label: 'Compare & weekly report' }, { id: 'how', label: 'How the model works' }] });
+if (!ATICCTX) await new Promise(() => {});
+let CFG0 = {};
+try { CFG0 = await ATIC.planner.config(); } catch (e) { CFG0 = {}; }
+if (!CFG0.params) { document.getElementById('lpBoot').innerHTML = '<div class="panel noacc"><h2>The model is not in the database yet</h2><p class="muted">Run the upgrade script in Supabase (SQL Editor), then refresh.</p></div>'; await new Promise(() => {}); }
+const P0 = CFG0.params;
+const BT = CFG0.backtest || null;
+document.getElementById('lpBoot').remove(); document.getElementById('lpRoot').hidden = false;
+const SECS = ['S1', 'S2'];
+const SECN = { S1: 'Section 1', S2: 'Section 2' };
+const SCOL = { S1: '#3d8fd1', S2: '#c7742f' };
+const COL = { mach: '#ef5a4c', clean: '#4fb3e8', plan: '#f2b33d', unpl: '#a97ee8', run: '#1f3a2e', idle: '#4a565e' };
+const fmt = n => n == null || !isFinite(n) ? '–' : Math.round(n).toLocaleString('en-US');
+const fmt1 = n => n == null || !isFinite(n) ? '–' : (Math.round(n * 10) / 10).toLocaleString('en-US');
+const pct = (x, d = 0) => x == null || !isFinite(x) ? '–' : (x * 100).toFixed(d) + '%';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = id => document.getElementById(id);
+const hhmm = ENGINE.hhmm;
+const pname = p => P0.products[p] || p;
+const num = x => x == null || x === '' || !isFinite(+x) ? null : +x;
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addDays = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); };
+const todayIso = () => iso(new Date());
+const nice = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+function opts(list, sel) { return list.map(([v, t]) => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(t)}</option>`).join(''); }
+const prodList = () => Object.keys(P0.products).map(p => [p, P0.products[p]]);
+const sizeList = p => (P0.sizes[p] || []).map(s => [s, s]);
+const balTxt = (product, size, batches) => { const b = ENGINE.batchInfo(P0, product, size, batches); return `≈ ${fmt(b.kg)} kg · ${fmt(b.litres)} L · ${fmt(b.boxes)} boxes of ${size}`; };
+
+// ---------------------------------------------------------------- state
+const S = { date: null, plans: [], actuals: [], db: null, user: null, dl: null, canWrite: true, saving: {}, inp: {}, fc: {}, L: null, Lall: null, dbState: 'connecting' };
+function defaultDate() { return todayIso(); } // always open on today
+S.date = defaultDate();
+
+function latestActual(sec, before) {
+  let best = null;
+  for (const a of S.actuals) if (a.sec === sec && (!before || a.date < before) && (!best || a.date > best.date)) best = a;
+  return best;
+}
+function lastKnown(sec, before) {
+  let a = null; for (const x of S.actuals) if (x.sec === sec && !x.noRun && (!before || x.date < before) && (!a || x.date > a.date)) a = x;
+  if (a) { const rr = ENGINE.actualRuns(a); const filled = rr.filter(r => (r.boxes || 0) > 0); const l = (filled.length ? filled : rr)[(filled.length ? filled : rr).length - 1]; return { product: l.product, size: l.size, batches: P0.defaultBatches[l.product], src: `Last logged actual, ${a.date}` }; }
+  const h = P0.lastState[sec];
+  return { product: h.product, size: h.size, batches: h.batches, src: `Last register run, ${h.date}` };
+}
+// closing balance of a product from the latest saved actual of this section before the date
+function savedClosing(sec, before, product) {
+  // newest saved actual of this section (before the date) that mentions this product
+  const list = S.actuals.filter(x => x.sec === sec && (!before || x.date < before)).sort((x, y) => y.date.localeCompare(x.date));
+  if (!list.length) return null;
+  for (const a of list) {
+    const rr = ENGINE.actualRuns(a);
+    for (let i = rr.length - 1; i >= 0; i--) if (rr[i].product === product && rr[i].closing != null) return { value: rr[i].closing, date: a.date };
+    if (rr.some(r => r.product === product)) return null;
+  }
+  return { value: 0, date: list[0].date, none: true };
+}
+function newRun(product, size, batches) { return { product, size, batches: batches ?? '', opening: '', openingAuto: true, startMode: 'after', startTime: '', target: '' }; }
+// what the opening balance of run k defaults to
+function autoOpening(sec, k) {
+  const i = S.inp[sec], r = i.runs[k];
+  const j = i.runs.slice(0, k).map(x => x.product).lastIndexOf(r.product);
+  if (j >= 0) return { chained: true, value: null, src: `Balance left after Run ${j + 1}` };
+  const c = savedClosing(sec, S.date, r.product);
+  if (c && !c.none) return { value: c.value, src: `Closing balance saved on ${c.date}` };
+  return { value: 0, src: 'No saved closing balance for this product, so 0. Enter it if there is product in the tank.' };
+}
+function initInputs() {
+  for (const sec of SECS) {
+    const k = lastKnown(sec, S.date);
+    S.inp[sec] = { runs: [newRun(k.product, k.size, k.batches)], targetOn: false, prevProduct: k.product, prevSize: k.size, prevAuto: true, prevSrc: k.src, fromPlan: null };
+  }
+}
+function refreshAutoPrev() {
+  for (const sec of SECS) {
+    const i = S.inp[sec]; if (!i.prevAuto) continue;
+    const k = lastKnown(sec, S.date); i.prevProduct = k.product; i.prevSize = k.size; i.prevSrc = k.src;
+  }
+}
+function applySavedPlan() {
+  for (const sec of SECS) {
+    const p = S.plans.find(x => x.date === S.date && x.sec === sec);
+    const i = S.inp[sec];
+    if (!p || !p.inputs || i.fromPlan === p.savedAt) continue;
+    const pin = p.inputs;
+    const runs = pin.runs && pin.runs.length ? pin.runs : [{ product: pin.product, size: pin.size, batches: pin.batches, opening: 0, start: null, target: pin.targetBoxes }];
+    i.runs = runs.map(r => ({ product: r.product, size: r.size, batches: r.batches ?? '', opening: r.opening ?? '', openingAuto: r.opening == null,
+      startMode: r.start != null ? 'time' : 'after', startTime: r.start != null ? hhmm(r.start) : '', target: r.target ?? '' }));
+    i.targetOn = !!(pin.targetOn || runs.some(r => r.target > 0));
+    if (pin.prev) { i.prevProduct = pin.prev.product; i.prevSize = pin.prev.size; } else { i.prevProduct = ''; i.prevSize = ''; }
+    i.prevAuto = false; i.prevSrc = 'From the saved forecast'; i.fromPlan = p.savedAt;
+  }
+}
+function engineInput(sec) {
+  const i = S.inp[sec];
+  return {
+    date: S.date, sec, prev: i.prevProduct && i.prevSize ? { product: i.prevProduct, size: i.prevSize } : null,
+    runs: i.runs.map((r, k) => {
+      const ao = autoOpening(sec, k);
+      return { product: r.product, size: r.size, batches: num(r.batches), opening: r.openingAuto ? (ao.chained ? null : ao.value) : (num(r.opening) ?? 0),
+        start: r.startMode === 'time' ? ENGINE.parseHHMM(r.startTime) : null, target: i.targetOn && num(r.target) > 0 ? num(r.target) : null };
+    }),
+  };
+}
+
+// ---------------------------------------------------------------- forecast + cards
+function compute() {
+  S.L = ENGINE.learn(P0, S.actuals, { before: S.date });
+  S.Lall = ENGINE.learn(P0, S.actuals, { today: todayIso() });
+  for (const sec of SECS) {
+    try { S.fc[sec] = ENGINE.forecast(S.L.P, engineInput(sec)); } catch (e) { S.fc[sec] = null; console.error(e); }
+  }
+}
+function buildCards() {
+  const root = $('cards'); root.innerHTML = '';
+  for (const sec of SECS) {
+    const c = document.createElement('article'); c.className = 'card'; c.id = 'card-' + sec;
+    c.innerHTML = `
+      <div class="card-h"><h2>${SECN[sec]}</h2><span class="sub" id="${sec}-sub"></span></div>
+      <div class="inputs">
+        <div class="f w2"><label class="l" for="${sec}-pprod">Previous run (yesterday)</label><select id="${sec}-pprod"></select></div>
+        <div class="f"><label class="l" for="${sec}-psize">Prev. size</label><select id="${sec}-psize"></select></div>
+        <div class="f"><span class="l" id="${sec}-tgtl">Add a target?</span><div class="seg sm" id="${sec}-tgt" role="group" aria-labelledby="${sec}-tgtl"><button data-v="no">No</button><button data-v="yes">Yes</button></div></div>
+        <div class="prevsrc" id="${sec}-psrc"></div>
+      </div>
+      <div class="runs" id="${sec}-runs"></div>
+      <button class="addrun" id="${sec}-add">+ Add run</button>
+      <div id="${sec}-res"></div>
+      <div class="cardfoot"><button class="primary" id="${sec}-save">Save forecast</button><button type="button" class="linkbtn" id="${sec}-del" hidden>Delete saved forecast</button><span class="msg" id="${sec}-msg" role="status"></span></div>`;
+    root.appendChild(c);
+    const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
+    on(`${sec}-pprod`, 'change', e => { const i = S.inp[sec]; i.prevProduct = e.target.value; i.prevAuto = false; i.prevSrc = 'Set by you'; if (i.prevProduct && !P0.sizes[i.prevProduct].includes(i.prevSize)) i.prevSize = P0.sizes[i.prevProduct][0]; if (!i.prevProduct) i.prevSize = ''; update(); });
+    on(`${sec}-psize`, 'change', e => { const i = S.inp[sec]; i.prevSize = e.target.value; i.prevAuto = false; i.prevSrc = 'Set by you'; update(); });
+    on(`${sec}-tgt`, 'click', e => { const b = e.target.closest('button'); if (!b) return; S.inp[sec].targetOn = b.dataset.v === 'yes'; update(); });
+    on(`${sec}-add`, 'click', () => { const i = S.inp[sec], l = i.runs[i.runs.length - 1]; if (i.runs.length >= 6) return; const other = P0.sizes[l.product].find(z => z !== l.size); i.runs.push(newRun(l.product, other || l.size, 0)); i.runs[i.runs.length - 1].startMode = 'after'; update(); });
+    on(`${sec}-save`, 'click', () => savePlan(sec));
+    on(`${sec}-del`, 'click', () => deletePlan(sec));
+    const box = $(`${sec}-runs`);
+    const onField = (e, final) => {
+      const el = e.target; const k = +el.dataset.k, f = el.dataset.f; if (!f) return;
+      const i = S.inp[sec], r = i.runs[k]; if (!r) return;
+      if (f === 'product') { r.product = el.value; if (!P0.sizes[r.product].includes(r.size)) r.size = P0.sizes[r.product][P0.sizes[r.product].length - 1]; r.batches = P0.defaultBatches[r.product]; r.openingAuto = true; r.opening = ''; }
+      else if (f === 'size') r.size = el.value;
+      else if (f === 'batches') r.batches = el.value;
+      else if (f === 'opening') { r.opening = el.value; r.openingAuto = el.value === ''; }
+      else if (f === 'startMode') r.startMode = el.value;
+      else if (f === 'startTime') r.startTime = el.value;
+      else if (f === 'target') r.target = el.value;
+      if (final || ['batches', 'opening', 'target', 'startTime'].includes(f)) update();
+    };
+    box.addEventListener('input', e => onField(e, false));
+    box.addEventListener('change', e => onField(e, true));
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const i = S.inp[sec], k = +b.dataset.k;
+      if (b.dataset.act === 'rm' && i.runs.length > 1) { i.runs.splice(k, 1); update(); }
+      if (b.dataset.act === 'auto') { i.runs[k].openingAuto = true; i.runs[k].opening = ''; update(); }
+    });
+  }
+}
+function runsHtml(sec) {
+  const i = S.inp[sec];
+  return i.runs.map((r, k) => {
+    const startOpts = k === 0 ? [['after', 'After start-up (07:00 shift)'], ['time', 'At a set time']] : [['after', 'When the previous run finishes'], ['time', 'At a set time']];
+    return `<div class="run" data-k="${k}">
+      <div class="rh"><b>Run ${k + 1}</b>${i.runs.length > 1 ? `<button class="linkbtn" data-act="rm" data-k="${k}" aria-label="Remove run ${k + 1}">Remove</button>` : ''}</div>
+      <div class="f w2"><label class="l" for="${sec}-r${k}-p">Product</label><select id="${sec}-r${k}-p" data-k="${k}" data-f="product">${opts(prodList(), r.product)}</select></div>
+      <div class="f"><label class="l" for="${sec}-r${k}-s">Size</label><select id="${sec}-r${k}-s" data-k="${k}" data-f="size">${opts(sizeList(r.product), r.size)}</select></div>
+      <div class="f"><label class="l" for="${sec}-r${k}-b">Batches prepared</label><input type="number" id="${sec}-r${k}-b" data-k="${k}" data-f="batches" min="0" max="40" step="1" inputmode="numeric"></div>
+      <div class="f"><label class="l" for="${sec}-r${k}-o">Opening balance</label><input type="number" id="${sec}-r${k}-o" data-k="${k}" data-f="opening" min="0" max="80" step="0.1" inputmode="decimal" placeholder="batches"></div>
+      <div class="f${i.targetOn ? '' : ' w2'}" style="${i.targetOn ? '' : 'grid-column:span 2'}"><label class="l" for="${sec}-r${k}-sm">Start</label><select id="${sec}-r${k}-sm" data-k="${k}" data-f="startMode">${opts(startOpts, r.startMode)}</select></div>
+      <div class="f"${r.startMode === 'time' ? '' : ' hidden'}><label class="l" for="${sec}-r${k}-st">Start time</label><input type="time" id="${sec}-r${k}-st" data-k="${k}" data-f="startTime" min="07:00" max="16:30"></div>
+      ${i.targetOn ? `<div class="f"><label class="l" for="${sec}-r${k}-t">Target boxes</label><input type="number" id="${sec}-r${k}-t" data-k="${k}" data-f="target" min="0" step="10" inputmode="numeric"></div>` : ''}
+      <div class="hint2" id="${sec}-r${k}-h"></div>
+    </div>`;
+  }).join('');
+}
+function syncInputs() {
+  for (const sec of SECS) {
+    const i = S.inp[sec];
+    const setSel = (id, html, v) => { const el = $(id); if (el._h !== html) { el.innerHTML = html; el._h = html; } el.value = v ?? ''; };
+    setSel(`${sec}-pprod`, '<option value="">None (first run)</option>' + opts(prodList(), i.prevProduct), i.prevProduct);
+    setSel(`${sec}-psize`, i.prevProduct ? opts(sizeList(i.prevProduct), i.prevSize) : '<option value="">–</option>', i.prevProduct ? i.prevSize : '');
+    $(`${sec}-psrc`).textContent = (i.prevAuto ? 'Previous run: ' : '') + i.prevSrc + (i.prevAuto ? '. Change it if you know better.' : '');
+    $(`${sec}-tgt`).querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'yes') === i.targetOn));
+    // rebuild the run blocks only when their structure changes, so typing keeps focus
+    const box = $(`${sec}-runs`);
+    const key = JSON.stringify([i.targetOn, i.runs.map(r => [r.product, r.startMode])]);
+    if (box._key !== key) { box.innerHTML = runsHtml(sec); box._key = key; }
+    const setV = (id, v) => { const el = $(id); if (el && document.activeElement !== el && el.value !== String(v ?? '')) el.value = v ?? ''; };
+    i.runs.forEach((r, k) => {
+      const ao = autoOpening(sec, k), f = S.fc[sec], fr = f && f.runs[k];
+      setV(`${sec}-r${k}-s`, r.size); setV(`${sec}-r${k}-b`, r.batches); setV(`${sec}-r${k}-sm`, r.startMode); setV(`${sec}-r${k}-st`, r.startTime); setV(`${sec}-r${k}-t`, r.target);
+      const oEl = $(`${sec}-r${k}-o`);
+      if (oEl && document.activeElement !== oEl) { oEl.value = r.openingAuto ? '' : r.opening; oEl.placeholder = r.openingAuto ? (ao.chained ? (fr ? fmt1(fr.opening) + ' carried' : 'carried') : String(ao.value)) : 'batches'; }
+      const h = $(`${sec}-r${k}-h`);
+      if (h) {
+        const op = fr ? fr.opening : (r.openingAuto ? ao.value : num(r.opening)) || 0;
+        const src = r.openingAuto ? ao.src : 'Opening balance entered by you';
+        h.innerHTML = `Opening ${fmt1(op)} batches ${op > 0 ? esc(balTxt(r.product, r.size, op)) : ''} · <span style="font-family:var(--display)">${esc(src)}</span>${!r.openingAuto ? ` <button class="linkbtn" data-act="auto" data-k="${k}">Use saved balance</button>` : ''}${num(r.batches) == null && !(op > 0) ? '<br><span style="font-family:var(--display)">No batches entered: this run is not limited by product.</span>' : ''}`;
+      }
+    });
+    $(`${sec}-add`).hidden = i.runs.length >= 6;
+  }
+}
+function miniBar(f) {
+  const marks = f.timeline.filter(x => x.g !== 'run').map(x => `<div style="left:${x.s / 6}%;width:${Math.max(x.d / 6, .3)}%;background:${COL[x.g]}"></div>`).join('');
+  const rb = f.runs.slice(1).map(r => `<div style="left:${r.start / 6}%;width:2px;background:rgba(255,255,255,.8)"></div>`).join('');
+  return `<div class="minibar" aria-hidden="true">${marks}${rb}</div>`;
+}
+function renderCards() {
+  for (const sec of SECS) {
+    const f = S.fc[sec], el = $(`${sec}-res`), i = S.inp[sec];
+    $(`${sec}-sub`).textContent = i.runs.map(r => `${pname(r.product)} ${r.size}`).join(' → ');
+    if (!f) { el.innerHTML = `<p class="msg err">One of these items has no model parameters. Pick another product or size.</p>`; continue; }
+    const chg = f.changes === 0 ? `<span class="tag2 ok">No changeover</span>` : `<span class="tag2 plan">${f.changes} changeover${f.changes > 1 ? 's' : ''} · ${f.changeMin + f.cipMin} min${f.cipMin ? ' incl. CIP' : ''}</span>`;
+    const prep = f.prepMin > 0 ? `<span class="tag2 plan">Waiting for batch prep ${f.prepMin} min</span>` : (f.prepParallelMin > 0 ? `<span class="tag2 ok">Batch prep in parallel · no line time</span>` : `<span class="tag2">No batch prep</span>`);
+    const cl = `<span class="tag2 clean">Cleaning ${f.routineMin}${f.deepMin ? ' + ' + f.deepMin + ' deep' : ''} min</span>`;
+    const closeTxt = f.closing.filter(c => c.batches >= 0.05);
+    const closing = closeTxt.length ? closeTxt.map(c => `<span><b>${esc(pname(c.product))}: ${fmt1(c.batches)} batches</b> ≈ ${fmt(c.kg)} kg · ${fmt(c.litres)} L · ${fmt(c.boxes)} boxes of ${esc(c.size)}</span>`).join('')
+      : (f.closingBatches != null && f.closingBatches < 0.05 ? '<span>Tanks empty at the end of the day: all product is filled.</span>' : '<span>Not limited by product (no batches entered).</span>');
+    const runRows = f.runs.map(o => `<tr><td>${o.i + 1}</td><td>${esc(pname(o.product))} ${esc(o.size)}${o.changeType !== 'none' ? `<span class="tiny">${esc(ENGINE.CHG_LABEL[o.changeType])} ${o.changeMin + o.cipMin} min</span>` : ''}</td><td class="n">${hhmm(o.start)}–${o.fillMin ? o.finish : '–'}</td><td class="n">${fmt1(o.opening)} + ${o.prepared == null ? '–' : fmt1(o.prepared)}</td><td class="n">${fmt(o.boxes.p50)}</td><td class="n">${o.closing == null ? '–' : fmt1(o.closing)}</td></tr>`).join('');
+    const saved = S.plans.find(p => p.date === S.date && p.sec === sec);
+    el.innerHTML = `
+      <div class="result">
+        <div class="big">
+          <span class="l" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600">Boxes expected</span>
+          <span class="v">${fmt(f.boxes.p50)}<small>boxes</small></span>
+          <span class="r">Likely range <b>${fmt(f.boxes.p10)}–${fmt(f.boxes.p90)}</b> (P10–P90)${f.target ? ` · target ${fmt(f.target)}` : ''}</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>Filling time</span><strong>${fmt(f.fillMin)} min</strong></div>
+          <div class="stat"><span>Stoppage</span><strong>${fmt(f.stopMin)} min · ${pct(f.stopPct)}</strong></div>
+          <div class="stat"><span>Last box</span><strong>${f.finish}</strong></div>
+          <div class="stat"><span>Closing balance</span><strong>${f.closingBatches == null ? '–' : fmt1(f.closingBatches) + ' batches'}</strong></div>
+        </div>
+      </div>
+      <div class="chips">${chg}${prep}${cl}</div>
+      ${miniBar(f)}
+      ${f.runs.length > 1 ? `<div class="tw"><table class="runtbl"><thead><tr><th>Run</th><th>Item</th><th class="n">Time</th><th class="n">Opening + prepared</th><th class="n">Boxes</th><th class="n">Closing</th></tr></thead><tbody>${runRows}</tbody></table></div>` : ''}
+      <div class="closing"><span class="l" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600">Left in the tank for tomorrow</span>${closing}</div>
+      <ul class="why">${f.why.map(w => `<li>${esc(w.t)}</li>`).join('')}</ul>`;
+    const btn = $(`${sec}-save`);
+    btn.disabled = !S.db || !S.canWrite || !!S.saving['plan' + sec];
+    btn.textContent = saved ? 'Update saved forecast' : 'Save forecast';
+    const del = $(`${sec}-del`); del.hidden = !saved || !S.db || !S.canWrite; if (!del.dataset.arm) del.textContent = 'Delete saved forecast';
+    const msg = $(`${sec}-msg`);
+    if (!msg.dataset.sticky) {
+      msg.className = 'msg note';
+      msg.textContent = !S.db ? 'Saving only works when this page is opened inside Claude (the Claude app or claude.ai, signed in). Open it from your chat or your artifacts list.' : !S.canWrite ? 'View only: you cannot save here.' : saved ? `Saved ${new Date(saved.savedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${fmt(saved.out?.boxesP50)} boxes` : 'Not saved yet for this date.';
+    }
+  }
+  const wd = ENGINE.weekdayIdx(S.date);
+  $('wday').textContent = ENGINE.WD[wd] + (wd === 4 ? ' · normally off' : '');
+  const n = S.Lall ? S.Lall.n : 0;
+  $('learnChip').querySelector('span').textContent = n ? `Model learned from ${n} logged day${n === 1 ? '' : 's'}` : 'History model · no logged days yet';
+  $('learnChip').className = 'chip' + (n ? '' : ' warn');
+  $('replayNote').textContent = `${new Date(S.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · forecast, 07:00 to 17:00`;
+}
+function setSaveChip() {
+  const c = $('saveChip'), t = c.querySelector('span');
+  if (S.dbState === 'connecting') { c.className = 'chip off'; t.textContent = 'Connecting…'; }
+  else if (S.db && S.dbState === 'ok') { c.className = 'chip'; t.textContent = S.local ? 'Saving on this computer' : (S.canWrite ? 'Saving on' : 'Saving on · view only'); }
+  else if (S.dbState === 'error') { c.className = 'chip warn'; t.textContent = 'Saving paused: store not answering'; }
+  else { c.className = 'chip off'; t.textContent = 'Saving off'; c.title = 'This view cannot reach the shared store. Forecasts still work; nothing is saved.'; }
+}
+function update(o = {}) {
+  compute(); syncInputs(); renderCards(); renderTimelineTab();
+  SIM.load(S.fc, o.keepTime);
+  if (!$('p-compare').hidden && !o.skipReport) renderCompare();
+  if (!$('p-how').hidden) renderHow();
+}
+
+// ---------------------------------------------------------------- saving
+async function deletePlan(sec) {
+  const del = $(`${sec}-del`), msg = $(`${sec}-msg`);
+  if (!S.db) return;
+  if (!del.dataset.arm) { del.dataset.arm = '1'; del.textContent = `Click again to delete the ${SECN[sec]} forecast for ${S.date}`; setTimeout(() => { delete del.dataset.arm; renderCards(); }, 5000); return; }
+  delete del.dataset.arm;
+  try { await S.db.doc(`plans/${S.date}_${sec}`).delete(); S.plans = S.plans.filter(p => !(p.date === S.date && p.sec === sec)); S.inp[sec].fromPlan = null;
+    msg.dataset.sticky = '1'; msg.className = 'msg ok'; msg.textContent = 'Saved forecast deleted.'; }
+  catch (e) { msg.dataset.sticky = '1'; msg.className = 'msg err'; msg.textContent = 'Could not delete. Try again.'; }
+  setTimeout(() => { delete msg.dataset.sticky; renderCards(); }, 2500); update({ keepTime: true });
+}
+async function savePlan(sec) {
+  const f = S.fc[sec], i = S.inp[sec], msg = $(`${sec}-msg`);
+  if (!S.db || !f || S.saving['plan' + sec]) return;
+  S.saving['plan' + sec] = true; $(`${sec}-save`).disabled = true; msg.dataset.sticky = '1'; msg.className = 'msg note'; msg.textContent = 'Saving…';
+  const inp = engineInput(sec);
+  const r0 = inp.runs[0];
+  const doc = {
+    kind: 'plan', schema: 2, date: S.date, sec,
+    inputs: { product: r0.product, size: r0.size, batches: f.batches, targetBoxes: f.target, // round-1 fields, kept so older readers still work
+      prev: inp.prev, prevSource: i.prevSrc, targetOn: i.targetOn,
+      runs: inp.runs.map((r, k) => ({ product: r.product, size: r.size, batches: r.batches, opening: r.opening == null ? null : r.opening, openingResolved: f.runs[k].opening, start: r.start, target: r.target })) },
+    out: { ...ENGINE.planSummary(f), timeline: f.timeline.map(x => [x.s, x.d, x.cat, x.run]) },
+    why: f.why.map(w => w.t),
+    model: { version: f.modelVersion, learnedFrom: f.learnedFrom, historyBuilt: P0.built },
+    savedAt: new Date().toISOString(), by: S.userId || null,
+  };
+  try { await S.db.doc(`plans/${S.date}_${sec}`).set(doc); msg.className = 'msg ok'; msg.textContent = 'Forecast saved.'; }
+  catch (e) { msg.className = 'msg err'; msg.textContent = saveErr(e); }
+  finally { S.saving['plan' + sec] = false; setTimeout(() => { delete msg.dataset.sticky; renderCards(); }, 2500); renderCards(); }
+}
+function saveErr(e) {
+  const c = e && e.code;
+  if (c === 'permission_denied' || c === 'not_granted') return 'Not saved: you do not have permission to save in this planner.';
+  if (c === 'resource_exhausted') return 'Not saved: too many saves at once. Try again in a moment.';
+  return 'Not saved: the store did not accept the write' + (c ? ` (${c})` : '') + '. Try again.';
+}
+
+// ---------------------------------------------------------------- timeline tab
+function merged(tl) {
+  const out = [];
+  for (const x of tl) { const l = out[out.length - 1]; if (l && l.g === 'run' && x.g === 'run' && l.run === x.run) l.d += x.d; else out.push({ ...x }); }
+  return out;
+}
+function renderTimelineTab() {
+  const root = $('tlTables'); root.innerHTML = '';
+  for (const sec of SECS) {
+    const f = S.fc[sec]; const d = document.createElement('div'); d.style.minWidth = '0';
+    if (!f) { d.innerHTML = `<h3>${SECN[sec]}</h3><p class="note">No forecast.</p>`; root.appendChild(d); continue; }
+    const multi = f.runs.length > 1;
+    const rows = merged(f.timeline).map(x => `<tr class="click" data-t="${x.s}"><td class="n">${hhmm(x.s)}</td><td class="n">${x.d}</td>${multi ? `<td class="n">${x.run + 1}</td>` : ''}<td><span class="dot" style="background:${x.g === 'run' ? 'var(--run)' : COL[x.g]}"></span>${esc(x.g === 'run' ? `Filling ${pname(f.runs[x.run].product)} ${f.runs[x.run].size}` : x.cat)}${x.g !== 'run' ? ` <span class="note">· ${esc(x.desc)}</span>` : ''}</td></tr>`).join('');
+    const cats = Object.entries(f.stopByCat).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span>${esc(k)}</span><span>${v} min</span>`).join('');
+    d.innerHTML = `<h3>${SECN[sec]} · ${f.runs.map(o => esc(pname(o.product)) + ' ' + esc(o.size)).join(' → ')}</h3>
+      <div class="tw"><table><thead><tr><th class="n">Start</th><th class="n">Min</th>${multi ? '<th class="n">Run</th>' : ''}<th>What happens</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <h3 style="margin-top:12px">Stop minutes by category</h3><div class="kv">${cats}<span>Total stoppage</span><span>${f.stopMin} min (${pct(f.stopPct)})</span><span>Filling</span><span>${f.fillMin} min</span>${f.idleMin ? `<span>Line idle</span><span>${f.idleMin} min</span>` : ''}</div>`;
+    d.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => { SIM.seek(+tr.dataset.t + .01); document.querySelector('.viewer').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    root.appendChild(d);
+  }
+}
+
+// ---------------------------------------------------------------- actual form (multiple runs per day)
+const A = { loadedKey: null, runs: [] };
+function aRunRow(r, k) {
+  const n = A.runs.length;
+  return `<tr class="arun" data-k="${k}"><td class="n">${k + 1}</td>
+    <td><select aria-label="Run ${k + 1} product" data-k="${k}" data-f="product">${opts(prodList(), r.product)}</select></td>
+    <td><select aria-label="Run ${k + 1} size" data-k="${k}" data-f="size">${opts(sizeList(r.product), r.size)}</select></td>
+    <td><input type="number" aria-label="Run ${k + 1} batches prepared" data-k="${k}" data-f="batches" min="0" step="0.5" inputmode="decimal" value="${esc(r.batches ?? '')}"></td>
+    <td><input type="number" aria-label="Run ${k + 1} opening balance" data-k="${k}" data-f="opening" min="0" step="0.1" inputmode="decimal" value="${esc(r.opening ?? '')}"></td>
+    <td><input type="number" aria-label="Run ${k + 1} closing balance" data-k="${k}" data-f="closing" min="0" step="0.1" inputmode="decimal" value="${esc(r.closing ?? '')}" placeholder="batches"></td>
+    <td class="n"><input type="checkbox" aria-label="Run ${k + 1} batches prepared only, not filled" title="Batches prepared in the tank only — this run did not fill boxes" data-k="${k}" data-f="prepOnly" ${r.prepOnly ? 'checked' : ''} style="width:18px;height:18px"></td>
+    <td><input type="number" aria-label="Run ${k + 1} boxes" data-k="${k}" data-f="boxes" min="0" step="1" inputmode="numeric" value="${esc(r.boxes ?? '')}"></td>
+    <td><input type="number" aria-label="Run ${k + 1} filling minutes" data-k="${k}" data-f="fillMin" min="0" step="1" inputmode="numeric" value="${esc(r.fillMin ?? '')}" placeholder="optional"></td>
+    <td><input type="number" aria-label="Run ${k + 1} changeover minutes before this run" data-k="${k}" data-f="changeoverMin" min="0" step="1" inputmode="numeric" value="${esc(r.changeoverMin ?? '')}" placeholder="${k === 0 ? 'if any' : ''}"></td>
+    <td>${n > 1 ? `<button type="button" class="linkbtn" data-act="rm" data-k="${k}">Remove</button>` : ''}</td></tr>`;
+}
+function aRender() {
+  $('a_runs').innerHTML = A.runs.map(aRunRow).join('');
+  aTotals();
+  aLockRuns();
+}
+function aTotals() {
+  const tb = A.runs.reduce((s, r) => s + (num(r.boxes) || 0), 0);
+  const cl = A.runs.filter(r => num(r.closing) != null);
+  $('a_tot').textContent = `Total ${fmt(tb)} boxes${A.runs.length > 1 ? ` over ${A.runs.length} runs` : ''}${cl.length ? ` · closing balance ${fmt1(cl.reduce((s, r) => s + num(r.closing), 0))} batches` : ' · enter the closing balance so boxes per batch can learn'}`;
+}
+function aFill(key) {
+  const [date, sec] = key.split('_');
+  const a = S.actuals.find(x => x.date === date && x.sec === sec);
+  const p = S.plans.find(x => x.date === date && x.sec === sec);
+  const set = (id, v) => { $(id).value = v ?? ''; };
+  const prodSel = (id, v, none) => { $(id).innerHTML = (none ? '<option value="">None (first run)</option>' : '') + opts(prodList(), v); $(id).value = v ?? ''; };
+  const sizeSel = (id, prod, v) => { $(id).innerHTML = prod ? opts(sizeList(prod), v) : '<option value="">–</option>'; $(id).value = prod ? (v || P0.sizes[prod][0]) : ''; };
+  let src;
+  const k = lastKnown(sec, date);
+  if (a) {
+    src = `Editing the actual saved ${new Date(a.savedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}.`;
+    const prev = a.prevProduct ? { product: a.prevProduct, size: a.prevSize } : null;
+    prodSel('a_pprod', prev ? prev.product : '', true); sizeSel('a_psize', prev ? prev.product : '', prev ? prev.size : '');
+    A.runs = ENGINE.actualRuns(a).map(r => ({ ...r }));
+    set('a_work', a.workMin ?? 600); set('a_fill', a.fillMin); set('a_stop', a.stopMin); set('a_last', a.lastBox);
+    set('a_start', a.startMin); set('a_prep', a.prepMin); set('a_rc', a.cleanRoutineMin); set('a_deep', a.cleanDeepMin); set('a_reasons', a.reasons); set('a_notes', a.notes);
+    $('a_norun').checked = !!a.noRun; $('a_excl').checked = !!a.excludeFromLearning;
+    $('a_save').textContent = 'Update actual';
+  } else {
+    let runs, prev;
+    if (p && p.inputs) {
+      const pr = p.inputs.runs && p.inputs.runs.length ? p.inputs.runs : [{ product: p.inputs.product, size: p.inputs.size, batches: p.inputs.batches, opening: 0 }];
+      runs = pr.map(r => ({ product: r.product, size: r.size, batches: r.batches ?? null, opening: r.openingResolved ?? r.opening ?? null }));
+      prev = p.inputs.prev || null;
+      src = 'Runs filled in from the saved forecast. Enter what really happened.';
+    } else if (date === S.date) {
+      const ei = engineInput(sec), f = S.fc[sec];
+      runs = ei.runs.map((r, j) => ({ product: r.product, size: r.size, batches: r.batches, opening: f ? f.runs[j].opening : r.opening }));
+      prev = ei.prev; src = 'No saved forecast for this day; runs filled in from the planner card.';
+    } else {
+      const c = savedClosing(sec, date, k.product);
+      runs = [{ product: k.product, size: k.size, batches: null, opening: c && !c.none ? c.value : 0 }];
+      prev = { product: k.product, size: k.size }; src = 'No saved forecast for this day; product filled in from the last known run.';
+    }
+    // opening balances default to yesterday's saved closing balance
+    runs.forEach((r, j) => { if (r.opening == null && !runs.slice(0, j).some(q => q.product === r.product)) { const c = savedClosing(sec, date, r.product); r.opening = c && !c.none ? c.value : 0; } });
+    A.runs = runs.map(r => ({ ...r, closing: null, boxes: null, fillMin: null, changeoverMin: null }));
+    prodSel('a_pprod', prev ? prev.product : '', true); sizeSel('a_psize', prev ? prev.product : '', prev ? prev.size : '');
+    ['a_fill', 'a_stop', 'a_last', 'a_start', 'a_prep', 'a_rc', 'a_deep', 'a_reasons', 'a_notes'].forEach(id => set(id, ''));
+    set('a_work', 600); delete $('a_stop').dataset.touched; $('a_norun').checked = false; $('a_excl').checked = false;
+    $('a_save').textContent = 'Save actual';
+  }
+  aRender(); aNoRun();
+  $('a_hint').textContent = src + ' Balances are in batches. Leave a box empty if nobody measured it; the model only learns from what you enter. Boxes per batch learns only when opening and closing balance are both entered.';
+  A.loadedKey = key;
+}
+function aNoRun() {
+  const on = $('a_norun').checked;
+  for (const id of ['a_work', 'a_fill', 'a_stop', 'a_last', 'a_start', 'a_prep', 'a_rc', 'a_deep']) { $(id).disabled = on; if (on) $(id).value = id === 'a_work' ? 0 : ''; else if (id === 'a_work' && !$(id).value) $(id).value = 600; }
+  if (on) { A.runs.forEach(r => { r.boxes = null; r.fillMin = null; r.changeoverMin = null; if (r.closing == null && r.opening != null && r.batches != null) r.closing = Math.round((r.opening + r.batches) * 100) / 100; }); aRender(); }
+  aLockRuns();
+  $('a_hint').dataset.norun = on ? '1' : '';
+}
+function aLockRuns() {
+  const on = $('a_norun') && $('a_norun').checked;
+  $('a_runs').querySelectorAll('[data-f=boxes],[data-f=fillMin],[data-f=changeoverMin]').forEach(el => { const r = A.runs[+el.dataset.k]; const lock = !!on || !!(r && r.prepOnly); el.disabled = lock; if (lock) { el.value = ''; el.placeholder = '–'; } });
+  $('a_runs').querySelectorAll('[data-f=prepOnly]').forEach(el => { el.disabled = !!on; });
+}
+function aKey() { return $('a_date').value + '_' + $('a_sec').value; }
+function initActualForm() {
+  $('a_date').value = S.date <= todayIso() ? S.date : todayIso();
+  $('a_date').max = addDays(todayIso(), 1);
+  $('a_sec').value = 'S1';
+  const reload = () => { if ($('a_date').value) aFill(aKey()); $('a_msg').textContent = ''; };
+  $('a_date').onchange = reload; $('a_sec').onchange = reload;
+  $('a_pprod').onchange = () => { const p = $('a_pprod').value; $('a_psize').innerHTML = p ? opts(sizeList(p), P0.sizes[p][0]) : '<option value="">–</option>'; };
+  const rows = $('a_runs');
+  rows.addEventListener('input', e => { const el = e.target, k = +el.dataset.k, f = el.dataset.f; if (!f || !A.runs[k] || f === 'prepOnly') return; if (f !== 'product' && f !== 'size') { A.runs[k][f] = el.value === '' ? null : +el.value; aTotals(); } });
+  rows.addEventListener('change', e => {
+    const el = e.target, k = +el.dataset.k, f = el.dataset.f; const r = A.runs[k]; if (!r) return;
+    if (f === 'product') { r.product = el.value; if (!P0.sizes[r.product].includes(r.size)) r.size = P0.sizes[r.product][0]; const c = savedClosing($('a_sec').value, $('a_date').value, r.product); if (!A.runs.slice(0, k).some(q => q.product === r.product)) r.opening = c && !c.none ? c.value : 0; aRender(); }
+    else if (f === 'size') r.size = el.value;
+    else if (f === 'prepOnly') { r.prepOnly = el.checked; if (el.checked) { r.boxes = null; r.fillMin = null; r.changeoverMin = null; if (r.closing == null && r.opening != null && r.batches != null) r.closing = Math.round((num(r.opening) + num(r.batches)) * 100) / 100; } aRender(); }
+  });
+  rows.addEventListener('click', e => { const b = e.target.closest('[data-act=rm]'); if (!b) return; A.runs.splice(+b.dataset.k, 1); aRender(); });
+  $('a_addrun').onclick = () => { if (A.runs.length >= 6) return; const l = A.runs[A.runs.length - 1]; const other = P0.sizes[l.product].find(z => z !== l.size); A.runs.push({ product: l.product, size: other || l.size, batches: 0, opening: null, closing: null, boxes: null, fillMin: null, changeoverMin: null }); aRender(); };
+  const autoStop = () => { const w = +$('a_work').value, f = +$('a_fill').value; if (w > 0 && f > 0 && !$('a_stop').dataset.touched) $('a_stop').value = Math.max(0, w - f); };
+  $('a_fill').oninput = autoStop; $('a_work').oninput = autoStop;
+  $('a_stop').oninput = () => { $('a_stop').dataset.touched = $('a_stop').value ? '1' : ''; };
+  $('a_norun').onchange = aNoRun;
+  $('actForm').addEventListener('submit', e => { e.preventDefault(); saveActual(); });
+  aFill(aKey());
+}
+async function saveActual() {
+  const msg = $('a_msg');
+  const n = id => num($(id).value);
+  const date = $('a_date').value, sec = $('a_sec').value;
+  const noRun = $('a_norun').checked || A.runs.every(r => r.prepOnly);
+  const runs = A.runs.map(r => { const po = noRun || !!r.prepOnly; return { product: r.product, size: r.size, batches: num(r.batches), opening: num(r.opening), closing: num(r.closing), boxes: po ? 0 : num(r.boxes), fillMin: po ? 0 : num(r.fillMin), changeoverMin: po ? null : num(r.changeoverMin), ...(po && !noRun ? { prepOnly: true } : {}) }; });
+  const errs = [];
+  if (noRun) {
+    if (!date) errs.push('a date');
+    if (runs.some(r => r.closing == null)) errs.push('the closing balance (batches now in the tank) for every product');
+    if (errs.length) { msg.className = 'msg err'; msg.textContent = 'Enter ' + errs.join(' and ') + ' before saving.'; return; }
+    if (!S.db) { msg.className = 'msg err'; msg.textContent = 'Not saved: the database cannot be reached. Check the connection and try again.'; return; }
+    const key = date + '_' + sec;
+    const doc = { kind: 'actual', schema: 2, noRun: true, date, sec, prevProduct: $('a_pprod').value || null, prevSize: $('a_pprod').value ? $('a_psize').value : null, runs,
+      product: (runs.find(r => !r.prepOnly) || runs[0]).product, size: (runs.find(r => !r.prepOnly) || runs[0]).size, batches: runs.reduce((s, r) => s + (r.batches || 0), 0), boxes: 0,
+      openingBalance: runs.reduce((s, r) => s + (r.opening || 0), 0), closingBalance: runs.reduce((s, r) => s + (r.closing || 0), 0),
+      workMin: 0, fillMin: 0, stopMin: 0, changeover: { done: false, type: null, min: 0, count: 0 }, cleanRoutineMin: null, cleanDeepMin: null, prepMin: null, lastBox: null,
+      reasons: '', notes: $('a_notes').value.trim() || 'Line did not run; batches prepared only.', savedAt: new Date().toISOString(), by: S.userId || null };
+    try { await S.db.doc(`actuals/${key}`).set(doc); msg.className = 'msg ok'; msg.textContent = `Saved as a no-production day. The tank now holds ${fmt1(doc.closingBalance)} batches for the next run; the model does not learn speed or stops from this day.`; }
+    catch (e) { msg.className = 'msg err'; msg.textContent = saveErr(e); }
+    return;
+  }
+  if (!date) errs.push('a date');
+  if (runs.some(r => !r.prepOnly && (r.boxes == null || r.boxes < 0))) errs.push('boxes for every filled run');
+  if (runs.some(r => r.prepOnly && r.closing == null)) errs.push('the closing balance of the prep-only run');
+  if (n('a_fill') == null || n('a_fill') <= 0) errs.push('filling minutes');
+  if (errs.length) { msg.className = 'msg err'; msg.textContent = 'Enter ' + errs.join(' and ') + ' before saving.'; return; }
+  const work = n('a_work') ?? 600, fill = n('a_fill'), stop = n('a_stop') ?? Math.max(0, work - fill);
+  if (fill > work) { msg.className = 'msg err'; msg.textContent = 'Filling minutes cannot be more than working minutes.'; return; }
+  const rf = runs.reduce((s, r) => s + (r.fillMin || 0), 0); if (rf > fill + 1) { msg.className = 'msg err'; msg.textContent = 'The runs\' filling minutes add up to more than the day\'s filling minutes.'; return; }
+  if (!S.db) { msg.className = 'msg err'; msg.textContent = 'Not saved: the database cannot be reached. Check the connection and try again.'; return; }
+  if (!S.canWrite) { msg.className = 'msg err'; msg.textContent = 'View only: you cannot save here.'; return; }
+  const key = date + '_' + sec; if (S.saving['act' + key]) return;
+  const prev = $('a_pprod').value ? { product: $('a_pprod').value, size: $('a_psize').value } : null;
+  // changeovers only between runs that were actually filled (prep-only runs don't touch the line)
+  let chainPrev = prev; const types = runs.map(r => { if (r.prepOnly) return 'none'; const t = ENGINE.changeType(chainPrev, r); chainPrev = r; return t; });
+  const coMin = runs.reduce((s, r) => s + (r.changeoverMin || 0), 0);
+  const firstOpen = runs.filter((r, i) => !runs.slice(0, i).some(q => q.product === r.product));
+  const lastClose = runs.filter((r, i) => !runs.slice(i + 1).some(q => q.product === r.product));
+  const doc = {
+    kind: 'actual', schema: 2, date, sec, prevProduct: prev ? prev.product : null, prevSize: prev ? prev.size : null,
+    runs,
+    // day totals, also in the round-1 field names so older readers keep working
+    product: runs[0].product, size: runs[0].size, batches: runs.some(r => r.batches != null) ? runs.reduce((s, r) => s + (r.batches || 0), 0) : null,
+    boxes: runs.reduce((s, r) => s + r.boxes, 0),
+    openingBalance: firstOpen.some(r => r.opening != null) ? firstOpen.reduce((s, r) => s + (r.opening || 0), 0) : null,
+    closingBalance: lastClose.some(r => r.closing != null) ? lastClose.reduce((s, r) => s + (r.closing || 0), 0) : null,
+    workMin: work, fillMin: fill, stopMin: stop,
+    changeover: { done: types.some(t => t !== 'none') || coMin > 0, type: types.find(t => t !== 'none') || null, min: coMin, count: types.filter(t => t !== 'none').length },
+    cleanRoutineMin: n('a_rc'), cleanDeepMin: n('a_deep'), prepMin: n('a_prep'), startMin: n('a_start'), lastBox: $('a_last').value || null,
+    reasons: $('a_reasons').value.trim(), notes: $('a_notes').value.trim(),
+    excludeFromLearning: $('a_excl').checked,
+    savedAt: new Date().toISOString(), by: S.userId || null,
+  };
+  S.saving['act' + key] = true; $('a_save').disabled = true; msg.className = 'msg note'; msg.textContent = 'Saving…';
+  try { await S.db.doc(`actuals/${key}`).set(doc); msg.className = 'msg ok'; msg.textContent = doc.excludeFromLearning ? `Saved as an unusual day: kept on record, but the model does not learn from ${SECN[sec]} on ${date}${doc.closingBalance != null ? `; tomorrow starts with ${fmt1(doc.closingBalance)} batches of balance` : ''}.` : `Saved. The model now learns from ${SECN[sec]} on ${date}${doc.closingBalance != null ? `; tomorrow starts with ${fmt1(doc.closingBalance)} batches of balance` : ''}.`; $('a_save').textContent = 'Update actual'; }
+  catch (e) { msg.className = 'msg err'; msg.textContent = saveErr(e); }
+  finally { S.saving['act' + key] = false; $('a_save').disabled = false; }
+}
+
+// ---------------------------------------------------------------- compare: report view
+const CM = { mode: 'week', scope: 'all', last: null };
+function lastDataDate() { let m = null; for (const x of S.actuals.concat(S.plans)) if (!m || x.date > m) m = x.date; return m; }
+const sgn = (x, d = 1) => x == null || !isFinite(x) ? '–' : (x > 0 ? '+' : '') + (x * 100).toFixed(d) + '%';
+const fa = (p, a, f = fmt) => `${f(p)} / ${f(a)}`;
+
+// small SVG charts (no library). Recessive grid, thin marks, 4px rounded data ends, legend + direct labels, hover tooltips.
+function niceMax(v) { if (!(v > 0)) return 1; const e = 10 ** Math.floor(Math.log10(v)); const m = v / e; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * e; }
+function barPath(x, y, w, h) { const r = Math.min(4, w / 2, h); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
+function svgBars({ cats, series, fmtV = fmt, W = 520, H = 190, tipOf }) {
+  const L = 44, R = 8, T = 16, B = 26, iw = W - L - R, ih = H - T - B;
+  const vmax = niceMax(Math.max(0, ...series.flatMap(s => s.values.filter(v => v != null))));
+  const y = v => T + ih - v / vmax * ih;
+  const gw = iw / cats.length, bw = Math.max(4, Math.min(22, (gw * 0.72 - 2 * (series.length - 1)) / series.length));
+  let g = '';
+  for (const k of [0, .5, 1]) g += `<line x1="${L}" x2="${W - R}" y1="${y(vmax * k)}" y2="${y(vmax * k)}" stroke="#2a353d" stroke-width="1"/><text x="${L - 6}" y="${y(vmax * k) + 3.5}" text-anchor="end">${fmtV(vmax * k)}</text>`;
+  cats.forEach((c, i) => {
+    const x0 = L + i * gw + (gw - (bw * series.length + 2 * (series.length - 1))) / 2;
+    series.forEach((s, j) => {
+      const v = s.values[i]; if (v == null) return;
+      const x = x0 + j * (bw + 2), h = Math.max(1, T + ih - y(v));
+      g += `<path d="${barPath(x, y(v), bw, h)}" fill="${s.color}"/>`;
+      if (i === cats.length - 1) g += `<text class="v" x="${x + bw / 2}" y="${y(v) - 4}" text-anchor="middle">${fmtV(v)}</text>`;
+    });
+    g += `<text x="${L + i * gw + gw / 2}" y="${H - 8}" text-anchor="middle">${esc(c)}</text>`;
+    g += `<rect x="${L + i * gw}" y="${T}" width="${gw}" height="${ih}" fill="transparent" data-tip="${esc(tipOf(i))}"/>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+}
+function svgLines({ cats, series, fmtV = v => pct(v), W = 520, H = 190, tipOf, vmax }) {
+  const L = 44, R = 64, T = 14, B = 26, iw = W - L - R, ih = H - T - B;
+  vmax = vmax || niceMax(Math.max(0.01, ...series.flatMap(s => s.values.filter(v => v != null))));
+  const y = v => T + ih - v / vmax * ih, x = i => L + (cats.length === 1 ? iw / 2 : i * iw / (cats.length - 1));
+  let g = '';
+  for (const k of [0, .5, 1]) g += `<line x1="${L}" x2="${W - R}" y1="${y(vmax * k)}" y2="${y(vmax * k)}" stroke="#2a353d" stroke-width="1"/><text x="${L - 6}" y="${y(vmax * k) + 3.5}" text-anchor="end">${fmtV(vmax * k)}</text>`;
+  cats.forEach((c, i) => { g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(c)}</text>`; });
+  for (const s of series) {
+    let d = '', pen = false, last = null;
+    s.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i)},${y(v)}`; pen = true; last = i; });
+    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    s.values.forEach((v, i) => { if (v != null) g += `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="${s.color}" stroke="#1c252b" stroke-width="2"/>`; });
+    if (last != null) g += `<text class="v" x="${x(last) + 8}" y="${y(s.values[last]) + 3.5}">${esc(s.name)} ${fmtV(s.values[last])}</text>`;
+  }
+  cats.forEach((c, i) => { const w = cats.length > 1 ? iw / (cats.length - 1) : iw; g += `<rect x="${x(i) - w / 2}" y="${T}" width="${w}" height="${ih}" fill="transparent" data-tip="${esc(tipOf(i))}"/>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+}
+const keyHtml = series => series.length > 1 ? `<div class="key">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
+
+function daySummary(rows) {
+  const s = [];
+  for (const r of rows) {
+    if (!r.am) { s.push(`${SECN[r.sec]}: forecast ${fmt(r.pm && r.pm.boxes)} boxes; no actual entered yet.`); continue; }
+    if (!r.pm) { s.push(`${SECN[r.sec]}: ${fmt(r.am.boxes)} boxes made; no forecast to compare.`); continue; }
+    let t = `${SECN[r.sec]} made ${fmt(r.am.boxes)} boxes against a forecast of ${fmt(r.pm.boxes)} (${sgn(r.boxesErr)})`;
+    if (r.mainDriver) t += r.mainDriver.unit === '' ? `; the run plan changed (${esc(r.mainDriver.plan)} planned, ${esc(r.mainDriver.actual)} run)` : `; the biggest gap was ${r.mainDriver.name.toLowerCase()}: forecast ${r.mainDriver.plan} vs actual ${r.mainDriver.actual} ${r.mainDriver.unit}`;
+    s.push(t + '.');
+    if (r.am.closing != null) s.push(`${SECN[r.sec]} closed with ${fmt1(r.am.closing)} batches in the tank${r.pm.closing != null ? ` (forecast ${fmt1(r.pm.closing)})` : ''}.`);
+  }
+  return s;
+}
+function renderCompare() {
+  const mode = CM.mode, scope = CM.scope;
+  $('c_endl').textContent = mode === 'week' ? 'Week ending' : 'Day';
+  if (!$('c_end').value) $('c_end').value = lastDataDate() || todayIso();
+  const end = $('c_end').value, from = mode === 'week' ? addDays(end, -6) : end;
+  const res = ENGINE.compare(P0, S.plans, S.actuals, { from, to: end });
+  const wk = mode === 'week' ? ENGINE.weekly(P0, S.plans, S.actuals, end) : null;
+  CM.last = { res, wk, from, end, mode };
+  const rows = scope === 'all' ? res.rows : res.rows.filter(r => r.sec === scope);
+  const summ = scope === 'all' ? res.summary : res.bySection[scope];
+  const L = ENGINE.learn(P0, S.actuals, { today: todayIso() });
+  const root = $('cmp');
+  $('c_csv').hidden = !S.dl;
+  const period = mode === 'week' ? `${nice(from)} – ${nice(end)} ${end.slice(0, 4)}` : new Date(end + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const scopeName = scope === 'all' ? 'Both sections' : SECN[scope];
+  const anyWeekData = wk && wk.weeks.some(w => w.all);
+  if (!rows.length && !anyWeekData) {
+    root.innerHTML = `<div class="empty"><b>Nothing saved for ${esc(period)} yet.</b><br>Save a forecast from a section card above, then enter what happened in <b>Enter actual</b>. Every day with both appears here as forecast vs actual, with the error, the part of the day that caused it, and how this week compares with earlier weeks.${S.db ? '' : '<br>Saving is off in this view, so this report stays empty.'}</div>` + changesHtml(L) + savedHtml();
+    return;
+  }
+  const tile = (k, v, e) => `<div class="tile"><span>${k}</span><strong>${v}</strong>${e ? `<em>${e}</em>` : ''}</div>`;
+  const sumLines = mode === 'week' ? wk.summary : daySummary(rows);
+  // ---- plan vs actual table
+  const fp = (x, f = fmt) => x == null ? '–' : f(x);
+  const rowHtml = r => {
+    const p = r.pm, a = r.am;
+    const err = r.boxesErr != null ? `<span class="${r.boxesErr > 0 ? 'pos' : 'neg'}">${sgn(r.boxesErr)}</span>` : '–';
+    const drv = r.mainDriver ? `${esc(r.mainDriver.name)}${r.mainDriver.unit !== '' ? `<span class="tiny">${esc(String(r.mainDriver.plan))} vs ${esc(String(r.mainDriver.actual))} ${esc(r.mainDriver.unit)}</span>` : ''}` : (a ? '' : '<span class="tiny">no actual yet</span>');
+    return `<tr><td class="n">${r.date.slice(5)}</td><td>${r.sec}</td><td>${esc(r.items)}${r.source === 'reforecast' ? '<span class="tiny" title="No forecast was saved; the model re-forecast the day with what it knew before it">re-forecast</span>' : ''}</td>
+      <td class="n">${fp(p && p.boxes)}</td><td class="n">${fp(a && a.boxes)}</td><td class="n">${err}</td>
+      <td class="n">${fa(p && p.closing, a && a.closing, fmt1)}</td><td class="n">${fa(p && p.stopPct, a && a.stopPct, x => pct(x))}</td>
+      <td class="n">${fa(p && p.changeMin, a && a.changeMin)}</td><td class="n">${fa(p && p.prepMin, a && a.prepMin)}</td><td class="n">${fa(p && p.cleanMin, a && a.cleanMin)}</td>
+      <td class="n">${fa(p && p.machineMin, a && a.machineMin)}</td><td class="n">${fa(p && p.bph, a && a.bph)}</td><td>${drv}</td></tr>`;
+  };
+  let body = '';
+  const dates = [...new Set(rows.map(r => r.date))].sort();
+  for (const d of dates) {
+    for (const r of rows.filter(x => x.date === d)) body += rowHtml(r);
+    const c = scope === 'all' && res.combined.find(x => x.date === d);
+    if (c && c.sections.length === 2) body += `<tr class="comb"><td class="n">${d.slice(5)}</td><td>Both</td><td></td><td class="n">${fmt(c.planBoxes)}</td><td class="n">${fmt(c.actualBoxes)}</td><td class="n">${sgn(c.boxesErr)}</td><td></td><td class="n">${fa(c.planStopPct, c.actStopPct, x => pct(x))}</td><td colspan="6"></td></tr>`;
+  }
+  // ---- component accuracy
+  const comp = summ.components || {};
+  const cRows = ENGINE.COMPONENTS.filter(([k]) => comp[k]).map(([k, name, unit]) => {
+    const c = comp[k], isPct = k === 'stopPct', f = isPct ? (x => pct(x)) : (k === 'closing' ? fmt1 : fmt);
+    const span = Math.max(Math.abs(c.plan), Math.abs(c.actual), 1e-9), w = Math.min(50, Math.abs(c.bias) / span * 50);
+    return `<tr><td>${esc(name)}${unit && !isPct ? ` <span class="note">${esc(unit)}</span>` : ''}</td><td class="n">${f(c.plan)}</td><td class="n">${f(c.actual)}</td>
+      <td class="n">${c.bias > 0 ? '+' : ''}${isPct ? (c.bias * 100).toFixed(1) + ' pts' : k === 'closing' ? fmt1(c.bias) : fmt(c.bias)}</td>
+      <td style="width:120px"><div class="biasbar" title="${c.bias > 0 ? 'Forecast higher than actual' : 'Forecast lower than actual'}"><b></b><i style="${c.bias > 0 ? 'left:50%' : `left:${50 - w}%`};width:${w}%;background:${c.bias > 0 ? 'var(--plan)' : 'var(--clean)'}"></i></div></td>
+      <td class="n">${isPct ? (c.mae * 100).toFixed(1) + ' pts' : k === 'closing' ? fmt1(c.mae) : fmt(c.mae)}</td><td class="n">${c.n}</td></tr>`;
+  }).join('');
+  const misses = (scope === 'all' ? res.misses : res.misses.filter(r => r.sec === scope)).filter(r => Math.abs(r.boxesErr) > 0.02).map(r => {
+    const d = r.mainDriver;
+    const dtxt = d ? (d.unit === '' ? `Run plan changed: planned ${d.plan}, ran ${d.actual}` : `${d.name}: forecast ${d.plan} vs actual ${d.actual} ${d.unit}`) : 'No breakdown entered';
+    return `<li><b>${nice(r.date)} · ${SECN[r.sec]}</b> · ${esc(r.items)} · forecast ${fmt(r.pm.boxes)}, actual ${fmt(r.am.boxes)} (${sgn(r.boxesErr)})<br><span class="note">Biggest gap: ${esc(dtxt)}${r.notes ? ' · Notes: ' + esc(r.notes) : ''}</span></li>`;
+  }).join('');
+  // ---- day mode: runs plan vs actual
+  let runsHtml2 = '';
+  if (mode === 'day') {
+    for (const r of rows) {
+      const pr = (r.pm && r.pm.runs) || [], ar = (r.am && r.am.runs) || [];
+      const n = Math.max(pr.length, ar.length); if (!n) continue;
+      let t = '';
+      for (let k = 0; k < n; k++) { const p = pr[k], a = ar[k]; t += `<tr><td class="n">${k + 1}</td><td>${p ? esc(p.product + ' ' + p.size) : '–'}</td><td>${a ? esc(a.product + ' ' + a.size) : '–'}</td><td class="n">${fa(p && p.boxesP50, a && a.boxes)}</td><td class="n">${fa(p && p.opening, a && a.opening, fmt1)}</td><td class="n">${fa(p && p.closing, a && a.closing, fmt1)}</td><td class="n">${p ? esc(p.start + '–' + p.finish) : '–'}</td></tr>`; }
+      runsHtml2 += `<div><h3>${SECN[r.sec]} · runs</h3><div class="tw"><table><thead><tr><th class="n">Run</th><th>Planned</th><th>Ran</th><th class="n">Boxes F / A</th><th class="n">Opening F / A</th><th class="n">Closing F / A</th><th class="n">Planned time</th></tr></thead><tbody>${t}</tbody></table></div></div>`;
+    }
+  }
+  // ---- week vs week
+  let wvw = '';
+  if (mode === 'week') {
+    const ws = wk.weeks.slice().reverse(), cats = ws.map(w => nice(w.to));
+    const scopes = scope === 'all' ? ['S1', 'S2'] : [scope];
+    const ser = (key, f = x => x) => scopes.map(s => ({ name: SECN[s], color: SCOL[s], values: ws.map(w => w[s] && w[s][key] != null ? f(w[s][key]) : null) }));
+    const tipW = (i, lines) => `<b>Week ending ${nice(ws[i].to)}</b><br>` + lines(ws[i]).join('<br>');
+    const boxesSer = ser('boxes'), stopSer = ser('stopPct');
+    const accVals = ws.map(w => { const a = scope === 'all' ? w.accuracy.all : w.accuracy[scope]; return a.mape; });
+    const chartBoxes = svgBars({ cats, series: boxesSer, fmtV: v => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : fmt(v), tipOf: i => tipW(i, w => scopes.map(s => `${SECN[s]}: ${w[s] ? fmt(w[s].boxes) + ' boxes in ' + w[s].sectionDays + ' day' + (w[s].sectionDays === 1 ? '' : 's') + ', ' + (w[s].bph != null ? Math.round(w[s].bph) + ' boxes/filling hr' : '') : 'no actuals'}`)) });
+    const chartStop = svgLines({ cats, series: stopSer, tipOf: i => tipW(i, w => scopes.map(s => `${SECN[s]}: ${w[s] && w[s].stopPct != null ? pct(w[s].stopPct, 1) + ' stoppage' : 'no actuals'}`)) });
+    const chartAcc = svgBars({ cats, series: [{ name: 'Boxes error (MAPE)', color: '#8b9aa4', values: accVals }], fmtV: v => pct(v), tipOf: i => tipW(i, w => { const a = scope === 'all' ? w.accuracy.all : w.accuracy[scope]; return a.scored ? [`Boxes error ${pct(a.mape, 1)} (bias ${sgn(a.bias)})`, `Stop minutes error ${fmt(a.stopMae)} min`, `${a.scored} day-section${a.scored === 1 ? '' : 's'} scored`] : ['No day with both a forecast and an actual']; }) });
+    const T = wk.table[scope];
+    const lab = { boxes: ['Boxes made', fmt], boxesPerDay: ['Boxes per section-day', fmt], stopPct: ['Stoppage', x => pct(x, 1)], bph: ['Boxes per filling hour', fmt], changes: ['Changeovers', fmt], changeMin: ['Changeover minutes', fmt], prepMin: ['Waiting for batch prep (min)', fmt], machineMin: ['Machine stop minutes', fmt], closingBalance: ['Balance carried out (batches)', fmt1], sectionDays: ['Section-days logged', fmt] };
+    const good = { boxes: 1, boxesPerDay: 1, bph: 1, stopPct: -1, changeMin: -1, prepMin: -1, machineMin: -1 };
+    const tRows = Object.keys(lab).map(k => {
+      const v = T[k], [name, f] = lab[k];
+      let ch = '';
+      if (v.thisWeek != null && v.lastWeek != null && v.lastWeek !== 0) {
+        const d = k === 'stopPct' ? (v.thisWeek - v.lastWeek) * 100 : (v.thisWeek / v.lastWeek - 1) * 100;
+        const cls = !good[k] || Math.abs(d) < 0.5 ? 'nt' : (d * good[k] > 0 ? 'up' : 'dn');
+        ch = `<span class="delta ${cls}">${d > 0 ? '+' : ''}${d.toFixed(1)}${k === 'stopPct' ? ' pts' : '%'}</span>`;
+      }
+      return `<tr><td>${name}</td><td class="n">${v.thisWeek == null ? '–' : f(v.thisWeek)}</td><td class="n">${v.lastWeek == null ? '–' : f(v.lastWeek)}</td><td class="n">${v.avg4 == null ? '–' : f(v.avg4)}</td><td class="n">${ch || '–'}</td></tr>`;
+    }).join('');
+    const accRows = wk.accuracy.map(a => { const x = scope === 'all' ? a : (() => { const w = wk.weeks.find(q => q.to === a.to).accuracy[scope]; return { ...a, mape: w.mape, bias: w.bias, stopMae: w.stopMae, n: w.scored, changeBias: w.components.changeMin ? w.components.changeMin.bias : null }; })();
+      return `<tr><td>${nice(x.from)} – ${nice(x.to)}</td><td class="n">${x.n || '–'}</td><td class="n">${x.mape == null ? '–' : pct(x.mape, 1)}</td><td class="n">${x.bias == null ? '–' : sgn(x.bias)}</td><td class="n">${x.stopMae == null ? '–' : fmt(x.stopMae) + ' min'}</td><td class="n">${x.changeBias == null ? '–' : (x.changeBias > 0 ? '+' : '') + fmt(x.changeBias) + ' min'}</td></tr>`; }).join('');
+    const w0 = wk.weeks[0][scope];
+    const reasons = w0 && w0.reasons.length ? `<div class="tw"><table><thead><tr><th>Reason entered</th><th class="n">Times</th><th class="n">Minutes</th></tr></thead><tbody>${w0.reasons.map(r => `<tr><td>${esc(r.reason)}</td><td class="n">${r.count}</td><td class="n">${r.minutes ? fmt(r.minutes) : '–'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">No stop reasons entered this week.</p>';
+    wvw = `<section class="rep" style="gap:12px">
+      <div><h2>Week vs week</h2><p class="note" style="margin:2px 0 0">Actuals in 7-day weeks ending ${nice(end)}, compared with last week and the average of the 4 weeks before. ${scopeName}.</p></div>
+      <div class="rgrid">
+        <div class="chart"><h4>Boxes made per week</h4><p class="sub">Total boxes; hover for days and speed</p>${keyHtml(boxesSer)}${chartBoxes}</div>
+        <div class="chart"><h4>Stoppage per week</h4><p class="sub">Stop minutes ÷ working minutes</p>${keyHtml(stopSer)}${chartStop}</div>
+        <div class="chart"><h4>Forecast error per week</h4><p class="sub">Average boxes miss (MAPE): lower is better</p>${chartAcc}</div>
+      </div>
+      <div class="cols2">
+        <div style="min-width:0"><h3>Actuals: this week vs last week vs 4-week average</h3><div class="tw"><table><thead><tr><th>Metric</th><th class="n">This week</th><th class="n">Last week</th><th class="n">4-wk avg</th><th class="n">vs last week</th></tr></thead><tbody>${tRows}</tbody></table></div></div>
+        <div style="min-width:0"><h3>Is the model getting better?</h3><div class="tw"><table><thead><tr><th>Week</th><th class="n">Days scored</th><th class="n">Boxes error</th><th class="n">Bias</th><th class="n">Stop error</th><th class="n">Changeover bias</th></tr></thead><tbody>${accRows}</tbody></table></div>
+          <h3 style="margin-top:12px">Top stop reasons this week</h3>${reasons}</div>
+      </div></section>`;
+  }
+  root.innerHTML = `<div class="rep">
+    <div><h2>Plan vs actual · ${esc(period)}</h2><p class="note" style="margin:2px 0 0">${scopeName}. Forecast = the saved forecast, or a re-forecast with what the model knew before that day when none was saved.</p></div>
+    <div class="rsum">${sumLines.map(s => `<p>${esc(s)}</p>`).join('')}</div>
+    ${rows.length ? `<div class="tiles">
+      ${tile('Boxes', `${fmt(summ.actualBoxes)}`, `actual vs ${fmt(summ.plannedBoxes)} forecast`)}
+      ${tile('Boxes error (MAPE)', summ.mape != null ? pct(summ.mape, 1) : '–', `${summ.scored} day-section${summ.scored === 1 ? '' : 's'} scored · bias ${sgn(summ.bias)}`)}
+      ${tile('Stop minutes error', summ.stopMae != null ? fmt(summ.stopMae) + ' min' : '–', summ.stopBias != null ? `forecast ${summ.stopBias > 0 ? 'more' : 'fewer'} stops by ${fmt(Math.abs(summ.stopBias))} min/day` : '')}
+      ${tile('Inside P10–P90', summ.inRange != null ? pct(summ.inRange) : '–', 'about 80% expected')}
+    </div>
+    <div><h3>Forecast / actual by ${mode === 'week' ? 'day' : 'section'}</h3><div class="tw"><table><thead><tr><th class="n">Date</th><th>Sec</th><th>Items</th><th class="n">Fcst boxes</th><th class="n">Actual</th><th class="n">Error</th><th class="n">Closing bal. F / A</th><th class="n">Stop % F / A</th><th class="n">Changeover F / A</th><th class="n">Prep wait F / A</th><th class="n">Cleaning F / A</th><th class="n">Machine F / A</th><th class="n">Boxes/hr F / A</th><th>Main driver</th></tr></thead><tbody>${body}</tbody></table></div><p class="note" style="margin:4px 0 0">Minutes unless marked. F = forecast, A = actual. Closing balance in batches.</p></div>
+    ${runsHtml2 ? `<div class="cols2">${runsHtml2}</div>` : ''}
+    <div class="cols2">
+      <div style="min-width:0"><h3>Which part of the day the forecast gets wrong</h3>${cRows ? `<div class="tw"><table><thead><tr><th>Part</th><th class="n">Fcst avg</th><th class="n">Actual avg</th><th class="n">Bias</th><th></th><th class="n">Avg miss</th><th class="n">Days</th></tr></thead><tbody>${cRows}</tbody></table></div><p class="note" style="margin:4px 0 0">Bias above zero (amber) = forecast higher than what happened.</p>` : '<p class="note">Enter actual minutes to see this.</p>'}</div>
+      <div style="min-width:0"><h3>Biggest misses</h3>${misses ? `<ul class="why" style="gap:8px">${misses}</ul>` : '<p class="note">No miss larger than 2%.</p>'}</div>
+    </div>` : '<p class="note">No day in this period has both a forecast and an actual.</p>'}
+    ${wvw}
+    ${changesHtml(L)}${savedHtml()}</div>`;
+}
+function changesHtml(L) {
+  if (!L.changes.length) return `<details><summary>What the model changed · nothing yet</summary><p class="note">Every saved actual moves the speed, boxes per batch (when balances are entered), stop rate, changeover, prep and cleaning numbers for that item and section toward what happened.</p></details>`;
+  const rows = L.changes.sort((a, b) => Math.abs(b.to - b.from) / (Math.abs(b.from) || 1) - Math.abs(a.to - a.from) / (Math.abs(a.from) || 1)).map(c => `<tr><td>${esc(c.label)}</td><td class="n">${c.from}</td><td class="n">${c.to}</td><td class="n">${c.n}</td><td class="n">${Math.round(c.weight * 100)}%</td></tr>`).join('');
+  return `<details><summary>What the model changed · ${L.changes.length} number${L.changes.length === 1 ? '' : 's'} moved (history → now)</summary><div class="tw"><table><thead><tr><th>Parameter</th><th class="n">History</th><th class="n">Now</th><th class="n">Logged days</th><th class="n">Weight of logs</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+}
+function savedHtml() {
+  const all = S.plans.map(p => ({ t: 'Forecast', d: p.date, s: p.sec, it: p.inputs && p.inputs.runs ? p.inputs.runs.map(r => `${r.product} ${r.size}`).join(' + ') : `${p.inputs?.product} ${p.inputs?.size}`, b: p.out?.boxesP50, c: p.out?.closingBatches, at: p.savedAt }))
+    .concat(S.actuals.map(a => ({ t: 'Actual', d: a.date, s: a.sec, it: ENGINE.actualRuns(a).map(r => `${r.product} ${r.size}`).join(' + '), b: a.boxes, c: ENGINE.actualTotals(a).closingBatches, at: a.savedAt })))
+    .sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : a.s < b.s ? -1 : 1);
+  return `<details><summary>All saved records (${S.plans.length} forecasts, ${S.actuals.length} actuals)</summary>
+    <p class="note">Stored in the shared collections <code>plans</code> and <code>actuals</code>, one document per day and section (for example <code>plans/2026-10-05_S1</code>). Field lists are in How the model works.</p>
+    ${all.length ? `<div class="tw"><table><thead><tr><th class="n">Date</th><th>Sec</th><th>Type</th><th>Items</th><th class="n">Boxes</th><th class="n">Closing bal.</th><th>Saved</th></tr></thead><tbody>${all.map(r => `<tr><td class="n">${r.d}</td><td>${r.s}</td><td>${r.t}</td><td>${esc(r.it)}</td><td class="n">${fmt(r.b)}</td><td class="n">${r.c == null ? '–' : fmt1(r.c)}</td><td class="note">${esc((r.at || '').slice(0, 16).replace('T', ' '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">No records yet.</p>'}</details>`;
+}
+async function exportCsv() {
+  if (!S.dl || !CM.last) return;
+  const msg = $('c_msg');
+  const { res, from, end } = CM.last;
+  const wk = CM.last.wk || ENGINE.weekly(P0, S.plans, S.actuals, end);
+  const cmpWeek = CM.last.mode === 'week' ? res : ENGINE.compare(P0, S.plans, S.actuals, { from: addDays(end, -6), to: end });
+  try { await S.dl.save({ filename: `ATIC weekly report ${wk.weeks[0].from} to ${wk.weeks[0].to}.csv`, data: ENGINE.reportCsv(cmpWeek, wk) }); msg.className = 'msg ok'; msg.textContent = 'Report saved.'; }
+  catch (e) { msg.className = 'msg ' + (e && e.code === 'declined' ? 'note' : 'err'); msg.textContent = e && e.code === 'declined' ? 'Export cancelled.' : e && (e.code === 'unavailable' || e.code === 'not_granted') ? 'Export is not available in this view.' : 'Export failed. Try again.'; if (e && (e.code === 'unavailable' || e.code === 'not_granted')) $('c_csv').hidden = true; }
+}
+// tooltip for the report charts
+{
+  const tip = $('tip');
+  $('cmp').addEventListener('mousemove', e => { const t = e.target.closest && e.target.closest('[data-tip]'); if (!t) { tip.hidden = true; return; } tip.innerHTML = t.getAttribute('data-tip'); tip.hidden = false; const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 14) + 'px'; });
+  $('cmp').addEventListener('mouseleave', () => { tip.hidden = true; });
+}
+
+// ---------------------------------------------------------------- how it works
+function renderHow() {
+  const P = S.Lall ? S.Lall.P : P0;
+  const sp = (k, s) => P.speed[k + '|' + s];
+  const items = Object.keys(P.boxesPerBatch);
+  const itemRows = items.map(k => { const [p, z] = k.split('|'); const a = sp(k, 'S1'), b = sp(k, 'S2');
+    return `<tr><td>${esc(P.products[p])} ${z}</td><td class="n">${Math.round(a.p50 * 60)}</td><td class="n">${Math.round(b.p50 * 60)}</td><td class="n">${Math.round(a.p10 * 60)}–${Math.round(a.p90 * 60)}</td><td class="n">${Math.round(P.boxesPerBatch[k].boxes)}</td><td class="n">${P.machineRate[k + '|S1'].minPerFillHr.toFixed(1)}</td><td class="n">${P.machineRate[k + '|S2'].minPerFillHr.toFixed(1)}</td><td class="note">${a.n} / ${b.n} runs</td></tr>`; }).join('');
+  const ws = q => q == null ? '–' : Math.round(q * 100) + '%';
+  const prep = Object.entries(P.prep).map(([p, q]) => `<tr><td>${esc(P.products[p])}</td><td class="n">${Math.round(q.minWhenDone)}</td><td class="n">${ws(q.waitShareWithBalance)} <span class="note">(${q.nWithBalance || 0})</span></td><td class="n">${ws(q.waitShareNoBalance)} <span class="note">(${q.nNoBalance || 0})</span></td><td>${q.waitsWithBalance ? 'Always before filling (heating / filtration)' : 'In parallel when there is balance; before filling when the tank is empty'}</td></tr>`).join('');
+  const bal = Object.entries(P0.balance || {}).filter(([, b]) => b.n).map(([p, b]) => { const bt = P0.batch[p]; return `<tr><td>${esc(P0.products[p])}</td><td class="n">${fmt(bt.kgPerBatch)}</td><td class="n">${bt.density.toFixed(2)}</td><td class="n">${pct(bt.yield, 1)}</td><td class="n">${fmt(bt.litresPerBatch)}</td><td class="n">${pct(b.shareDaysWithOpening)}</td><td class="n">${fmt1(b.medianOpening)}</td><td class="n">${fmt1(b.medianClosing)}</td><td class="n">${pct(b.shareDaysNoPrep)}</td><td class="n">${b.n}</td></tr>`; }).join('');
+  const endBal = Object.entries(P0.balanceEndOfRegister || {}).map(([s, m]) => `${SECN[s]}: ${Object.entries(m).map(([p, v]) => `${pname(p)} ${fmt1(v)}`).join(', ') || 'none'}`).join(' · ');
+  const co = ['size', 'product', 'both'].map(t => { const c = P.changeover[t]; return `<tr><td>${ENGINE.CHG_LABEL[t]}</td><td class="n">${Math.round(c.changeoverMin)}</td><td class="n">${Math.round(c.cipMin)}</td><td class="n">${Math.round(c.afterChangeLossMin)}</td><td class="n">${Math.round(c.extraStopMin)}</td><td class="note">${c.n} change days</td></tr>`; }).join('');
+  const wd = [5, 6, 0, 1, 2, 3].map(k => `<span>${ENGINE.WD[k]}</span><span>${P.weekday[k].pts > 0 ? '+' : ''}${P.weekday[k].pts} pts</span>`).join('');
+  const hp = Object.entries(P.hourProfile).map(([h, v]) => `<span>${h.padStart(2, '0')}:00</span><span>×${(+v).toFixed(2)}</span>`).join('');
+  const pl = s => P.planned[s];
+  const b0 = BT && BT.before;
+  const bt = BT ? `<p>We tested the model on the <b>last ${BT.n} section-days</b> that have both a production register and a stoppage log (${BT.from} to ${BT.to}). Each day was forecast using only data from before that day, with the runs, the batches prepared, the estimated tank balance, the previous run, the weekday and the section as inputs (for days with two items, the logged line-change time was used as the start of the second run).</p>
+    <div class="tw"><table><thead><tr><th></th><th class="n">Boxes error (MAPE)</th><th class="n">Typical day (median)</th><th class="n">Bias</th><th class="n">Stop minutes error</th><th class="n">Inside P10–P90</th></tr></thead><tbody>
+      ${b0 ? `<tr><td>Before (one item, batches as a hard limit, no balance)</td><td class="n">${b0.mape}%</td><td class="n">${b0.mdape}%</td><td class="n">${b0.bias > 0 ? '+' : ''}${b0.bias}%</td><td class="n">${b0.stopMae} min</td><td class="n">${b0.cover}%</td></tr>` : ''}
+      <tr><td><b>Now (runs + balance)</b></td><td class="n">${BT.mape}%</td><td class="n">${BT.mdape}%</td><td class="n">${BT.bias > 0 ? '+' : ''}${BT.bias}%</td><td class="n">${BT.stopMae} min</td><td class="n">${BT.cover}%</td></tr>
+      ${BT.multiRunDays ? `<tr><td>Days with two or more items (${BT.multiRunDays.n})</td><td class="n">${BT.multiRunDays.mape}%</td><td class="n">${BT.multiRunDays.mdape}%</td><td class="n">${BT.multiRunDays.bias > 0 ? '+' : ''}${BT.multiRunDays.bias}%</td><td class="n">${BT.multiRunDays.stopMae} min</td><td class="n">${BT.multiRunDays.cover}%</td></tr>` : ''}
+    </tbody></table></div>
+    <p>The typical day is now about ${BT.mdape}% off. A few days with very long stops pull the average up, and the model still forecasts too few stop minutes on those days.${BT.multiRunDays && BT.multiRunDays.runMape != null ? ` On days with more than one item, each run's boxes were off by ${BT.multiRunDays.runMape}% on average: splitting a day between sizes is harder to predict than the day's total.` : ''}</p>` : '';
+  $('how').innerHTML = `<div class="how">
+    <section>
+      <h3>What the planner does</h3>
+      <p>For each section and day you list the runs: which product and size, how many batches were prepared today, and how much is already in the tank from yesterday (the <b>balance</b>). The planner builds a minute-by-minute plan of the 07:00–17:00 shift: start-up, changeovers and CIP (also mid-day, between runs), waiting for batch preparation when the line has to, filling with its usual machine stops, and end-of-day cleaning. It gives the boxes to expect, the stoppage, when the last box comes off, and the <b>closing balance</b> that stays in the tank for tomorrow.</p>
+      <p>All numbers come from ATIC's own records: <b>${P0.counts.runs}</b> line runs in the production registers (${P0.counts.from} to ${P0.counts.registerTo}) and <b>${fmt(P0.counts.events)}</b> logged stops (January to ${P0.counts.logsTo}). Recent months count more than old ones.</p>
+      <h3 style="margin-top:12px">How accurate it is</h3>${bt}
+      <p>The range (P10–P90) means about 8 in 10 days should land inside it. It is wide on purpose: a few days each month lose two or more hours to one long breakdown.</p>
+    </section>
+    <section>
+      <h3>How it learns</h3>
+      <p>Every actual you save is blended into the numbers. One logged day counts like <b>three</b> days of history, and logged days lose half their weight every <b>60 days</b>. An item with lots of history moves slowly, a new item moves fast.</p>
+      <p>From an actual the model updates each run's <b>filling speed</b>, the <b>machine stop rate</b>, <b>changeover</b> and <b>CIP</b> minutes (including mid-day changes), <b>batch prep</b> time and whether the line had to wait for it, and the section's <b>cleaning</b> time. <b>Boxes per batch</b> only learns when you enter both the opening and closing balance: boxes ÷ (opening + prepared − closing). Without balances it would mix up "fewer boxes per batch" with "product left in the tank", so it does not guess.</p>
+      <p>A forecast for a date only learns from actuals before that date. Right now: <b>${S.Lall ? S.Lall.n : 0}</b> logged day${S.Lall && S.Lall.n === 1 ? '' : 's'}.</p>
+    </section>
+    <section style="grid-column:1/-1">
+      <h3>Balance: product left in the tank</h3>
+      <p>The registers show that prepared batches are often not all filled the same day: some rows have batches prepared and nothing filled (4 Grenadine Molasses batches in Section 1 on 31 Aug 2026), and some days fill with no batches prepared (Blossom Water 750ml on 31 Aug). Using each row's <i>Total qty prepared</i> and <i>Total Filled weight in kg</i>, we tracked the product in each tank day by day: closing = opening + prepared × filling yield − filled, never below zero and never more than about 1.5 days of filling (Section 2's Grenadine records show about 30% more batches prepared than filled, which a tank cannot hold).</p>
+      <div class="tw"><table><thead><tr><th>Product</th><th class="n">kg per batch</th><th class="n">Density kg/L</th><th class="n">Filling yield</th><th class="n">Litres per batch</th><th class="n">Days starting with balance</th><th class="n">Typical opening (batches)</th><th class="n">Typical closing</th><th class="n">Days with no new batch</th><th class="n">Filling days</th></tr></thead><tbody>${bal}</tbody></table></div>
+      <p class="note" style="margin-top:6px">Filling yield = filled kg ÷ prepared kg over the whole history (product lost to tank heel, samples, spills and breakage). Boxes per batch = kg per batch × yield ÷ density ÷ litres per box, so it is based on what is actually filled and is not distorted by balance. Estimated balances at the end of the register (${esc(P0.balanceAsOf || '')}): ${esc(endBal)}. These are five weeks old, so the planner starts from a saved actual's closing balance, or 0.</p>
+    </section>
+    <section style="grid-column:1/-1">
+      <h3>Filling speed, batch size and machine stops by item</h3>
+      <div class="tw"><table><thead><tr><th>Item</th><th class="n">Boxes / filling hr S1</th><th class="n">S2</th><th class="n">S1 slow–fast day</th><th class="n">Boxes per batch</th><th class="n">Machine stop min / fill hr S1</th><th class="n">S2</th><th>Data</th></tr></thead><tbody>${itemRows}</tbody></table></div>
+    </section>
+    <section>
+      <h3>Batch preparation: does filling wait?</h3>
+      <div class="tw"><table><thead><tr><th>Product</th><th class="n">Prep min</th><th class="n">Waited, with balance</th><th class="n">Waited, no balance</th><th>Rule used</th></tr></thead><tbody>${prep}</tbody></table></div>
+      <p class="note" style="margin-top:6px">From the stoppage logs joined to the estimated balance (number of logged days in brackets). Rose Water and Blossom Water are heated and filtered before filling every day, balance or not. Grenadine Molasses, Lemon Substitute and White Vinegar start filling on yesterday's balance while today's batch is prepared, so prep costs no line time; if the balance runs out before prep is done, the line waits for the rest. With an empty tank, filling waits for prep.</p>
+      <h3 style="margin-top:12px">Planned stops</h3>
+      <div class="kv">
+        <span>Morning start, S1 / S2</span><span>${Math.round(pl('S1').morningStart)} / ${Math.round(pl('S2').morningStart)} min</span>
+        <span>Routine cleaning at end of day, S1 / S2</span><span>${Math.round(pl('S1').routineCleaning)} / ${Math.round(pl('S2').routineCleaning)} min</span>
+        <span>Deep cleaning / CIP on a normal day, S1</span><span>${Math.round(pl('S1').deepProb * 100)}% × ${Math.round(pl('S1').deepMin)} min</span>
+        <span>Deep cleaning / CIP on a normal day, S2</span><span>${Math.round(pl('S2').deepProb * 100)}% × ${Math.round(pl('S2').deepMin)} min</span>
+        <span>Section 2 speed vs Section 1</span><span>×${P.sectionFactor.speed}</span>
+        <span>Section 2 machine stops vs Section 1</span><span>×${P.sectionFactor.machineStops}</span>
+      </div>
+    </section>
+    <section>
+      <h3>Changeovers</h3>
+      <div class="tw"><table><thead><tr><th>Change</th><th class="n">Changeover</th><th class="n">CIP</th><th class="n">Settling stops</th><th class="n">Extra vs normal day</th><th>Data</th></tr></thead><tbody>${co}</tbody></table></div>
+      <p class="note" style="margin-top:6px">The same minutes apply to a change at the start of the day and to a mid-day change between runs. A day with a product change gets CIP instead of the usual chance of deep cleaning.</p>
+      <h3 style="margin-top:12px">Weekday and hour of day</h3>
+      <div class="cols2" style="gap:12px"><div class="kv">${wd}</div><div class="kv">${hp}</div></div>
+      <p class="note" style="margin-top:6px">Left: stoppage points vs an average day. Right: how likely a machine stop is in each hour; stops are placed by this profile with a fixed random seed, so the same inputs always give the same timeline.</p>
+    </section>
+    <section style="grid-column:1/-1">
+      <h3>Data saved by this page</h3>
+      <p>Two shared collections, one document per day and section. <code>plans/&lt;date&gt;_S1</code> or <code>_S2</code> holds a saved forecast: <code>inputs.runs[]</code> (product, size, batches prepared, opening balance or null when carried from an earlier run, start in minutes after 07:00 or null, target), <code>inputs.prev</code>, <code>out</code> (boxesP10/P50/P90, closingBatches, closing[] per product with kg/litres/boxes, runs[] with boxes and closing per run, fillMin, stopMin, stopPct, changes, changeMin, cipMin, prepMin, routineMin, deepMin, machineMin, finish, timeline), <code>why</code>, <code>model</code>, <code>savedAt</code>. <code>actuals/&lt;date&gt;_S1</code> holds what happened: <code>runs[]</code> (product, size, batches, opening, closing, boxes, fillMin, changeoverMin), the day totals (boxes, openingBalance, closingBalance, workMin, fillMin, stopMin, changeover {done, type, min, count}, cleanRoutineMin, cleanDeepMin, prepMin, lastBox), reasons, notes, savedAt. Documents saved before runs existed (single product per day) are still read.</p>
+      <p class="note">History model ${esc(P0.version)}, built ${esc(P0.built)}. No production register exists yet for September 2026, so the default previous run is the last register run (31 August). The September stoppage log suggests Section 2 was heating Blossom Water from 27 September; set the previous run on the card if you know it.</p>
+    </section>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- tabs
+function showTab(id) {
+  for (const t of ['timeline', 'actual', 'compare', 'how']) {
+    const on = t === id; $('tab-' + t).setAttribute('aria-selected', on); $('tab-' + t).tabIndex = on ? 0 : -1; $('p-' + t).hidden = !on;
+  }
+  try { ATIC.setSub(id); if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id); } catch (e) {}
+  if (id === 'compare') renderCompare();
+  if (id === 'how') renderHow();
+  if (id === 'actual' && !A.loadedKey) aFill(aKey());
+  store.set('aticPlannerTab', id);
+}
+document.querySelectorAll('[role=tab]').forEach((b, i, all) => {
+  b.onclick = () => showTab(b.id.slice(4));
+  b.onkeydown = e => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const n = all[(i + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]; n.focus(); n.click(); } };
+});
+// ---------------------------------------------------------------- simulation clock + crew (works without 3D)
+const SIM = (() => {
+  let fc = { S1: null, S2: null }, t = 0, playing = true, speed = 6, last = performance.now(), view = null;
+  const axis = $('axis'); axis.innerHTML = '';
+  for (let m = 0; m <= 600; m += 60) { const s = document.createElement('span'); s.style.left = (m / 6) + '%'; s.textContent = hhmm(m); axis.appendChild(s); }
+  function drawBars() {
+    for (const [n, sec] of [[1, 'S1'], [2, 'S2']]) {
+      const tl = $('tl' + n); tl.querySelectorAll('.b').forEach(e => e.remove());
+      const f = fc[sec]; if (!f) continue;
+      for (const x of f.timeline) {
+        if (x.g === 'run') continue;
+        const b = document.createElement('div'); b.className = 'b'; b.style.left = (x.s / 6) + '%'; b.style.width = Math.max(x.d / 6, .25) + '%'; b.style.background = COL[x.g];
+        b.title = `${hhmm(x.s)}–${hhmm(x.s + x.d)} ${x.cat}: ${x.desc} (${x.d} min)`; tl.insertBefore(b, tl.firstChild);
+      }
+      // run boundaries (mid-day line changes)
+      (f.runs || []).forEach((r, k) => { if (!k) return; const b = document.createElement('div'); b.className = 'b rb'; b.style.left = (r.start / 6) + '%'; b.title = `${hhmm(r.start)} Run ${k + 1}: ${pname(r.product)} ${r.size}`; tl.insertBefore(b, tl.firstChild); });
+    }
+  }
+  function load(newFc, keepTime) { fc = { ...newFc }; if (!keepTime) { t = 0; playing = true; $('play').textContent = 'Pause'; } drawBars(); if (view) view.load(fc); }
+  function cur(sec, tt) { const f = fc[sec]; if (!f) return null; for (const x of f.timeline) if (tt >= x.s && tt < x.s + x.d) return x; return null; }
+  // boxes so far: each run fills at its own rate (its boxes / its filling minutes)
+  function made(sec, tt) {
+    const f = fc[sec]; if (!f || !f.fillMin) return 0; let b = 0;
+    for (const x of f.timeline) { if (x.g !== 'run') continue; if (x.s >= tt) break; const r = f.runs[x.run] || f.runs[0]; if (r.fillMin > 0) b += Math.min(x.d, tt - x.s) * r.boxes.p50 / r.fillMin; }
+    return Math.min(f.boxes.p50, b);
+  }
+  $('play').onclick = () => { playing = !playing; if (playing && t >= 600) t = 0; $('play').textContent = playing ? 'Pause' : 'Play'; };
+  document.querySelectorAll('#speed button').forEach(b => b.onclick = () => { speed = +b.dataset.s; document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b)); store.set('aticPlannerSpeed', speed); });
+  { const sv = +store.get('aticPlannerSpeed'); if ([1, 3, 6, 15].includes(sv)) { speed = sv; document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', +x.dataset.s === sv)); } }
+  for (const n of [1, 2]) $('tl' + n).onclick = e => { const r = e.currentTarget.getBoundingClientRect(); t = Math.max(0, Math.min(599.9, (e.clientX - r.left) / r.width * 600)); };
+  const stateText = c => !c ? 'Running' : c.g === 'mach' ? 'Machine stop' : c.g === 'clean' ? 'Cleaning' : c.g === 'plan' ? 'Planned stop' : c.g === 'idle' ? 'Idle' : c.g === 'run' ? 'Running' : 'Unplanned';
+  let lastCrew = '';
+  function tick(ts) {
+    const dt = Math.min((ts - last) / 1000, .1); last = ts;
+    if (playing) { t += dt * speed; if (t >= 600) { t = 600; playing = false; $('play').textContent = 'Replay'; } }
+    $('clk').textContent = hhmm(Math.min(t, 600));
+    const st = {};
+    for (const [n, sec] of [[1, 'S1'], [2, 'S2']]) {
+      const c = t >= 600 ? null : cur(sec, t); st[sec] = c;
+      $('tl' + n).querySelector('.ph').style.left = (Math.min(t, 600) / 6) + '%';
+      const m = made(sec, t), f = fc[sec];
+      $('hb' + n).textContent = fmt(m); $('tc' + n).textContent = `${fmt(m)} / ${fmt(f ? f.boxes.p50 : 0)}`;
+      const pill = $('hs' + n); const g = t >= 600 ? 'idle' : (c ? c.g : 'run');
+      pill.textContent = t >= 600 ? 'Shift over' : stateText(c); pill.style.background = g === 'run' ? 'var(--run)' : g === 'idle' ? 'var(--idle)' : COL[g]; pill.style.color = g === 'idle' ? 'var(--fg)' : '#071a12';
+    }
+    const plan = CREW.plan(t, st);
+    const html = CREW.html(plan), key = html.S1 + html.S2 + html.F;
+    if (key !== lastCrew) { $('crew1').innerHTML = html.S1; $('crew2').innerHTML = html.S2; $('crew0').innerHTML = html.F; lastCrew = key; }
+    if (view) view.frame(dt, ts, t, st, plan, { S1: made('S1', t), S2: made('S2', t) }, speed);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+  return { load, seek: x => { t = x; }, attach: v => { view = v; v.load(fc); }, get t() { return t; } };
+})();
+
+// crew logic (local line coordinates as in the single-line replay; converted to the plant by the 3D view)
+const CREW = (() => {
+  const SX = { wash: -12, fill: -6.5, cap: -0.5, lab: 5.2, pack: 11, tank: -16.5 };
+  const ST = { Capping: 'cap', Labeling: 'lab', Filling: 'fill', Packaging: 'pack', 'Conveyor & Washer': 'wash', 'Batch Preparation': 'tank', 'Start-up after change': 'cap' };
+  const SNAME = { wash: 'washer / feed', fill: 'filling machine', cap: 'capping machine', lab: 'labeling machine', pack: 'packaging' };
+  const POST = { feeder: [SX.fill - 1.7, -1.5], packer: [SX.pack, -1.55], stacker: [SX.pack, 5.75] };
+  const FACE = { feeder: 0, packer: 0, stacker: Math.PI };
+  const TAPE_Z = 3.0;
+  // entrance at the far end of the aisle, maintenance room beyond the packaging end (nearer the viewer, a few metres farther from the lines than before)
+  const ENTRY = [0, -21.5], MROOM = [0, 23.5], BREAK = [0, 18];
+  const PEOPLE = [['feeder', 'Bottle feeder', '#ff8a1f'], ['packer', 'Packer', '#ff8a1f'], ['stacker', 'Pallet stacker', '#ff8a1f'], ['maint', 'Maintenance', '#3d8bf2']];
+  function secPlan(sec, t, c) {
+    const P = {}; const off = sec === 'S1' ? -1 : 1;
+    const set = (k, x, z, work, status, face, w = false) => { P[k] = { x, z, work, status, face: face ?? (z > 0 ? Math.PI : 0), w }; };
+    const atFiller = txt => set('feeder', SX.fill - .6, -1.45, true, txt || 'Stays at the filler, controlling the machine', 0);
+    const post = (k, work, status) => set(k, POST[k][0], POST[k][1], work, status, FACE[k]);
+    const wait = (k, txt) => post(k, false, txt || 'Waiting at the line');
+    post('feeder', true, 'Putting bottles into the filler feeder');
+    post('packer', true, 'Filling boxes, sending them down the rail');
+    post('stacker', true, 'Taking taped boxes, stacking the pallet');
+    set('maint', MROOM[0] + off * 1.1, MROOM[1], true, 'In the maintenance room', Math.PI, true);
+    let fspot = null;
+    if (t >= 600) { ['feeder', 'packer', 'stacker', 'maint'].forEach((k, i) => set(k, ENTRY[0] + off * (1.2 + (i % 2) * .7), ENTRY[1] + 1 + Math.floor(i / 2) * .7, false, 'Shift over', Math.PI, true)); return { P, fspot }; }
+    if (!c || c.g === 'run') return { P, fspot };
+    const cat = c.cat, st = ST[cat] || 'line', el = t - c.s, dur = c.d, desc = (c.desc || '').toLowerCase();
+    if (c.g === 'idle') { atFiller('Line stopped: all batches filled'); post('packer', false, 'Batches done, tidying cartons'); post('stacker', true, 'Wrapping the last pallet'); return { P, fspot }; }
+    if (['wash', 'fill', 'cap', 'lab', 'pack'].includes(st)) {
+      const x = SX[st];
+      if (st === 'pack') set('maint', SX.pack + 1.1, TAPE_Z, true, 'Fixing the taping / packaging', Math.PI * 1.5); else set('maint', x + .5, 1.25, true, 'Fixing the ' + SNAME[st]);
+      fspot = { x: x - .7, z: 2.1, status: `At ${SECN[sec]}: ${desc}` };
+      atFiller(st === 'fill' ? 'At the filler, working on it with maintenance' : null);
+      if (el < 3) { post('packer', true, 'Packing the last bottles'); post('stacker', true, 'Stacking the last cartons'); } else { wait('packer'); wait('stacker'); }
+      if (dur >= 15 && el >= 2 && (st === 'lab' || st === 'pack')) set('packer', x - .2, 1.25, true, 'Helping fix the ' + SNAME[st]);
+      return { P, fspot };
+    }
+    if (cat === 'Morning Start') {
+      if (el < dur / 2) { ['feeder', 'packer', 'stacker'].forEach((k, i) => set(k, ENTRY[0] + off * (1.5 + i * .8), ENTRY[1] + 2.5, false, 'Arriving, getting ready', 0, true)); fspot = { x: ENTRY[0], z: ENTRY[1] + 3.5, w: true, status: 'Briefing both crews' }; }
+      else { post('feeder', true, 'Setting up the line'); post('packer', true, 'Setting up cartons'); post('stacker', true, 'Setting up the pallet'); fspot = { x: SX.fill, z: 2.4, status: `Starting ${SECN[sec]}` }; }
+      return { P, fspot };
+    }
+    if (cat === 'Routine Cleaning' || cat === 'Deep Cleaning / CIP') {
+      const deep = cat !== 'Routine Cleaning';
+      set('feeder', SX.fill, -1.3, true, deep ? 'CIP / hot-water cleaning of the filler' : 'Cleaning the filler');
+      set('packer', SX.cap + .4, 1.3, true, 'Cleaning capping & labeling');
+      set('stacker', SX.pack + .9, 4.2, true, 'Cleaning the rail & taping machine', Math.PI * 1.5);
+      fspot = { x: SX.fill - 1.2, z: 2.3, status: `Supervising cleaning at ${SECN[sec]}` };
+      return { P, fspot };
+    }
+    if (cat === 'Changeover & Line Setup') {
+      set('maint', SX.cap + .5, 1.25, true, 'Setting the capper for the new bottle');
+      set('feeder', SX.fill, -1.3, true, 'Changing filler parts');
+      set('packer', SX.lab, 1.3, true, 'Changing the label roll');
+      set('stacker', SX.pack + 1, 5.5, true, 'Preparing new cartons', Math.PI);
+      fspot = { x: SX.fill - 1.2, z: 2.3, status: `Running the changeover at ${SECN[sec]}` };
+      return { P, fspot };
+    }
+    if (cat === 'Batch Preparation') {
+      fspot = { x: SX.tank + 1.8, z: 1.6, status: `Checking the batch at ${SECN[sec]}: ${desc}` };
+      atFiller('At the filler, waiting for the batch'); wait('packer', 'Waiting for the batch'); wait('stacker', 'Waiting for the batch');
+      return { P, fspot };
+    }
+    // unplanned allowance
+    atFiller(); wait('packer'); wait('stacker'); fspot = { x: SX.lab, z: 2.4, status: `Handling a hold-up at ${SECN[sec]}` };
+    return { P, fspot };
+  }
+  function plan(t, st) {
+    const out = { S1: secPlan('S1', t, st.S1), S2: secPlan('S2', t, st.S2), foreman: null, fSec: null };
+    // shared foreman: go to the section that has a stop; if both, the machine stop, else the one that started first
+    const cand = ['S1', 'S2'].filter(s => out[s].fspot);
+    let pick = null;
+    if (cand.length === 1) pick = cand[0];
+    else if (cand.length === 2) {
+      const a = st.S1, b = st.S2, ma = a.g === 'mach', mb = b.g === 'mach';
+      pick = ma !== mb ? (ma ? 'S1' : 'S2') : (a.s <= b.s ? 'S1' : 'S2');
+      if (out.S1.fspot.w && out.S2.fspot.w) pick = 'S1';
+    }
+    if (t >= 600) out.foreman = { x: ENTRY[0], z: ENTRY[1] + .6, w: true, status: 'Shift over', work: false };
+    else if (pick) { const f = out[pick].fspot; out.foreman = { ...f, w: !!f.w, work: false }; out.fSec = pick; }
+    else { const ph = Math.floor(t / 40) % 4; const z = [-8, 0, 8, 2][ph]; out.foreman = { x: [-1.2, 1.2, -1.2, 1.2][ph], z, w: true, work: false, status: 'Walking the aisle between the sections' }; }
+    return out;
+  }
+  function html(pl) {
+    const li = (c, n, s) => `<li><i style="background:${c}"></i><b>${n}</b><span>${esc(s)}</span></li>`;
+    const r = {};
+    for (const sec of ['S1', 'S2']) r[sec] = PEOPLE.map(([k, n, c]) => li(c, n, pl[sec].P[k].status)).join('');
+    r.F = li('#c6e84a', 'Foreman', pl.foreman.status) + `<li><i style="background:transparent"></i><span style="grid-column:2/-1">One foreman for both sections. He goes to whichever section stops; if both stop, to the machine stop or the one that stopped first.</span></li>`;
+    return r;
+  }
+  return { plan, html, SX, ST, POST, TAPE_Z, ENTRY, MROOM, BREAK, PEOPLE };
+})();
+
+// ---------------------------------------------------------------- 3D view (loaded lazily; the planner works without it)
+async function init3D() {
+  const stage = $('stage');
+  let THREE, OrbitControls;
+  try { THREE = await import('three'); ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js')); }
+  catch (e) { const m = document.createElement('div'); m.className = 's3d-msg'; m.textContent = 'The 3D view could not load here. The clock, timelines and crew list below still play the forecast.'; stage.appendChild(m); $('hint').hidden = true; return; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias: true }); } catch (e) { const m = document.createElement('div'); m.className = 's3d-msg'; m.textContent = 'This device cannot show 3D graphics. The clock, timelines and crew list below still play the forecast.'; stage.appendChild(m); $('hint').hidden = true; return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true;
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0f1418); scene.fog = new THREE.Fog(0x0f1418, 70, 130);
+  const camera = new THREE.PerspectiveCamera(42, 1, .1, 260);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, -1); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * .47; controls.minDistance = 10; controls.maxDistance = 90;
+  scene.add(new THREE.HemisphereLight(0xcfe3ef, 0x1a2228, .9));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(10, 26, 16); sun.castShadow = true;
+  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, far: 100 }); sun.shadow.mapSize.set(2048, 2048); scene.add(sun);
+  const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .55, metalness: .25, ...o });
+  const add = (geo, mat, x, y, z, parent = scene) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; };
+  const steel = M(0x9aa7ae, { metalness: .7, roughness: .35 }), body = M(0xdfe4e6, { metalness: .3, roughness: .4 }), dark = M(0x323b41);
+  // plant floor
+  const floor = add(new THREE.PlaneGeometry(60, 58), M(0x1b2328, { roughness: .95, metalness: 0 }), 0, 0, 1); floor.rotation.x = -Math.PI / 2;
+  const grid = new THREE.GridHelper(58, 29, 0x2a353d, 0x222b31); grid.position.set(0, .01, 1); scene.add(grid);
+  for (const x of [-5.4, 5.4]) { const s = add(new THREE.PlaneGeometry(.12, 38), M(0xd9b640, { roughness: 1, metalness: 0 }), x, .02, -1); s.rotation.x = -Math.PI / 2; }
+  const { SX, POST, TAPE_Z, MROOM, ENTRY } = CREW;
+  const PCOL = { GM: 0x7a1020, LS: 0xf2d43a, RW: 0xf3a6b8, BW: 0xf4efd8, WV: 0xdfe8ea, FC: 0xf08a2a };
+  const cartonGeo = new THREE.BoxGeometry(.72, .5, .55), cartonMat = M(0xb98a52, { roughness: .9, metalness: 0 });
+  const LINE_X = 10;
+  // one Thomson line in local coordinates (identical to the single-line replay); S1 is mirrored so both crews stand on the outer side
+  function buildLine(sec) {
+    const g = new THREE.Group(); scene.add(g);
+    g.rotation.y = -Math.PI / 2;
+    if (sec === 'S1') { g.position.x = -LINE_X; g.scale.z = -1; } else g.position.x = LINE_X;
+    const L = { g, beacons: {} };
+    const A = (geo, mat, x, y, z, p = g) => add(geo, mat, x, y, z, p);
+    A(new THREE.BoxGeometry(27, .15, 1.1), M(0x2c3338, { roughness: .8 }), -.5, 1.05, 0);
+    A(new THREE.BoxGeometry(27, .12, .08), steel, -.5, 1.2, .58); A(new THREE.BoxGeometry(27, .12, .08), steel, -.5, 1.2, -.58);
+    for (let x = -13.5; x <= 12.5; x += 2.6) { A(new THREE.BoxGeometry(.1, 1, .1), steel, x, .5, .5); A(new THREE.BoxGeometry(.1, 1, .1), steel, x, .5, -.5); }
+    const beacon = (key, x, h, z = 0) => { const m = A(new THREE.CylinderGeometry(.16, .16, .36, 16), M(0x3ccf8e, { emissive: 0x3ccf8e, emissiveIntensity: 1.2 }), x, h, z); L.beacons[key] = m; A(new THREE.CylinderGeometry(.05, .05, .4, 8), steel, x, h - .36, z); };
+    A(new THREE.BoxGeometry(2.4, 1.6, 1.8), body, SX.wash, 1.9, 0); A(new THREE.BoxGeometry(2.4, .3, 1.9), dark, SX.wash, 2.8, 0); beacon('wash', SX.wash, 3.3);
+    const fill = new THREE.Group(); fill.position.x = SX.fill; g.add(fill);
+    for (const [x, z] of [[-1.3, -.9], [1.3, -.9], [-1.3, .9], [1.3, .9]]) A(new THREE.BoxGeometry(.14, 2.8, .14), steel, x, 2.4, z, fill);
+    A(new THREE.BoxGeometry(2.9, .2, 2), body, 0, 3.8, 0, fill); A(new THREE.CylinderGeometry(.75, .75, 1, 24), steel, 0, 4.4, 0, fill);
+    L.nozzles = []; for (let i = 0; i < 6; i++) L.nozzles.push(A(new THREE.CylinderGeometry(.06, .04, .7, 8), steel, -1.1 + i * .44, 3.3, 0, fill));
+    A(new THREE.BoxGeometry(3, .12, 2.1), new THREE.MeshStandardMaterial({ color: 0x8fd3ff, transparent: true, opacity: .18 }), 0, 2.6, 0, fill);
+    beacon('fill', SX.fill + 1.5, 5.3);
+    const cap = new THREE.Group(); cap.position.x = SX.cap; g.add(cap);
+    A(new THREE.BoxGeometry(2.4, .9, 2), body, 0, .45, -1.6, cap); A(new THREE.BoxGeometry(.3, 3.6, .3), steel, 0, 1.8, -1.1, cap); A(new THREE.BoxGeometry(.4, .3, 1.4), dark, 0, 3.4, -.5, cap);
+    L.capHead = A(new THREE.CylinderGeometry(.42, .42, .6, 20), M(0xc8a548, { metalness: .8, roughness: .3 }), 0, 2.75, 0, cap);
+    L.hopper = A(new THREE.CylinderGeometry(.9, .35, 1, 20), body, -.2, 4.2, -1.1, cap);
+    A(new THREE.BoxGeometry(.18, .12, 1.3), steel, -.1, 3.4, -.6, cap).rotation.x = .6;
+    beacon('cap', SX.cap + 1.1, 4.4);
+    const lab = new THREE.Group(); lab.position.x = SX.lab; g.add(lab);
+    A(new THREE.BoxGeometry(2.6, 1.8, 1.4), body, 0, 2, -1.35, lab);
+    L.roll = A(new THREE.CylinderGeometry(.55, .55, .25, 28), M(0xf4f4f0, { roughness: .8, metalness: 0 }), -.5, 3.3, -1.35, lab); L.roll.rotation.x = Math.PI / 2;
+    L.roll2 = A(new THREE.CylinderGeometry(.3, .3, .25, 20), dark, .6, 3.1, -1.35, lab); L.roll2.rotation.x = Math.PI / 2;
+    beacon('lab', SX.lab + 1.2, 3.6);
+    A(new THREE.BoxGeometry(3, .12, 2.4), M(0x7a5a3a, { roughness: .9, metalness: 0 }), SX.pack, 1.0, 0);
+    for (const [x, z] of [[-1.3, -1], [1.3, -1], [-1.3, 1], [1.3, 1]]) A(new THREE.BoxGeometry(.1, 1, .1), steel, SX.pack + x, .5, z);
+    const RAIL = { x: SX.pack, z0: 1.3, z1: 5.0 }; L.RAIL = RAIL;
+    A(new THREE.BoxGeometry(1.0, .1, RAIL.z1 - RAIL.z0), M(0x2c3338, { roughness: .8 }), RAIL.x, .82, (RAIL.z0 + RAIL.z1) / 2);
+    for (let z = RAIL.z0 + .2; z < RAIL.z1; z += .35) { const rr = A(new THREE.CylinderGeometry(.05, .05, .95, 8), steel, RAIL.x, .9, z); rr.rotation.z = Math.PI / 2; }
+    for (const z of [RAIL.z0 + .3, RAIL.z1 - .3]) for (const dx of [-.45, .45]) A(new THREE.BoxGeometry(.08, .8, .08), steel, RAIL.x + dx, .4, z);
+    A(new THREE.BoxGeometry(.18, 1.5, .9), M(0x3b6ea8), RAIL.x - .6, 1.4, TAPE_Z); A(new THREE.BoxGeometry(.18, 1.5, .9), M(0x3b6ea8), RAIL.x + .6, 1.4, TAPE_Z); A(new THREE.BoxGeometry(1.4, .3, .9), M(0x3b6ea8), RAIL.x, 2.2, TAPE_Z);
+    L.PALLET = [SX.pack + 2.3, 6.1];
+    A(new THREE.BoxGeometry(2.4, .25, 2.4), M(0x8a6a44, { roughness: .95, metalness: 0 }), L.PALLET[0], .13, L.PALLET[1]);
+    L.railBoxes = new THREE.InstancedMesh(cartonGeo, cartonMat, 4); L.railBoxes.castShadow = true; g.add(L.railBoxes);
+    beacon('pack', SX.pack, 2.4);
+    L.cartons = new THREE.InstancedMesh(cartonGeo, cartonMat, 48); L.cartons.castShadow = true; g.add(L.cartons);
+    A(new THREE.CylinderGeometry(1.5, 1.5, 4, 32), steel, SX.tank, 2.2, -3.5);
+    A(new THREE.SphereGeometry(1.5, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), steel, SX.tank, 4.2, -3.5);
+    A(new THREE.CylinderGeometry(.12, .12, 7.5, 10), steel, SX.tank + 3.7, 4.2, -3.5).rotation.z = Math.PI / 2;
+    A(new THREE.BoxGeometry(1.8, 2.2, 1.6), M(0x6d4a3a), SX.tank, 1.1, 3.5);
+    beacon('tank', SX.tank, 6.2, -3.5);
+    L.NB = 64; L.BELT0 = -13.6; L.BELTL = 25.2; L.beltPh = 0;
+    const bGeo = new THREE.CylinderGeometry(.13, .15, 1, 14); bGeo.translate(0, .5, 0);
+    L.bMat = new THREE.MeshStandardMaterial({ color: 0x7a1020, roughness: .15, metalness: .1, transparent: true, opacity: .92 });
+    L.bottles = new THREE.InstancedMesh(bGeo, L.bMat, L.NB); L.bottles.castShadow = true; g.add(L.bottles);
+    L.caps = new THREE.InstancedMesh(new THREE.CylinderGeometry(.1, .1, .09, 10), M(0xd4b14a, { metalness: .8 }), L.NB); g.add(L.caps);
+    L.labels = new THREE.InstancedMesh(new THREE.CylinderGeometry(.155, .155, 1, 14, 1, true), M(0xffffff, { roughness: .9, metalness: 0, side: THREE.DoubleSide }), L.NB); g.add(L.labels);
+    return L;
+  }
+  const LINES = { S1: buildLine('S1'), S2: buildLine('S2') };
+  // local line coords -> plant coords (see buildLine transform)
+  const L2W = (sec, x, z) => sec === 'S1' ? [-LINE_X + z, x] : [LINE_X - z, x];
+  const yawW = (sec, f) => sec === 'S1' ? Math.PI / 2 - f : f - Math.PI / 2;
+  // maintenance room at the far end of the aisle, open toward the lines
+  const wallM = M(0x46545d, { roughness: .9, metalness: 0 });
+  const [mx, mz] = MROOM;
+  // open side faces the lines (-z); low walls so the camera still sees inside
+  const mf = add(new THREE.PlaneGeometry(6, 4.6), M(0x24323a, { roughness: 1, metalness: 0 }), mx, .025, mz); mf.rotation.x = -Math.PI / 2;
+  add(new THREE.BoxGeometry(6, 2.2, .2), wallM, mx, 1.1, mz + 2.3); add(new THREE.BoxGeometry(.2, 2.2, 4.6), wallM, mx - 3, 1.1, mz); add(new THREE.BoxGeometry(.2, 2.2, 4.6), wallM, mx + 3, 1.1, mz);
+  add(new THREE.BoxGeometry(3, 1, 1.1), M(0x56616a), mx, .5, mz + 1.6); add(new THREE.BoxGeometry(.8, .4, .5), M(0xc0392b), mx + .8, 1.2, mz + 1.6);
+  add(new THREE.BoxGeometry(6, .25, .25), M(0x2f6fd6), mx, 2.3, mz - 2.3);
+  // entrance door frame at the far end of the aisle
+  for (const dx of [-1.7, 1.7]) add(new THREE.BoxGeometry(.25, 3.4, .25), M(0x3c4a52), ENTRY[0] + dx, 1.7, ENTRY[1] - 1.2);
+  add(new THREE.BoxGeometry(3.65, .3, .25), M(0x3c4a52), ENTRY[0], 3.4, ENTRY[1] - 1.2);
+  // people
+  const skin = 0xc59a76;
+  function makePerson(shirt, helmet, legs) {
+    const g = new THREE.Group();
+    add(new THREE.CylinderGeometry(.16, .14, .8, 10), M(legs), 0, .4, 0, g);
+    const torso = add(new THREE.CylinderGeometry(.24, .2, .75, 12), M(shirt, { roughness: .7, metalness: 0 }), 0, 1.18, 0, g);
+    add(new THREE.SphereGeometry(.17, 14, 10), M(skin, { roughness: .8, metalness: 0 }), 0, 1.75, 0, g);
+    add(new THREE.SphereGeometry(.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), M(helmet, { roughness: .5 }), 0, 1.8, 0, g);
+    scene.add(g); return { g, torso, pos: new THREE.Vector3(ENTRY[0], 0, ENTRY[1]), ph: Math.random() * 6 };
+  }
+  const people = [];
+  for (const sec of ['S1', 'S2']) for (const [k] of CREW.PEOPLE) people.push({ sec, k, p: k === 'maint' ? makePerson(0x2f6fd6, 0x2f6fd6, 0x2559b0) : makePerson(0xff8a1f, 0xf5f5f5, 0x2b3a55) });
+  const foreman = { sec: null, k: 'foreman', p: makePerson(0xc6e84a, 0xf2c230, 0x3a3f45) };
+  people.push(foreman);
+  people.forEach((c, i) => { c.p.pos.set(ENTRY[0] + (i % 5 - 2) * .7, 0, ENTRY[1] + Math.floor(i / 5) * .7); c.p.g.position.copy(c.p.pos); });
+  // HTML labels
+  const mk = (txt, cls = 'slabel') => { const d = document.createElement('div'); d.className = cls; d.textContent = txt; stage.appendChild(d); return d; };
+  const lbls = [[mk('Section 1'), -LINE_X, 6.8, -17.5], [mk('Section 2'), LINE_X, 6.8, -17.5], [mk('Maintenance room', 'slabel m'), mx, 2.9, mz], [mk('Aisle · foreman', 'slabel m'), 0, .2, 6], [mk('Entrance', 'slabel m'), ENTRY[0], 3.9, ENTRY[1] - 1.2]];
+  const tags = { S1: mk('', 'tag'), S2: mk('', 'tag') }; tags.S1.hidden = tags.S2.hidden = true;
+  const v3 = new THREE.Vector3();
+  const toScreen = (x, y, z) => { v3.set(x, y, z).project(camera); const r = renderer.domElement.getBoundingClientRect(); return [(v3.x * .5 + .5) * r.width, (-v3.y * .5 + .5) * r.height, v3.z < 1]; };
+  function resize() {
+    const r = stage.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); const a = r.width / Math.max(r.height, 1); camera.aspect = a; camera.updateProjectionMatrix();
+    const k = Math.max(1, 1.45 / a); camera.position.set(0, 30 * k, 41 * k); controls.update();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+  const dummy = new THREE.Object3D();
+  let fc = {};
+  const heightOf = sz => sz === '300ml' ? .62 : sz === '1L' ? 1.0 : sz === '500ml' ? .76 : .88;
+  function setRun(sec, k) { const f = fc[sec], L = LINES[sec]; if (!f || !f.runs || !f.runs[k]) return; if (L.curRun === k && L.curKey === f.runs[k].key) return; L.curRun = k; L.curKey = f.runs[k].key; L.bMat.color.setHex(PCOL[f.runs[k].product] || 0x7a1020); L.h = heightOf(f.runs[k].size); }
+  function load(newFc) { fc = newFc; for (const sec of ['S1', 'S2']) { LINES[sec].curRun = -1; setRun(sec, 0); } }
+  const STN = CREW.ST;
+  function frame(dt, ts, t, st, plan, made, speed) {
+    const tt = ts / 1000, blink = Math.sin(tt * 8) > 0;
+    for (const sec of ['S1', 'S2']) {
+      const L = LINES[sec], c = st[sec], running = (!c || c.g === 'run') && t < 600;
+      if (c && c.run != null) setRun(sec, c.run);
+      const h = L.h || .88;
+      if (running) L.beltPh = (L.beltPh + dt * 1.6) % L.BELTL;
+      for (let i = 0; i < L.NB; i++) {
+        const x = L.BELT0 + ((i * L.BELTL / L.NB + L.beltPh) % L.BELTL), vis = x < SX.pack - .6 && t < 600 && !(c && c.g === 'idle');
+        dummy.rotation.set(0, 0, 0);
+        dummy.position.set(x, 1.13, 0); dummy.scale.set(1, vis ? h : 1e-4, 1); dummy.updateMatrix(); L.bottles.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(x, 1.13 + h + .04, 0); dummy.scale.setScalar(vis && x > SX.cap ? 1 : 1e-4); dummy.updateMatrix(); L.caps.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(x, 1.13 + h * .45, 0); dummy.scale.set(1, vis && x > SX.lab ? h * .4 : 1e-4, 1); dummy.updateMatrix(); L.labels.setMatrixAt(i, dummy.matrix);
+      }
+      L.bottles.instanceMatrix.needsUpdate = L.caps.instanceMatrix.needsUpdate = L.labels.instanceMatrix.needsUpdate = true;
+      if (running) { L.capHead.rotation.y += dt * 8; L.roll.rotation.y += dt * 3; L.roll2.rotation.y -= dt * 5; L.nozzles.forEach((n, i) => n.position.y = 3.3 + Math.sin(tt * 6 + i) * .12); L.hopper.rotation.y += dt * .6; }
+      const nC = Math.min(48, Math.floor((made[sec] || 0) / 30) % 49);
+      for (let i = 0; i < 48; i++) { const l = Math.floor(i / 16), r = i % 16; dummy.position.set(L.PALLET[0] - 1.1 + (r % 4) * .74, .5 + l * .52, L.PALLET[1] - .85 + Math.floor(r / 4) * .57); dummy.scale.setScalar(i < nC ? 1 : 1e-4); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); L.cartons.setMatrixAt(i, dummy.matrix); }
+      L.cartons.instanceMatrix.needsUpdate = true;
+      for (let i = 0; i < 4; i++) { const z = L.RAIL.z0 + .3 + ((i * .25 + L.beltPh / L.BELTL * 6) % 1) * (L.RAIL.z1 - L.RAIL.z0 - .6); dummy.position.set(L.RAIL.x, 1.2, z); dummy.scale.setScalar(t < 600 && running ? 1 : 1e-4); dummy.rotation.set(0, Math.PI / 2, 0); dummy.updateMatrix(); L.railBoxes.setMatrixAt(i, dummy.matrix); }
+      L.railBoxes.instanceMatrix.needsUpdate = true;
+      const stn = c && c.g !== 'run' ? (STN[c.cat] || 'line') : null;
+      for (const k in L.beacons) {
+        const m = L.beacons[k].material; let col = 0x3ccf8e, I = 1.2;
+        if (t >= 600 || (c && c.g === 'idle')) { col = 0x55626a; I = .2; }
+        else if (stn) { if (stn === k) { col = 0xef5a4c; I = blink ? 2.2 : .4; } else if (stn === 'line') { col = c.g === 'clean' ? 0x4fb3e8 : c.g === 'plan' ? 0xf2b33d : 0xa97ee8; I = 1.2; } else { col = 0xf2b33d; I = .8; } }
+        m.color.setHex(col); m.emissive.setHex(col); m.emissiveIntensity = I;
+      }
+      const tg = tags[sec];
+      if (c && c.g !== 'run' && c.g !== 'idle' && t < 600) {
+        tg.hidden = false; tg.style.borderLeftColor = COL[c.g]; tg.innerHTML = `<b>${SECN[sec]} · ${esc(c.cat)}</b>${esc(c.desc)} · ${c.d} min`;
+        const lx = stn && stn !== 'line' ? SX[stn] : -1, [wx, wz] = L2W(sec, lx, stn === 'tank' ? -3.5 : 0); const [sx, sy, ok] = toScreen(wx, stn === 'tank' ? 6.8 : 5.4, wz);
+        tg.style.left = sx + 'px'; tg.style.top = sy + 'px'; if (!ok) tg.hidden = true;
+      } else tg.hidden = true;
+    }
+    // people
+    for (const c of people) {
+      let pl, x, z, face;
+      if (c.k === 'foreman') {
+        pl = plan.foreman;
+        if (pl.w) { x = pl.x; z = pl.z; face = Math.PI; } else { [x, z] = L2W(plan.fSec, pl.x, pl.z); face = yawW(plan.fSec, Math.PI); }
+      } else {
+        pl = plan[c.sec].P[c.k];
+        if (pl.w) { x = pl.x; z = pl.z; face = pl.face; } else { [x, z] = L2W(c.sec, pl.x, pl.z); face = yawW(c.sec, pl.face); }
+      }
+      const w = c.p, d = new THREE.Vector3(x - w.pos.x, 0, z - w.pos.z), dist = d.length();
+      const sp = Math.min(dist, dt * Math.min(34, 3 + speed * 2.5));
+      if (dist > .03) { d.normalize(); w.pos.addScaledVector(d, sp); w.g.rotation.y = Math.atan2(d.x, d.z); w.g.position.y = Math.abs(Math.sin(tt * 10 + w.ph)) * .06; w.torso.rotation.x = 0; }
+      else { w.g.position.y = 0; w.g.rotation.y = face; w.torso.rotation.x = pl.work ? .3 + Math.sin(tt * 5 + w.ph) * .15 : 0; }
+      w.g.position.x = w.pos.x; w.g.position.z = w.pos.z;
+    }
+    controls.update(); renderer.render(scene, camera);
+    for (const [el, x, y, z] of lbls) { const [sx, sy, ok] = toScreen(x, y, z); el.style.left = sx + 'px'; el.style.top = sy + 'px'; el.hidden = !ok; }
+  }
+  SIM.attach({ load, frame });
+}
+
+// ---------------------------------------------------------------- boot
+$('date').value = S.date;
+$('date').onchange = e => { if (!e.target.value) return; S.date = e.target.value; for (const sec of SECS) { S.inp[sec].prevAuto = true; S.inp[sec].fromPlan = null; S.inp[sec].runs.forEach(r => { r.openingAuto = true; r.opening = ''; }); } refreshAutoPrev(); applySavedPlan(); update(); };
+initInputs(); buildCards(); update();
+initActualForm();
+$('c_end').onchange = renderCompare;
+$('c_last').onclick = () => { $('c_end').value = lastDataDate() || todayIso(); renderCompare(); };
+$('c_csv').onclick = exportCsv;
+$('c_mode').onclick = e => { const b = e.target.closest('button'); if (!b) return; CM.mode = b.dataset.m; $('c_mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); renderCompare(); };
+$('c_scope').onclick = e => { const b = e.target.closest('button'); if (!b) return; CM.scope = b.dataset.s; $('c_scope').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); renderCompare(); };
+{ const tab = store.get('aticPlannerTab'); const h = (location.hash || '').slice(1); const pick = ['timeline', 'actual', 'compare', 'how'].includes(h) ? h : ['timeline', 'actual', 'compare', 'how'].includes(tab) ? tab : 'timeline'; showTab(pick); }
+init3D();
+setSaveChip();
+
+
+async function connect() {
+  const db = ATIC.planner.makeDb();
+  S.db = db; S.user = null; S.local = false; S.userId = ATIC.profile.id; S.canWrite = ATIC.canWrite;
+  S.dl = { save: async ({ filename, data }) => ATIC.download(filename, data) };
+  S.dbState = 'ok'; setSaveChip(); renderCards();
+  let first = { plans: true, actuals: true };
+  const onErr = e => { S.dbState = 'error'; setSaveChip(); console.warn('db', e); };
+  const handle = (kind) => snap => {
+    S.dbState = 'ok'; setSaveChip();
+    S[kind] = snap.docs.filter(d => d.exists).map(d => ({ ...d.data() })).filter(x => x && x.date && x.sec);
+    if (kind === 'actuals') refreshAutoPrev();
+    if (kind === 'plans' && first.plans) applySavedPlan();
+    first[kind] = false;
+    update({ keepTime: true });
+    if (!$('p-actual').hidden && A.loadedKey && !document.activeElement?.closest?.('#actForm')) aFill(A.loadedKey);
+  };
+  try {
+    db.collection('plans').orderBy('date', 'desc').limit(400).onSnapshot(handle('plans'), onErr);
+    db.collection('actuals').orderBy('date', 'desc').limit(400).onSnapshot(handle('actuals'), onErr);
+  } catch (e) { onErr(e); }
+}
+connect();
+
+
+window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (['timeline', 'actual', 'compare', 'how'].includes(h)) { showTab(h); document.querySelector('.tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
+
+// ---------------------------------------------------------------- daily reports (Word, form FR01) → actuals
+$('a_docx').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
+  const days = [];
+  for (const f of files) { try { days.push(ATICWord.parseFR01(await ATICWord.readDocx(f), f.name)); } catch (err) { days.push({ file: f.name, error: err.message || String(err), warnings: [] }); } }
+  days.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.sec || '').localeCompare(b.sec || ''));
+  wordDialog(days);
+};
+function wordFill(d) {
+  $('a_date').value = d.date; $('a_sec').value = d.sec; aFill(d.date + '_' + d.sec);
+  A.runs = d.runs.map(r => ({ product: r.product, size: r.size || (P0.sizes[r.product] || [])[0], batches: r.batches, opening: r.opening, closing: r.closing, boxes: r.boxes, fillMin: d.runs.length > 1 ? r.fillMin : null, changeoverMin: r.changeoverMin }));
+  const set = (id, v) => { $(id).value = v ?? ''; };
+  $('a_norun').checked = false; aNoRun();
+  set('a_work', d.workMin ?? 600); set('a_fill', d.fillMin); set('a_stop', d.stopMin); if (d.stopMin != null) $('a_stop').dataset.touched = '1';
+  set('a_last', d.lastBox); set('a_start', d.startMin); set('a_prep', d.prepMin); set('a_rc', d.cleanRoutineMin); set('a_deep', d.cleanDeepMin);
+  set('a_reasons', d.reasons); set('a_notes', d.notes);
+  aRender();
+}
+function wordDialog(days) {
+  ATICExcel.ensureCss();
+  const ok = days.filter(d => !d.error && d.date && d.sec && d.runs && d.runs.length);
+  const back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
+  const diff = d => {
+    const a = S.actuals.find(x => x.date === d.date && x.sec === d.sec); if (!a) return '<span class="chip ok"><span class="dot"></span>New day</span>';
+    const t = ENGINE.actualTotals(a), out = [];
+    const boxes = d.runs.reduce((s, r) => s + (r.boxes || 0), 0), closing = d.runs.filter(r => r.closing != null).reduce((s, r) => s + r.closing, 0);
+    if (Math.abs((t.boxes || 0) - boxes) > 0.5) out.push(`boxes ${fmt(t.boxes)} → ${fmt(boxes)}`);
+    if (t.closingBatches != null && d.runs.some(r => r.closing != null) && Math.abs(t.closingBatches - closing) > 0.05) out.push(`closing balance ${fmt1(t.closingBatches)} → ${fmt1(closing)}`);
+    if (a.fillMin != null && d.fillMin != null && a.fillMin !== d.fillMin) out.push(`filling ${a.fillMin} → ${d.fillMin} min`);
+    if (a.stopMin != null && d.stopMin != null && a.stopMin !== d.stopMin) out.push(`stops ${a.stopMin} → ${d.stopMin} min`);
+    return out.length ? '<span style="color:var(--amber);font-weight:600">Already saved, differs:</span><br>' + out.map(esc).join('<br>') : '<span class="muted">Already saved, same numbers</span>';
+  };
+  let h = `<div class="xd" role="dialog" aria-modal="true" aria-label="Daily reports"><header><div><h2>Daily line reports</h2><p class="small muted" style="margin:4px 0 0">${days.length} file${days.length === 1 ? '' : 's'} read · nothing is saved until you choose below</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">`;
+  h += '<div class="tablewrap" style="max-height:440px"><table><thead><tr><th>Day</th><th>Runs</th><th class="n">Fill / stop / work</th><th>Stops</th><th>Last box</th><th>Compared with saved</th></tr></thead><tbody>' + days.map(d => {
+    if (d.error || !d.date || !d.sec) return `<tr><td colspan="6"><b>${esc(d.file)}</b>: <span style="color:var(--red)">${esc(d.error || 'date or section not found')}</span></td></tr>`;
+    const runs = d.runs.map(r => `<b>${esc(pname(r.product))} ${esc(r.size || '')}</b><br><span class="small muted">${fmt1(r.batches)} prepared · balance ${r.opening == null ? '?' : fmt1(r.opening)} → ${r.closing == null ? '?' : fmt1(r.closing)} · ${r.boxes == null ? '?' : fmt(r.boxes)} boxes</span>`).join('<br>');
+    const stops = `<span class="small">start ${d.startMin ?? '–'} · cleaning ${d.cleanRoutineMin ?? '–'}${d.cleanDeepMin ? ' · CIP ' + d.cleanDeepMin : ''}${d.changeoverMin ? ' · changeover ' + d.changeoverMin : ''}${d.prepMin ? ' · prep ' + d.prepMin : ''}</span>${d.reasons ? '<br><span class="small muted">' + esc(d.reasons) + '</span>' : ''}`;
+    const warn = d.warnings.length ? '<br><span class="small" style="color:var(--red)">' + d.warnings.map(esc).join('<br>') + '</span>' : '';
+    return `<tr><td><b>${new Date(d.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</b><br><span class="small muted">${SECN[d.sec]} · ${esc(d.file)}</span></td><td>${runs}${warn}</td><td class="n">${d.fillMin ?? '–'} / ${d.stopMin ?? '–'} / ${d.workMin ?? '–'}</td><td>${stops}</td><td>${esc(d.lastBox || '–')}</td><td class="small">${diff(d)}</td></tr>`;
+  }).join('') + '</tbody></table></div>';
+  h += '<p class="small muted" style="margin:0">Start-up, cleaning, changeover and batch-prep stops are sorted by their names; everything else goes to "main stop reasons". The previous product comes from the day before.</p>';
+  h += `</div><footer><span class="msg" id="w_msg" style="margin-right:auto"></span><button class="btn" data-x="close">Cancel</button>${ok.length === 1 ? '<button class="btn" data-x="form">Put in the form to check</button>' : ''}<button class="btn primary" data-x="all"${ok.length && S.canWrite ? '' : ' disabled'}>Save ${ok.length} day${ok.length === 1 ? '' : 's'}</button></footer></div>`;
+  back.innerHTML = h;
+  const close = () => back.remove();
+  back.querySelectorAll('[data-x="close"]').forEach(b => b.onclick = close);
+  const fb = back.querySelector('[data-x="form"]'); if (fb) fb.onclick = () => { close(); showTab('actual'); wordFill(ok[0]); $('a_msg').className = 'msg note'; $('a_msg').textContent = 'Filled in from ' + ok[0].file + '. Check it, then press Save.'; };
+  back.querySelector('[data-x="all"]').onclick = async () => {
+    const btn = back.querySelector('[data-x="all"]'); btn.disabled = true; let saved = 0, failed = [];
+    showTab('actual');
+    for (const d of ok) { back.querySelector('#w_msg').textContent = `Saving ${d.date} ${SECN[d.sec]}…`; wordFill(d); await saveActual(); if ($('a_msg').className.includes('ok')) saved++; else failed.push(d.date + ' ' + SECN[d.sec] + ': ' + $('a_msg').textContent); }
+    close(); $('a_msg').className = failed.length ? 'msg err' : 'msg ok'; $('a_msg').textContent = `Saved ${saved} day${saved === 1 ? '' : 's'} from the reports.` + (failed.length ? ' Not saved: ' + failed.join(' · ') : '');
+  };
+}
+</script>
+</body></html>
