@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC BETA 2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+.hero{background:#0c1512;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(6,30,22,.28);color:#e7efeb;display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:560px;position:relative}
+.hero .stage{position:relative;min-height:560px;cursor:grab;touch-action:none}
+.hero .stage:active{cursor:grabbing}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero .side{border-left:1px solid rgba(255,255,255,.08);padding:18px;display:flex;flex-direction:column;gap:14px;background:linear-gradient(180deg,rgba(255,255,255,.03),transparent)}
+.hero .ttl{position:absolute;left:20px;top:16px;pointer-events:none;display:flex;flex-direction:column;gap:4px}
+.hero .ttl b{font:700 13px var(--f-mono);letter-spacing:.14em;color:#e0b060}
+.hero .ttl span{font:600 22px var(--f-display);letter-spacing:-.01em}
+.hero .ttl em{font-style:normal;font-size:13px;color:#9db0a8}
+.hero .hint3{position:absolute;left:20px;bottom:14px;font-size:12px;color:#6f827a;pointer-events:none}
+.hero .msel{position:absolute;right:16px;top:14px}
+.hero .seg{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12)}
+.hero .seg button{color:#9db0a8;border-color:rgba(255,255,255,.12)}
+.hero .seg button[aria-pressed="true"]{background:#4fb590;color:#06261c}
+.m-k{display:flex;flex-direction:column;gap:2px}
+.m-k span{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9db0a8;font-weight:600}
+.m-k strong{font:600 30px var(--f-display);letter-spacing:-.02em}
+.m-k em{font-style:normal;font-size:12.5px;color:#9db0a8}
+.m-k.good strong{color:#47cd89}.m-k.bad strong{color:#f97066}
+.m-ch{font-size:13px;display:flex;flex-direction:column;gap:6px;max-height:210px;overflow:auto;padding-right:4px}
+.m-ch div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:5px}
+.m-ch b{font:500 12.5px var(--f-mono);white-space:nowrap}
+.m-ch .up{color:#47cd89}.m-ch .dn{color:#f97066}
+.tl3{grid-column:1/-1;border-top:1px solid rgba(255,255,255,.08);padding:14px 20px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center}
+.tl3 button.play{width:44px;height:44px;border-radius:50%;border:0;background:#4fb590;color:#06261c;font-size:16px;font-weight:700}
+.tl3 input[type=range]{accent-color:#4fb590;width:100%}
+.tl3 .dt{font:600 15px var(--f-display);min-width:150px;text-align:right}
+.tl3 .ticks{position:relative;height:16px;margin-top:2px}
+.tl3 .ticks i{position:absolute;top:2px;width:2px;height:10px;border-radius:1px;background:#2a3b35}
+.tl3 .ticks i.on{background:#4fb590}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#47cd89;font-weight:600}
+.live i{width:8px;height:8px;border-radius:50%;background:#47cd89;box-shadow:0 0 0 0 rgba(71,205,137,.6);animation:pulse 1.8s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(71,205,137,0)}100%{box-shadow:0 0 0 0 rgba(71,205,137,0)}}
+.tip3{position:absolute;pointer-events:none;background:rgba(12,21,18,.95);border:1px solid #2a3b35;border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.45;color:#e7efeb;max-width:240px;transform:translate(-50%,calc(-100% - 12px));white-space:nowrap}
+.tip3 b{font-family:var(--f-display)}
+.two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{font:11px var(--f-mono);fill:var(--muted)}
+.acc td.e{font-family:var(--f-mono);text-align:right}
+.acc td.e.g{color:var(--green)}.acc td.e.a{color:var(--amber)}.acc td.e.r{color:var(--red)}
+tr.cur td{background:var(--gold-soft)}
+@media (max-width:1100px){.hero{grid-template-columns:1fr}.hero .side{border-left:0;border-top:1px solid rgba(255,255,255,.08)}.two{grid-template-columns:1fr}}
+@media (max-width:620px){.hero .stage{min-height:380px}.hero{min-height:0}.hero .msel{position:static;padding:0 16px 10px}.hero .ttl span{font-size:18px}.tl3{grid-template-columns:auto minmax(0,1fr)}.tl3 .dt{grid-column:1/-1;text-align:left}}
+@media (prefers-reduced-motion:reduce){.live i{animation:none}}
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading ATIC BETA 2.0…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/line-engine.js"></script>
+<script>
+(function () {
+var A, E = window.ATIC_LINE_ENGINE, P0, BT, ACT = [], PLANS = [], STEPS = [], CMP = null;
+var ST = { step: 0, metric: 'speed', playing: false, yaw: -0.5, pitch: 0.42, dist: 33, hover: null, auto: true };
+var esc = function (s) { return A.esc(s); };
+var ITEMS = [['GM', '300ml'], ['GM', '500ml'], ['GM', '750ml'], ['RW', '300ml'], ['RW', '750ml'], ['BW', '300ml'], ['BW', '750ml'], ['LS', '1L'], ['WV', '1L'], ['FC', '710ml']];
+var PCOL = { GM: [138, 43, 58], RW: [192, 87, 122], BW: [199, 136, 46], LS: [122, 143, 31], WV: [79, 107, 120], FC: [180, 90, 60] };
+var METRICS = {
+  speed: { label: 'Filling speed', unit: 'boxes per filling hour', get: function (P, p, z, s) { var x = P.speed[p + '|' + z + '|' + s]; return x ? x.p50 * 60 : null; }, n: function (P, p, z, s) { var x = P.speed[p + '|' + z + '|' + s]; return x ? x.n : 0; }, better: 1 },
+  bpb: { label: 'Boxes per batch', unit: 'boxes from one batch', get: function (P, p, z) { var x = P.boxesPerBatch[p + '|' + z]; return x ? x.boxes : null; }, n: function () { return null; }, better: 1, same: true },
+  stops: { label: 'Machine stops', unit: 'minutes per filling hour', get: function (P, p, z, s) { var x = P.machineRate[p + '|' + z + '|' + s]; return x ? x.minPerFillHr : null; }, n: function (P, p, z, s) { var x = P.machineRate[p + '|' + z + '|' + s]; return x ? x.n : 0; }, better: -1 }
+};
+function $(s) { return document.querySelector(s); }
+function fmt(x, d) { if (x == null || !isFinite(x)) return '–'; d = d == null ? (Math.abs(x) >= 100 ? 0 : 1) : d; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('en-US'); }
+function nice(d) { return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); }
+function addDays(s, n) { return E.addDays(s, n); }
+function pct(x) { return x == null ? '–' : Math.round(x * 100) + '%'; }
+
+/* ---------- learning steps: step 0 = history only, then one step per logged day ---------- */
+function buildSteps() {
+  var dates = []; ACT.forEach(function (a) { if (dates.indexOf(a.date) < 0) dates.push(a.date); }); dates.sort();
+  STEPS = [{ date: null, L: E.learn(P0, [], {}) }].concat(dates.map(function (d) { return { date: d, L: E.learn(P0, ACT, { before: addDays(d, 1), ref: d }) }; }));
+  CMP = E.compare(P0, PLANS, ACT);
+  STEPS.forEach(function (s) {
+    if (!s.date) return;
+    var rows = CMP.rows.filter(function (r) { return r.date === s.date && r.boxesErr != null; });
+    s.err = rows.length ? rows.reduce(function (a, r) { return a + Math.abs(r.boxesErr); }, 0) / rows.length : null;
+    var win = CMP.rows.filter(function (r) { return r.boxesErr != null && r.date <= s.date && r.date > addDays(s.date, -7); });
+    s.roll = win.length ? win.reduce(function (a, r) { return a + Math.abs(r.boxesErr); }, 0) / win.length : null;
+    var all = CMP.rows.filter(function (r) { return r.boxesErr != null && r.date <= s.date; });
+    s.inRange = all.length ? all.filter(function (r) { return r.inRange; }).length / all.length : null;
+    s.rows = rows;
+  });
+}
+function changesAt(i) {
+  if (i === 0) return [];
+  var a = STEPS[i - 1].L.P, b = STEPS[i].L.P, out = [];
+  ['speed', 'stops', 'bpb'].forEach(function (k) {
+    var M = METRICS[k];
+    ITEMS.forEach(function (it) { (M.same ? ['S1'] : ['S1', 'S2']).forEach(function (s) {
+      var x = M.get(a, it[0], it[1], s), y = M.get(b, it[0], it[1], s);
+      if (x != null && y != null && Math.abs(y - x) > Math.max(Math.abs(x) * 0.004, 0.01)) out.push({ k: k, label: (P0.products[it[0]] || it[0]) + ' ' + it[1] + (M.same ? '' : ' · ' + (s === 'S1' ? 'S1' : 'S2')), what: M.label, from: x, to: y, good: (y - x) * M.better > 0 });
+    }); });
+  });
+  ['size', 'product', 'both'].forEach(function (t) { var x = a.changeover[t].changeoverMin, y = b.changeover[t].changeoverMin; if (Math.abs(y - x) > 0.3) out.push({ k: 'co', label: E.CHG_LABEL[t], what: 'Changeover minutes', from: x, to: y, good: y < x }); });
+  return out.sort(function (p, q) { return Math.abs(q.to - q.from) / Math.max(Math.abs(q.from), 1e-6) - Math.abs(p.to - p.from) / Math.max(Math.abs(p.from), 1e-6); });
+}
+
+/* ---------- a small 3D renderer on a 2D canvas ---------- */
+var cv, cx, W = 0, H = 0, DPR = 1, bars = [], anim = {}, labels = [];
+function layout() {
+  bars = [];
+  var M = METRICS[ST.metric], P = STEPS[ST.step].L.P, H0 = STEPS[0].L.P, secs = M.same ? ['S1'] : ['S1', 'S2'];
+  var vals = []; ITEMS.forEach(function (it) { secs.forEach(function (s) { var v = M.get(P, it[0], it[1], s); if (v != null) vals.push(v); var h = M.get(H0, it[0], it[1], s); if (h != null) vals.push(h); }); });
+  var vmax = Math.max.apply(null, vals) || 1;
+  var learnedHere = {}; if (STEPS[ST.step].date) ACT.filter(function (a) { return a.date === STEPS[ST.step].date; }).forEach(function (a) { E.actualRuns(a).forEach(function (r) { learnedHere[r.product + '|' + r.size + '|' + a.sec] = 1; learnedHere[r.product + '|' + r.size] = 1; }); });
+  ITEMS.forEach(function (it, i) {
+    secs.forEach(function (s, j) {
+      var v = M.get(P, it[0], it[1], s), h = M.get(H0, it[0], it[1], s); if (v == null) return;
+      var key = it[0] + '|' + it[1] + '|' + s;
+      bars.push({ key: key, p: it[0], z: it[1], s: s, x: (i - (ITEMS.length - 1) / 2) * 2.4, zz: M.same ? 0 : (j === 0 ? -1.6 : 1.6), v: v, h: h, target: 7 * v / vmax, ghost: 7 * (h || 0) / vmax, n: M.n(P, it[0], it[1], s), hit: !!(learnedHere[key] || (M.same && learnedHere[it[0] + '|' + it[1]])) });
+      if (anim[key] == null) anim[key] = 0;
+    });
+  });
+}
+function proj(x, y, z) {
+  var cy = Math.cos(ST.yaw), sy = Math.sin(ST.yaw), cp = Math.cos(ST.pitch), sp = Math.sin(ST.pitch);
+  var X = x * cy - z * sy, Z = x * sy + z * cy;
+  var Y = y - 3.2, Y2 = Y * cp - Z * sp, Z2 = Y * sp + Z * cp + ST.dist;
+  var f = Math.min(W, H * 1.6) * 0.9 / 1;
+  return { x: W / 2 + X * f / Z2, y: H * 0.56 - Y2 * f / Z2, d: Z2 };
+}
+function shade(c, k, a) { return 'rgba(' + Math.round(c[0] * k) + ',' + Math.round(c[1] * k) + ',' + Math.round(c[2] * k) + ',' + (a == null ? 1 : a) + ')'; }
+function poly(pts, fill, stroke, lw) { cx.beginPath(); pts.forEach(function (p, i) { if (i) cx.lineTo(p.x, p.y); else cx.moveTo(p.x, p.y); }); cx.closePath(); if (fill) { cx.fillStyle = fill; cx.fill(); } if (stroke) { cx.strokeStyle = stroke; cx.lineWidth = lw || 1; cx.stroke(); } }
+var t0 = performance.now();
+function draw(now) {
+  var dt = Math.min(0.05, (now - t0) / 1000); t0 = now;
+  if (ST.auto && !drag) ST.yaw += dt * 0.05;
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0); cx.clearRect(0, 0, W, H);
+  // floor glow
+  var g = cx.createRadialGradient(W / 2, H * 0.62, 10, W / 2, H * 0.62, Math.max(W, H) * 0.7); g.addColorStop(0, 'rgba(79,181,144,.10)'); g.addColorStop(1, 'rgba(12,21,18,0)'); cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+  // grid floor
+  var ext = 12;
+  for (var gx = -ext; gx <= ext; gx += 1.5) { var a = proj(gx, 0, -5), b = proj(gx, 0, 5); cx.strokeStyle = 'rgba(157,176,168,.07)'; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke(); }
+  for (var gz = -5; gz <= 5; gz += 1.25) { var a2 = proj(-ext, 0, gz), b2 = proj(ext, 0, gz); cx.beginPath(); cx.moveTo(a2.x, a2.y); cx.lineTo(b2.x, b2.y); cx.stroke(); }
+  // bars, far to near
+  var pulse = (Math.sin(now / 260) + 1) / 2;
+  bars.forEach(function (b) { anim[b.key] += (b.target - anim[b.key]) * Math.min(1, dt * 6); b.cur = anim[b.key]; var c = proj(b.x, b.cur / 2, b.zz); b.depth = c.d; });
+  bars.slice().sort(function (p, q) { return q.depth - p.depth; }).forEach(function (b) {
+    var w = 0.7, d = 0.7, hgt = Math.max(0.02, b.cur), col = PCOL[b.p] || [120, 140, 130];
+    var v = function (x, y, z) { return proj(b.x + x, y, b.zz + z); };
+    var P = [v(-w, 0, -d), v(w, 0, -d), v(w, 0, d), v(-w, 0, d), v(-w, hgt, -d), v(w, hgt, -d), v(w, hgt, d), v(-w, hgt, d)];
+    // faces with outward normals; draw the ones facing the camera
+    var faces = [[0, 1, 5, 4, [0, 0, -1]], [1, 2, 6, 5, [1, 0, 0]], [2, 3, 7, 6, [0, 0, 1]], [3, 0, 4, 7, [-1, 0, 0]], [4, 5, 6, 7, [0, 1, 0]]];
+    var cyw = Math.cos(ST.yaw), syw = Math.sin(ST.yaw);
+    var hov = ST.hover === b.key;
+    faces.forEach(function (f) {
+      var nx = f[4][0] * cyw - f[4][2] * syw, nz = f[4][0] * syw + f[4][2] * cyw, ny = f[4][1];
+      var facing = ny > 0 ? Math.sin(ST.pitch) > -0.2 : nz < 0.05;
+      if (!facing) return;
+      var light = ny > 0 ? 1.18 : 0.62 + 0.3 * Math.max(0, -nx * 0.6 - nz * 0.4);
+      poly([P[f[0]], P[f[1]], P[f[2]], P[f[3]]], shade(col, Math.min(1.5, light * (hov ? 1.25 : 1)), 0.96), 'rgba(255,255,255,' + (ny > 0 ? 0.25 : 0.08) + ')', 1);
+    });
+    // learned-today halo
+    if (b.hit) { var top = [P[4], P[5], P[6], P[7]]; poly(top, null, 'rgba(224,176,96,' + (0.45 + 0.55 * pulse) + ')', 2.5); }
+    // history ghost outline
+    if (b.ghost > 0) { var gh = b.ghost; var G = [v(-w - .08, gh, -d - .08), v(w + .08, gh, -d - .08), v(w + .08, gh, d + .08), v(-w - .08, gh, d + .08)]; cx.setLineDash([4, 3]); poly(G, null, 'rgba(231,239,235,.55)', 1.2); cx.setLineDash([]); }
+    b.top = P[7]; b.screen = [P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7]];
+  });
+  // labels
+  cx.font = '600 10px "IBM Plex Mono", monospace'; cx.textAlign = 'center';
+  ITEMS.forEach(function (it, i) {
+    var x = (i - (ITEMS.length - 1) / 2) * 2.4, p = proj(x, 0, METRICS[ST.metric].same ? 1.6 : 3.4);
+    if (!bars.some(function (b) { return b.p === it[0] && b.z === it[1]; })) return;
+    cx.fillStyle = 'rgba(231,239,235,.85)'; cx.fillText(it[0] + it[1].replace('ml', ''), p.x, p.y + 14);
+  });
+  if (!METRICS[ST.metric].same) ['S1', 'S2'].forEach(function (s, j) { var p = proj(-(ITEMS.length / 2) * 2.4 - 1.2, 0, j === 0 ? -1.6 : 1.6); cx.fillStyle = s === 'S1' ? '#6fb3e8' : '#e0a36a'; cx.textAlign = 'right'; cx.fillText(s === 'S1' ? 'SECTION 1' : 'SECTION 2', p.x, p.y + 4); cx.textAlign = 'center'; });
+  // hovered value
+  var hb = bars.filter(function (b) { return b.key === ST.hover; })[0], tip = $('#tip3');
+  if (hb && hb.top) {
+    var M = METRICS[ST.metric], ch = hb.h ? (hb.v - hb.h) / hb.h : 0;
+    tip.hidden = false; tip.style.left = hb.top.x + 'px'; tip.style.top = hb.top.y + 'px';
+    tip.innerHTML = '<b>' + esc(P0.products[hb.p]) + ' ' + hb.z + (M.same ? '' : ' · ' + (hb.s === 'S1' ? 'Section 1' : 'Section 2')) + '</b><br>' + M.label + ': <b>' + fmt(hb.v, 1) + '</b> ' + M.unit + '<br>History: ' + fmt(hb.h, 1) + ' · <span style="color:' + ((ch * M.better) >= 0 ? '#47cd89' : '#f97066') + '">' + (ch >= 0 ? '+' : '') + (ch * 100).toFixed(1) + '%</span>' + (hb.n ? '<br>' + hb.n + ' history runs' : '') + (hb.hit ? '<br><span style="color:#e0b060">Learned from this day</span>' : '');
+  } else tip.hidden = true;
+  requestAnimationFrame(draw);
+}
+function resize() { var st = $('#stage3'); if (!st) return; var r = st.getBoundingClientRect(); DPR = Math.min(window.devicePixelRatio || 1, 2); W = r.width; H = r.height; cv.width = W * DPR; cv.height = H * DPR; }
+var drag = null;
+function pick(mx, my) {
+  var best = null;
+  bars.forEach(function (b) { if (!b.screen) return; var xs = b.screen.map(function (p) { return p.x; }), ys = b.screen.map(function (p) { return p.y; }); if (mx >= Math.min.apply(null, xs) && mx <= Math.max.apply(null, xs) && my >= Math.min.apply(null, ys) && my <= Math.max.apply(null, ys)) { if (!best || b.depth < best.depth) best = b; } });
+  return best;
+}
+function wire3D() {
+  cv = $('#cv3'); cx = cv.getContext('2d'); resize(); window.addEventListener('resize', resize);
+  var st = $('#stage3');
+  st.addEventListener('pointerdown', function (e) { if (e.target.closest('.msel')) return; drag = { x: e.clientX, y: e.clientY, yaw: ST.yaw, pitch: ST.pitch }; ST.auto = false; st.setPointerCapture(e.pointerId); });
+  st.addEventListener('pointermove', function (e) {
+    var r = st.getBoundingClientRect();
+    if (drag) { ST.yaw = drag.yaw + (e.clientX - drag.x) * 0.006; ST.pitch = Math.max(0.12, Math.min(1.2, drag.pitch + (e.clientY - drag.y) * 0.004)); return; }
+    var b = pick(e.clientX - r.left, e.clientY - r.top); ST.hover = b ? b.key : null;
+  });
+  st.addEventListener('pointerup', function () { drag = null; });
+  st.addEventListener('pointerleave', function () { drag = null; ST.hover = null; });
+  st.addEventListener('wheel', function (e) { e.preventDefault(); ST.dist = Math.max(16, Math.min(52, ST.dist + e.deltaY * 0.02)); }, { passive: false });
+  layout(); requestAnimationFrame(draw);
+}
+
+/* ---------- side panel, timeline, charts ---------- */
+function side() {
+  var s = STEPS[ST.step], ch = changesAt(ST.step);
+  var h = '';
+  h += kpi('Learned from', s.L.n + ' day' + (s.L.n === 1 ? '' : '-sections'), s.date ? 'actuals up to ' + nice(s.date) : 'history only (Jan 2025 – Aug 2026)');
+  if (s.date) {
+    h += kpi('Error that day', s.err == null ? '–' : pct(s.err), 'forecast vs actual boxes', s.err == null ? '' : s.err <= 0.1 ? 'good' : s.err > 0.25 ? 'bad' : '');
+    h += kpi('Last 7 days', s.roll == null ? '–' : pct(s.roll), 'average error · ' + (s.inRange == null ? '' : pct(s.inRange) + ' inside the range so far'), s.roll == null ? '' : s.roll <= 0.12 ? 'good' : s.roll > 0.25 ? 'bad' : '');
+  } else h += kpi('Back-test', BT ? fmt(BT.mdape, 0) + '%' : '–', 'typical error before any logged day (' + (BT ? BT.n : 0) + ' past days)');
+  h += '<div><div class="m-k"><span>What it learned ' + (s.date ? 'on ' + nice(s.date) : '') + '</span></div><div class="m-ch" style="margin-top:6px">' + (ch.length ? ch.slice(0, 12).map(function (c) { var d = c.to - c.from; return '<div><span>' + esc(c.label) + '<br><span style="color:#6f827a;font-size:11.5px">' + esc(c.what) + '</span></span><b class="' + (c.good ? 'up' : 'dn') + '">' + fmt(c.from, 1) + ' → ' + fmt(c.to, 1) + '</b></div>'; }).join('') : '<span style="color:#6f827a">' + (s.date ? 'Nothing moved much this day.' : 'Move the timeline to watch it learn.') + '</span>') + '</div></div>';
+  $('#side3').innerHTML = h;
+  function kpi(l, v, e, cls) { return '<div class="m-k ' + (cls || '') + '"><span>' + l + '</span><strong>' + v + '</strong><em>' + e + '</em></div>'; }
+}
+function syncTimeline() {
+  $('#rng').max = STEPS.length - 1; $('#rng').value = ST.step;
+  var s = STEPS[ST.step]; $('#dt3').textContent = s.date ? nice(s.date) : 'History only';
+  $('#ticks').innerHTML = STEPS.map(function (x, i) { return '<i class="' + (i <= ST.step ? 'on' : '') + '" style="left:calc(' + (STEPS.length > 1 ? i / (STEPS.length - 1) * 100 : 0) + '% - 1px)"></i>'; }).join('');
+  layout(); side(); drawCharts();
+}
+function errChart() {
+  var pts = STEPS.filter(function (s) { return s.date && s.err != null; }); if (!pts.length) return '<p class="muted">No scored days yet. Save forecasts and actuals in the Line Planner.</p>';
+  var Wd = 720, Hd = 220, L = 40, R = 12, T = 12, B = 26, iw = Wd - L - R, ih = Hd - T - B, n = pts.length;
+  var mx = Math.max(0.4, Math.min(1, Math.max.apply(null, pts.map(function (s) { return s.err; })) * 1.1));
+  var x = function (i) { return L + (n === 1 ? iw / 2 : i * iw / (n - 1)); }, y = function (v) { return T + ih - Math.min(v, mx) / mx * ih; };
+  var g = '';
+  [0, 0.1, 0.2, 0.3, 0.4].filter(function (v) { return v <= mx; }).forEach(function (v) { g += '<line x1="' + L + '" x2="' + (Wd - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + Math.round(v * 100) + '%</text>'; });
+  g += '<rect x="' + L + '" y="' + y(0.1) + '" width="' + iw + '" height="' + (y(0) - y(0.1)) + '" fill="var(--green-soft)" opacity=".7"/>';
+  var path = pts.map(function (s, i) { return (i ? 'L' : 'M') + x(i) + ' ' + y(s.roll); }).join(' ');
+  g += '<path d="' + path + '" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linejoin="round"/>';
+  pts.forEach(function (s, i) { var cur = s === STEPS[ST.step]; g += '<circle cx="' + x(i) + '" cy="' + y(s.err) + '" r="' + (cur ? 6 : 3.5) + '" fill="' + (cur ? 'var(--gold)' : 'var(--faint)') + '"><title>' + nice(s.date) + ': ' + pct(s.err) + ' error, 7-day ' + pct(s.roll) + '</title></circle>'; if (n <= 16 || i % Math.ceil(n / 12) === 0) g += '<text x="' + x(i) + '" y="' + (Hd - 8) + '" text-anchor="middle">' + s.date.slice(8) + '/' + s.date.slice(5, 7) + '</text>'; });
+  return '<svg viewBox="0 0 ' + Wd + ' ' + Hd + '" role="img" aria-label="Forecast error per day">' + g + '</svg>';
+}
+function drawCharts() {
+  $('#errc').innerHTML = errChart();
+  var s = STEPS[ST.step], rows = CMP.rows.filter(function (r) { return r.boxesErr != null; }).slice(-24).reverse();
+  $('#acc').innerHTML = rows.length ? '<div class="tablewrap" style="max-height:330px"><table class="acc"><thead><tr><th>Day</th><th>Line</th><th>Product</th><th class="n">Forecast</th><th class="n">Actual</th><th class="n">Error</th></tr></thead><tbody>' + rows.map(function (r) { var e = Math.abs(r.boxesErr), c = e <= 0.1 ? 'g' : e <= 0.25 ? 'a' : 'r'; return '<tr class="' + (s.date === r.date ? 'cur' : '') + '"><td>' + nice(r.date) + '</td><td>' + (r.sec === 'S1' ? 'S1' : 'S2') + '</td><td class="small">' + esc(r.items) + '</td><td class="n">' + fmt(r.pm.boxes, 0) + '</td><td class="n">' + fmt(r.am.boxes, 0) + '</td><td class="e ' + c + '">' + (r.boxesErr > 0 ? '+' : '') + Math.round(r.boxesErr * 100) + '%</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted">No scored days yet.</p>';
+}
+var timer = null;
+function play(on) {
+  ST.playing = on; $('#play3').textContent = on ? '❚❚' : '▶'; $('#play3').setAttribute('aria-label', on ? 'Pause' : 'Play');
+  clearInterval(timer); if (!on) return;
+  if (ST.step >= STEPS.length - 1) { ST.step = 0; syncTimeline(); }
+  timer = setInterval(function () { if (ST.step >= STEPS.length - 1) { play(false); return; } ST.step++; syncTimeline(); }, 1100);
+}
+
+function render() {
+  var last = STEPS[STEPS.length - 1], first = STEPS.filter(function (s) { return s.date && s.roll != null; })[0];
+  var h = '<nav class="subbar" id="subbar"></nav><div class="top"><div><h1>ATIC BETA 2.0</h1><p class="sub" style="margin:4px 0 0">How the Line Planner\'s model learns and how accurate it is. Every bar is one product on one line; it grows or shrinks as real days are entered.</p></div><div class="row"><span class="live"><i></i>Live</span></div></div>';
+  h += '<section class="hero" aria-label="3D view of the model learning"><div class="stage" id="stage3"><canvas id="cv3"></canvas><div class="ttl"><b>MODEL STATE</b><span id="mt">' + METRICS[ST.metric].label + '</span><em id="mu">' + METRICS[ST.metric].unit + ' · dashed outline = history before any logged day · gold ring = learned this day</em></div>' +
+    '<div class="msel">' + '<div class="seg" role="group" id="msel">' + Object.keys(METRICS).map(function (k) { return '<button type="button" data-m="' + k + '" aria-pressed="' + (k === ST.metric) + '">' + METRICS[k].label + '</button>'; }).join('') + '</div></div>' +
+    '<div class="tip3" id="tip3" hidden></div><div class="hint3">Drag to turn · scroll to zoom · point at a bar</div></div><aside class="side" id="side3"></aside>' +
+    '<div class="tl3"><button class="play" id="play3" aria-label="Play">▶</button><div><input type="range" id="rng" min="0" step="1" aria-label="Logged day"><div class="ticks" id="ticks"></div></div><span class="dt" id="dt3"></span></div></section>';
+  h += '<div class="kpis">' + kpiL('Logged days', String(last.L.n), 'day-sections the model learned from') + kpiL('Accuracy now', last.roll == null ? '–' : (100 - Math.round(last.roll * 100)) + '%', 'boxes, last 7 days') +
+    kpiL('Since the start', first && last.roll != null ? ((first.roll - last.roll) >= 0 ? '−' : '+') + Math.abs(Math.round((first.roll - last.roll) * 100)) + ' pts' : '–', 'error change, first week vs now') + kpiL('Inside the range', last.inRange == null ? '–' : pct(last.inRange), 'of days landed in P10–P90') + '</div>';
+  h += '<div class="two"><div class="panel chart"><div class="sect-h"><h3>Is it getting better?</h3><span class="legend"><span><i style="background:var(--faint)"></i>Error each day</span><span><i style="background:var(--brand)"></i>7-day average</span><span><i style="background:var(--green-soft);border:1px solid var(--green)"></i>Under 10%</span></span></div><div id="errc"></div></div>' +
+    '<div class="panel"><div class="sect-h"><h3>Forecast vs actual</h3><a class="small" href="line.html#compare">Full report →</a></div><div id="acc"></div></div></div>';
+  $('#main').innerHTML = h;
+  $('#subbar').innerHTML = '';
+  wire3D();
+  $('#rng').oninput = function () { play(false); ST.step = +this.value; syncTimeline(); };
+  $('#play3').onclick = function () { play(!ST.playing); };
+  $('#msel').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; ST.metric = b.dataset.m; document.querySelectorAll('#msel button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); }); $('#mt').textContent = METRICS[ST.metric].label; $('#mu').textContent = METRICS[ST.metric].unit + ' · dashed outline = history before any logged day · gold ring = learned this day'; anim = {}; layout(); };
+  syncTimeline();
+  function kpiL(l, v, s) { return '<div class="kpi"><span class="l">' + l + '</span><span class="v num">' + v + '</span><span class="small muted">' + s + '</span></div>'; }
+}
+async function loadAll() {
+  var r = await Promise.all([A.planner.list('actuals'), A.planner.list('plans')]);
+  ACT = r[0].map(function (x) { return x.data; }).filter(function (x) { return x && x.date && x.sec; });
+  PLANS = r[1].map(function (x) { return x.data; }).filter(function (x) { return x && x.date && x.sec; });
+  buildSteps();
+}
+(async function () {
+  A = await ATIC.boot({ page: 'model' }); if (!A) return;
+  try { var c = await A.planner.config(); P0 = c.params; BT = c.backtest; if (!P0) throw new Error('The model is not in the database yet. Run the upgrade script in Supabase.'); await loadAll(); }
+  catch (e) { $('#main').innerHTML = '<div class="panel noacc"><h2>Could not load</h2><p class="muted">' + esc(e.message || e) + '</p></div>'; return; }
+  ST.step = STEPS.length - 1;
+  render();
+  // live: a new actual animates in
+  A.planner.subscribe(async function () { var n = STEPS.length; await loadAll(); if (STEPS.length !== n || true) { if (ST.step >= n - 1) ST.step = STEPS.length - 1; syncTimeline(); } });
+})();
+})();
+</script>
+</body></html>

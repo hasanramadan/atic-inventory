@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Supply Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+.lines{display:flex;flex-direction:column;gap:10px}
+.ln{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.ln .calc{font:500 14px var(--f-mono);color:var(--muted);padding-bottom:10px;white-space:nowrap}
+.ln.mixed{grid-template-columns:minmax(0,1fr) auto}
+.mix-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.mix-h b{font:600 14px var(--f-display)}
+.mixrow{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:8px;align-items:end;margin-bottom:8px}
+.capbar{height:8px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:4px}
+.capbar i{display:block;height:100%;background:var(--brand)}
+.capbar.over i{background:var(--red)}
+.icon{border:1px solid var(--line);background:var(--surface);border-radius:9px;width:38px;height:38px;display:grid;place-items:center;color:var(--muted);font-size:18px;line-height:1}
+.icon:hover{color:var(--red);border-color:var(--red)}
+.kpis5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.days{display:flex;flex-wrap:wrap;gap:6px}
+.dchip{border:1px solid var(--line);border-radius:10px;padding:6px 8px;min-width:86px;background:var(--surface);font-size:12px;display:flex;flex-direction:column;gap:3px}
+.dchip b{font:600 12.5px var(--f-display)}
+.dchip .bar{display:flex;height:6px;border-radius:4px;overflow:hidden;background:var(--surface-2)}
+.dchip .bar i{display:block;height:100%}
+.dot2{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:0}
+.mx td,.mx th{padding:7px 8px;font-size:13px}
+.mx td.c{font-family:var(--f-mono);text-align:right}
+.mx td.r{background:var(--red-soft);color:var(--red);font-weight:600}
+.mx td.a{background:var(--amber-soft);color:var(--amber)}
+.mx td.g{color:var(--green)}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{font:11px var(--f-mono);fill:var(--muted)}
+.chart .v{fill:var(--ink);font-weight:500}
+.model{display:flex;gap:10px 18px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+.model b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
+.need td.n b{font-weight:600}
+.saved .card{cursor:default}
+.saved .card::before{background:var(--brand)}
+.missing td{background:var(--amber-soft)}
+@media (max-width:1100px){.kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:900px){.ln{grid-template-columns:1fr 1fr}.ln .calc{grid-column:1/-1;padding:0}.kpis5{grid-template-columns:repeat(2,minmax(0,1fr))}.mixrow{grid-template-columns:1fr 1fr auto}}
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading the Supply Planner…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/line-engine.js"></script>
+<script src="js/materials-engine.js"></script>
+<script src="js/supply-engine.js"></script>
+<script>
+(function () {
+var A, SP = window.ATICSupply, U = SP.util, X = window.ATICExcel;
+var TODAY = (function () { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+var PCOL = { GM: '#8A2B3A', RW: '#C0577A', BW: '#C7882E', LS: '#7A8F1F', WV: '#4F6B78' };
+var D = { P0: null, actuals: [], docs: {}, meta: {}, model: null, items: [] };
+var ST = load() || {
+  view: 'order',
+  order: { lines: [{ kind: 'full', item: 'GM750', trucks: 1, ppt: 22 }], samples: null, sections: ['S2'], start: U.nextWorkday(TODAY), needBy: '', saturdays: null, name: '' },
+  camp: { item: 'GM750', weeks: 8, start: U.addDays(U.weekStart(TODAY), 7), sections: ['S1', 'S2'], saturdays: null, alt: false, name: '' }
+};
+function save() { try { localStorage.setItem('aticSupplyDraft', JSON.stringify(ST)); } catch (e) {} }
+function load() { try { var s = JSON.parse(localStorage.getItem('aticSupplyDraft')); return s && s.order && s.camp ? s : null; } catch (e) { return null; } }
+var esc = function (s) { return A.esc(s); };
+function $(s) { return document.querySelector(s); }
+function fmt(x, d) { if (x == null || !isFinite(x)) return '–'; d = d == null ? (Math.abs(x) >= 100 ? 0 : 1) : d; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('en-US'); }
+function nice(s) { if (!s) return '–'; var d = new Date(s + 'T00:00:00Z'); return d.getUTCDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]; }
+function wd(s) { return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][U.dow(s)]; }
+function settings() { return D.docs.supply || {}; }
+function sats(v) { return v == null ? !!settings().saturdays : v; }
+function item(id) { return SP.itemById(D.items, id); }
+function head(t, s, right) { return '<div class="top"><div><h1>' + t + '</h1><p class="sub" style="margin:4px 0 0">' + s + '</p></div><div class="row">' + (right || '') + '</div></div>'; }
+function seg(id, opts, cur) { return '<div class="seg" role="group" id="' + id + '">' + opts.map(function (o) { return '<button type="button" data-v="' + esc(o[0]) + '" aria-pressed="' + (String(cur) === String(o[0])) + '">' + esc(o[1]) + '</button>'; }).join('') + '</div>'; }
+function itemOpts(sel, allowAll) { return D.items.map(function (x) { var dis = !allowAll && !x.ready; return '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + (dis ? ' disabled' : '') + '>' + esc(x.name) + (x.ready ? '' : ' (pallets not set yet)') + '</option>'; }).join(''); }
+function secKey(a) { return a.length === 2 ? 'both' : a[0]; }
+function secArr(k) { return k === 'both' ? ['S1', 'S2'] : [k]; }
+function modelStrip() {
+  var m = D.model;
+  return '<div class="model"><span class="chip info">From the Line Planner</span><span>Learned from <b>' + m.learnedFrom + '</b> logged days</span><span>Model <b>' + esc(m.version) + '</b></span><span>Speeds and boxes per batch update every time an actual is saved.</span></div>';
+}
+
+/* ---------------- ORDER BY TRUCKS ---------------- */
+function vOrder() {
+  var o = ST.order, h = head('Order forecast by trucks', 'Enter the trucks. The planner turns them into pallets, cartons, batches, working days and raw materials, using what the Line Planner has learned.',
+    '<label class="btn" for="xlOrder" style="display:inline-flex;cursor:pointer">Import order from Excel</label><input type="file" id="xlOrder" accept=".xlsx,.xls,.xlsm,.csv" hidden>');
+  h += modelStrip();
+  // lines
+  h += '<div class="panel"><div class="sect-h"><h3>1 · The order</h3><div class="row"><button class="btn" id="addFull">+ Full trucks</button><button class="btn" id="addMixed">+ Mixed truck</button></div></div><div class="lines">';
+  if (!o.lines.length) h += '<div class="empty">No trucks yet. Add full trucks of one product, or a mixed truck.</div>';
+  o.lines.forEach(function (ln, i) {
+    if (ln.kind === 'mixed') {
+      var parts = ln.parts || [], its = parts.map(function (p) { return item(p.item); }).filter(Boolean);
+      var cap = its.length ? Math.min.apply(null, its.map(function (x) { return (ln.alt && x.pptAlt) || x.ppt || 24; })) : 22;
+      var tot = parts.reduce(function (a, p) { return a + (+p.pallets || 0); }, 0);
+      h += '<div class="ln mixed"><div><div class="mix-h"><b>Mixed truck</b><span class="small muted num">' + tot + ' / ' + cap + ' pallets</span></div>' +
+        parts.map(function (p, k) { return '<div class="mixrow"><label class="field">Product<select data-mi="' + i + '" data-mk="' + k + '" data-mf="item">' + itemOpts(p.item) + '</select></label><label class="field">Pallets<input type="number" min="0" step="1" data-mi="' + i + '" data-mk="' + k + '" data-mf="pallets" value="' + (p.pallets || '') + '"></label><button class="icon" data-mrm="' + i + '-' + k + '" aria-label="Remove product">×</button></div>'; }).join('') +
+        '<div class="row" style="justify-content:space-between"><button class="btn ghost" data-madd="' + i + '">+ Product on this truck</button>' + (its.some(function (x) { return x.pptAlt; }) ? '<label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-malt="' + i + '"' + (ln.alt ? ' checked' : '') + '> 750ml truck takes 23 pallets</label>' : '') + '</div>' +
+        '<div class="capbar' + (tot > cap ? ' over' : '') + '"><i style="width:' + Math.min(100, 100 * tot / cap) + '%"></i></div></div><button class="icon" data-rm="' + i + '" aria-label="Remove truck">×</button></div>';
+    } else {
+      var it = item(ln.item) || D.items[0];
+      var pptOpts = it.pptAlt ? [[it.ppt, it.ppt + ' pallets'], [it.pptAlt, it.pptAlt + ' pallets']] : [[it.ppt || '', it.ppt ? it.ppt + ' pallets' : 'not set']];
+      var cartons = it.ready ? (ln.trucks || 0) * (ln.ppt || it.ppt) * it.cpp : null;
+      h += '<div class="ln"><label class="field">Product<select data-li="' + i + '" data-lf="item">' + itemOpts(ln.item) + '</select></label>' +
+        '<label class="field">Trucks<input type="number" min="0" step="1" data-li="' + i + '" data-lf="trucks" value="' + (ln.trucks || '') + '"></label>' +
+        '<label class="field">Pallets per truck<select data-li="' + i + '" data-lf="ppt">' + pptOpts.map(function (p) { return '<option value="' + p[0] + '"' + (+p[0] === +(ln.ppt || it.ppt) ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></label>' +
+        '<div class="calc">' + (it.ready ? fmt((ln.trucks || 0) * (ln.ppt || it.ppt), 0) + ' pallets · ' + fmt(cartons, 0) + ' ctns<br><span class="small">' + it.cpp + ' cartons per pallet</span>' : '<span style="color:var(--amber)">Pallet details not set</span>') + '</div>' +
+        '<button class="icon" data-rm="' + i + '" aria-label="Remove line">×</button></div>';
+    }
+  });
+  h += '</div></div>';
+  // production settings
+  h += '<div class="panel"><div class="sect-h"><h3>2 · When and where</h3></div><div class="fgrid">' +
+    '<label class="field">Start production<input type="date" id="oStart" value="' + esc(o.start) + '"></label>' +
+    '<label class="field">Needed by (optional)<input type="date" id="oNeed" value="' + esc(o.needBy || '') + '"></label>' +
+    '<div class="field">Lines' + seg('oSec', [['S1', 'Section 1'], ['S2', 'Section 2'], ['both', 'Both']], secKey(o.sections)) + '</div>' +
+    '<div class="field">Saturdays' + seg('oSat', [['false', 'Off'], ['true', 'Working']], sats(o.saturdays)) + '</div></div></div>';
+  var calc = SP.orderCalc(o.lines, { samples: !!o.samples, sections: o.sections, start: o.start || U.nextWorkday(TODAY), saturdays: sats(o.saturdays), model: D.model, items: D.items });
+  // sample question
+  if (calc.trucks > 0) {
+    if (o.samples == null) h += '<div class="callout"><b>Add 1 sample carton per truck at the end?</b><span class="muted">' + calc.trucks + ' truck' + (calc.trucks === 1 ? '' : 's') + ' → ' + calc.samplesIfYes + ' sample carton' + (calc.samplesIfYes === 1 ? '' : 's') + (calc.mixedTrucks ? ' (mixed truck: 1 per product)' : '') + '.</span><span style="margin-left:auto" class="row"><button class="btn" data-smp="no">No</button><button class="btn primary" data-smp="yes">Yes, add them</button></span></div>';
+    else h += '<div class="callout q"><span>Sample cartons: <b>' + (o.samples ? 'added (' + calc.samples + ')' : 'not added') + '</b></span><button class="btn ghost" data-smp="ask" style="margin-left:auto">Change</button></div>';
+  }
+  calc.errors.forEach(function (e) { h += '<div class="callout" style="background:var(--red-soft);border-color:var(--red)">' + esc(e) + '</div>'; });
+  calc.warnings.forEach(function (e) { h += '<div class="callout">' + esc(e) + '</div>'; });
+  if (calc.rows.length && !calc.errors.length) h += orderResults(calc, o);
+  return h;
+}
+function orderResults(c, o) {
+  var late = o.needBy && c.finish && c.finish > o.needBy;
+  var h = '<div class="kpis5">' +
+    kpi('Trucks', fmt(c.trucks, 0), c.mixedTrucks ? c.mixedTrucks + ' mixed' : 'full trucks') +
+    kpi('Pallets', fmt(c.pallets, 0), '') +
+    kpi('Cartons', fmt(c.cartons, 0), c.samples ? 'incl. ' + c.samples + ' sample' + (c.samples === 1 ? '' : 's') : 'no samples') +
+    kpi('Batches', fmt(c.batches, 1), '≈ ' + Math.ceil(c.batches) + ' tanks to prepare') +
+    kpi('Working days', fmt(c.workdays, 0), nice(c.start) + ' → ' + nice(c.finish), late ? 'order' : (o.needBy ? 'ok' : '')) + '</div>';
+  if (o.needBy) h += '<div class="callout ' + (late ? '' : 'q') + '" style="' + (late ? 'background:var(--red-soft);border-color:var(--red);color:var(--red)' : '') + '">' + (late ? '<b>Late:</b> production finishes ' + nice(c.finish) + ', after the ' + nice(o.needBy) + ' deadline. Start earlier, add the other section, or work Saturdays.' : '<b>On time:</b> production finishes ' + nice(c.finish) + ', before ' + nice(o.needBy) + '.') + '</div>';
+  h += '<div class="panel"><div class="sect-h"><h3>3 · What it takes</h3><span class="small muted">Cartons per day = what the line usually fills in a full 07:00–17:00 day, from the Line Planner.</span></div><div class="tablewrap"><table><thead><tr><th>Product</th><th class="n">Pallets</th><th class="n">Cartons</th><th class="n">Samples</th><th class="n">Bottles</th><th class="n">Boxes per batch</th><th class="n">Batches</th><th class="n">Cartons per day</th><th class="n">Line days</th></tr></thead><tbody>' +
+    c.rows.map(function (r) { return '<tr><td><span class="dot2" style="background:' + PCOL[r.item.product] + '"></span><b>' + esc(r.item.name) + '</b></td><td class="n">' + fmt(r.pallets, 0) + '</td><td class="n">' + fmt(r.cartons, 0) + '</td><td class="n">' + (r.samples || '–') + '</td><td class="n">' + fmt(r.bottles, 0) + '</td><td class="n">' + fmt(r.bpb, 1) + '</td><td class="n"><b>' + fmt(r.batches, 1) + '</b></td><td class="n">' + fmt(r.cap.p50, 0) + '</td><td class="n">' + fmt(r.days, 1) + ' <span class="muted small">(' + fmt(r.daysLo, 1) + '–' + fmt(r.daysHi, 1) + ')</span></td></tr>'; }).join('') +
+    '</tbody></table></div><p class="hint" style="margin:10px 0 0">Line days in brackets: a good day to a bad day (P90 to P10 of the learned output). Batches = cartons ÷ boxes per batch.</p></div>';
+  h += '<div class="panel"><div class="sect-h"><h3>Day by day</h3><span class="small muted">' + (o.sections.length === 2 ? 'Both sections' : o.sections[0] === 'S1' ? 'Section 1' : 'Section 2') + ' · Friday off' + (sats(o.saturdays) ? ' · Saturdays working' : ' · Saturdays off') + '</span></div><div class="days">' +
+    c.days.map(function (d) { var tot = d.items.reduce(function (a, x) { return a + x.cartons; }, 0);
+      return '<div class="dchip"><b>' + wd(d.date) + ' ' + nice(d.date) + '</b><span class="num">' + fmt(tot, 0) + ' ctns · ' + fmt(d.items.reduce(function (a, x) { return a + x.batches; }, 0), 1) + ' bt</span><div class="bar">' + d.items.map(function (x) { return '<i title="' + esc(item(x.item).name + ': ' + fmt(x.cartons, 0)) + '" style="width:' + (100 * x.cartons / Math.max(tot, 1)) + '%;background:' + PCOL[x.product] + '"></i>'; }).join('') + '</div></div>'; }).join('') + '</div></div>';
+  h += materialsPanel(c.days, '4 · Raw materials for this order');
+  h += saveBar('order');
+  return h;
+}
+function kpi(l, v, s, cls) { return '<div class="kpi ' + (cls || '') + '"><span class="l">' + l + '</span><span class="v num">' + v + '</span>' + (s ? '<span class="s">' + s + '</span>' : '') + '</div>'; }
+function savedForEngine() { var s = D.docs; return { materials: s.materials, recipes: s.recipes, stock: s.stock, plan: s.plan, orders: (s.orders && s.orders.items) || [], settings: s.settings }; }
+function materialsPanel(days, title, weekly) {
+  if (!D.docs.baseline) return '<div class="panel"><h3>' + title + '</h3><p class="muted">Raw material data is not available for this account.</p></div>';
+  var mi = SP.materialsImpact(window.ATICEngine, D.docs.baseline, savedForEngine(), days, TODAY);
+  if (!mi) return '';
+  var h = '<div class="panel"><div class="sect-h"><h3>' + title + '</h3><span class="small muted">Stock, open orders and lead times from Raw Materials. The other section keeps its normal plan.</span></div>';
+  if (mi.missingRecipes.length) h += '<div class="callout" style="margin-bottom:12px">No recipe yet for ' + esc(mi.missingRecipes.join(', ')) + '. Add it on Raw Materials → Recipes and these materials will appear.</div>';
+  var act = mi.rows.filter(function (r) { return r.status === 'order' || r.status === 'soon'; });
+  var line = function (r) { return '<span>' + esc(r.name) + ': ' + (r.status === 'order' ? '<b>now</b>' : 'by <b>' + nice(r.orderBy) + '</b>') + ', about ' + fmt(r.suggestedQty, 0) + ' ' + unitTxt(r.unit, r.suggestedQty) + ' (arrives in ' + Math.round(r.lead.min / 30 * 10) / 10 + '–' + Math.round(r.lead.max / 30 * 10) / 10 + ' months)' + (r.runOut ? ' · runs out ' + nice(r.runOut) : '') + '</span>'; };
+  var because = act.filter(function (r) { return r.runOut !== r.baseRunOut || r.orderBy !== r.baseOrderBy; }), already = act.filter(function (r) { return because.indexOf(r) < 0; });
+  if (because.length) h += '<div class="callout" style="background:var(--red-soft);border-color:var(--red);margin-bottom:12px;flex-direction:column;align-items:flex-start;gap:4px"><b style="color:var(--red)">To order because of this</b>' + because.map(line).join('') + '</div>';
+  if (already.length) h += '<div class="callout" style="margin-bottom:12px;flex-direction:column;align-items:flex-start;gap:4px"><b>Already short without this (see Raw Materials)</b>' + already.map(line).join('') + '</div>';
+  if (!weekly) {
+    h += '<div class="tablewrap need"><table><thead><tr><th>Material</th><th class="n">Needed</th><th class="n">Stock now (est.)</th><th>Status</th><th>Runs out</th><th>Without this</th><th>Order by</th></tr></thead><tbody>' +
+      mi.rows.map(function (r) { return '<tr><td><b>' + esc(r.name) + '</b> <span class="small muted">' + esc(r.unit) + '</span></td><td class="n"><b>' + fmt(r.need) + '</b></td><td class="n">' + fmt(Math.max(0, r.stockNow)) + '</td><td>' + chip(r.status) + '</td><td>' + (r.runOut ? nice(r.runOut) : 'not in 26 weeks') + '</td><td class="muted">' + (r.baseRunOut ? nice(r.baseRunOut) : '–') + '</td><td>' + (r.status === 'order' ? '<b style="color:var(--red)">Now</b>' : r.orderBy ? nice(r.orderBy) : '–') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  } else {
+    h += '<div class="tablewrap mx"><table><thead><tr><th>Material</th><th class="n">Needed</th>' + mi.weeks.map(function (w) { return '<th class="n">' + nice(w) + '</th>'; }).join('') + '<th>Order by</th></tr></thead><tbody>' +
+      mi.rows.map(function (r) { return '<tr><td><b>' + esc(r.name) + '</b><br><span class="small muted">' + unitTxt(r.unit, 2) + ' · stock ' + fmt(Math.max(0, r.stockNow)) + '</span></td><td class="c"><b>' + fmt(r.need) + '</b></td>' +
+        r.weeks.map(function (w) { var cls = w.closing == null ? '' : w.closing < 0 ? 'r' : w.closing < w.safety ? 'a' : 'g'; return '<td class="c ' + cls + '" title="Uses ' + fmt(w.need) + ' this week; stock at week end ' + fmt(w.closing) + '">' + fmt(w.closing) + '</td>'; }).join('') +
+        '<td>' + (r.status === 'order' ? '<b style="color:var(--red)">Now</b>' : r.orderBy ? nice(r.orderBy) : '–') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="hint" style="margin:10px 0 0">Each cell is the stock left at the end of that week. Red = run out, amber = below the safety level, green = enough.</p>';
+  }
+  return h + '</div>';
+}
+function unitTxt(u, q) { return /^(kg|gal|l|g)$/i.test(u) ? u : u + (Math.abs(q) === 1 ? '' : 's'); }
+function chip(s) { var t = { order: 'Order now', soon: 'Order soon', ok: 'Enough', idle: 'Not used' }; return '<span class="chip ' + s + '"><span class="dot"></span>' + t[s] + '</span>'; }
+function saveBar(kind) {
+  var x = kind === 'order' ? ST.order : ST.camp;
+  return '<div class="panel row" style="justify-content:space-between"><div class="row" style="flex:1 1 320px"><label class="field" style="flex:1 1 260px">Name this forecast<input id="svName" placeholder="' + (kind === 'order' ? 'e.g. Kuwait order, 5 trucks' : 'e.g. Grenadine campaign Nov–Dec') + '" value="' + esc(x.name || '') + '"></label></div><div class="row"><button class="btn primary" id="svBtn"' + (A.canWrite ? '' : ' disabled title="View only"') + '>Save to Forecast Results</button></div></div>';
+}
+
+/* ---------------- CAMPAIGN ---------------- */
+function vCamp() {
+  var o = ST.camp, it = item(o.item);
+  var h = head('Campaign forecast', 'One product for a number of weeks: cartons, trucks, batches and working days, and the raw materials week by week with the dates to order.');
+  h += modelStrip();
+  h += '<div class="panel"><div class="fgrid">' +
+    '<label class="field w2">Product<select id="cItem">' + itemOpts(o.item, true) + '</select></label>' +
+    '<label class="field">Weeks<input type="number" id="cWeeks" min="1" max="26" step="1" value="' + o.weeks + '"></label>' +
+    '<label class="field">Starting<input type="date" id="cStart" value="' + esc(o.start) + '"></label>' +
+    '<div class="field">Lines' + seg('cSec', [['S1', 'Section 1'], ['S2', 'Section 2'], ['both', 'Both']], secKey(o.sections)) + '</div>' +
+    '<div class="field">Saturdays' + seg('cSat', [['false', 'Off'], ['true', 'Working']], sats(o.saturdays)) + '</div>' +
+    (it && it.pptAlt ? '<div class="field">Pallets per truck' + seg('cAlt', [['false', it.ppt + ''], ['true', it.pptAlt + '']], !!o.alt) + '</div>' : '') + '</div></div>';
+  var c = SP.campaignCalc({ item: o.item, weeks: Math.max(1, Math.min(26, +o.weeks || 1)), start: o.start || TODAY, sections: o.sections, saturdays: sats(o.saturdays), alt: o.alt, model: D.model, items: D.items });
+  c.errors.forEach(function (e) { h += '<div class="callout" style="background:var(--red-soft);border-color:var(--red)">' + esc(e) + '</div>'; });
+  if (c.errors.length) return h;
+  if (!it.ready) h += '<div class="callout">Pallets per truck for ' + esc(it.name) + ' are not set yet, so trucks are not shown. Add them under Pallets &amp; trucks.</div>';
+  var t = c.total;
+  h += '<div class="kpis5">' + kpi('Cartons', fmt(t.cartons, 0), fmt(t.lo, 0) + '–' + fmt(t.hi, 0) + ' range') + kpi('Trucks', t.trucks != null ? fmt(t.fullTrucks, 0) : '–', t.trucks != null ? fmt(t.trucks, 1) + ' truckloads · ' + c.perTruck + ' ctns each' : 'pallets not set') +
+    kpi('Batches', fmt(t.batches, 0), fmt(c.bpb, 1) + ' boxes per batch') + kpi('Working days', fmt(t.days, 0), nice(c.start) + ' → ' + nice(c.finish)) + kpi('Per day', fmt(c.cap.p50, 0), 'cartons · ' + fmt(c.cap.p50 / c.bpb, 1) + ' batches') + '</div>';
+  h += '<div class="panel"><div class="sect-h"><h3>Week by week</h3><span class="legend"><span><i style="background:' + PCOL[it.product] + '"></i>Cartons</span><span><i style="background:var(--surface-2);border:1px solid var(--faint)"></i>Good–bad day range</span></span></div>' + weekChart(c) +
+    '<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Week</th><th class="n">Working days</th><th class="n">Cartons</th><th class="n">Batches</th><th class="n">Pallets</th><th class="n">Trucks</th><th class="n">Trucks so far</th></tr></thead><tbody>' +
+    c.weeks.map(function (w) { return '<tr><td>' + nice(w.start) + ' – ' + nice(w.end) + '</td><td class="n">' + w.days + '</td><td class="n"><b>' + fmt(w.cartons, 0) + '</b></td><td class="n">' + fmt(w.batches, 1) + '</td><td class="n">' + fmt(w.pallets, 1) + '</td><td class="n">' + fmt(w.trucks, 1) + '</td><td class="n">' + (w.cumTrucks != null ? w.cumTrucks : '–') + '</td></tr>'; }).join('') +
+    '<tr style="font-weight:600"><td>Total</td><td class="n">' + t.days + '</td><td class="n">' + fmt(t.cartons, 0) + '</td><td class="n">' + fmt(t.batches, 1) + '</td><td class="n">' + fmt(t.pallets, 1) + '</td><td class="n">' + fmt(t.trucks, 1) + '</td><td class="n">' + (t.fullTrucks != null ? t.fullTrucks : '–') + '</td></tr></tbody></table></div></div>';
+  h += materialsPanel(c.days, 'Raw materials, week by week', true);
+  h += saveBar('camp');
+  return h;
+}
+function weekChart(c) {
+  var W = 760, H = 210, L = 46, R = 10, T = 14, B = 26, iw = W - L - R, ih = H - T - B, n = c.weeks.length;
+  var mx = Math.max.apply(null, c.weeks.map(function (w) { return w.hi; })) || 1, e = Math.pow(10, Math.floor(Math.log10(mx))), nm = Math.ceil(mx / e / 2) * 2 * e;
+  var y = function (v) { return T + ih - v / nm * ih; }, bw = iw / n * 0.62;
+  var g = '';
+  for (var k = 0; k <= 4; k++) { var v = nm * k / 4; g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + fmt(v, 0) + '</text>'; }
+  c.weeks.forEach(function (w, i) {
+    var x = L + iw / n * i + (iw / n - bw) / 2;
+    g += '<rect x="' + (x + bw / 2 - 1.5) + '" y="' + y(w.hi) + '" width="3" height="' + Math.max(1, y(w.lo) - y(w.hi)) + '" fill="var(--faint)" opacity=".55"><title>Range ' + fmt(w.lo, 0) + '–' + fmt(w.hi, 0) + '</title></rect>';
+    g += '<rect x="' + x + '" y="' + y(w.cartons) + '" width="' + bw + '" height="' + (T + ih - y(w.cartons)) + '" rx="4" fill="' + PCOL[c.item.product] + '"><title>' + nice(w.start) + ': ' + fmt(w.cartons, 0) + ' cartons, ' + w.days + ' days</title></rect>';
+    if (n <= 14 || i % 2 === 0) g += '<text x="' + (x + bw / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + nice(w.start) + '</text>';
+  });
+  return '<div class="chart"><svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Cartons per week">' + g + '</svg></div>';
+}
+
+/* ---------------- SAVED ---------------- */
+function vSaved() {
+  var list = (settings().saved || []).slice().sort(function (a, b) { return b.savedAt < a.savedAt ? -1 : 1; });
+  var h = head('Saved forecasts', 'Order and campaign forecasts saved by the team. They also appear on Forecast Results.');
+  if (!list.length) return h + '<div class="panel empty">Nothing saved yet. Build an order or a campaign and press Save.</div>';
+  h += '<div class="grid saved">' + list.map(function (s) {
+    return '<div class="card"><div class="h"><h3>' + esc(s.name) + '</h3><span class="chip info">' + (s.kind === 'order' ? 'Order' : 'Campaign') + '</span></div><p class="small muted" style="margin:0">' + esc(s.summary || '') + '</p><p class="small muted" style="margin:0">Saved ' + esc((s.savedAt || '').slice(0, 10)) + ' by ' + esc(s.by || '') + '</p><div class="row"><button class="btn" data-open="' + esc(s.id) + '">Open</button>' + (A.canWrite ? '<button class="btn ghost" data-del="' + esc(s.id) + '" style="color:var(--red)">Delete</button>' : '') + '</div></div>';
+  }).join('') + '</div>';
+  return h;
+}
+
+/* ---------------- SETTINGS ---------------- */
+function vSettings() {
+  var h = head('Pallets &amp; trucks', 'How each item is packed and shipped. Boxes per batch and cartons per day come from the Line Planner and update by themselves.');
+  h += '<div class="tablewrap"><table><thead><tr><th>Item</th><th class="n">Cartons per pallet</th><th class="n">Pallets per truck</th><th class="n">Option</th><th class="n">Bottles per carton</th><th class="n">Boxes per batch</th><th class="n">Cartons/day S1</th><th class="n">Cartons/day S2</th></tr></thead><tbody>' +
+    D.items.map(function (x) { var m = D.model, c = m.cap[x.id] || {};
+      return '<tr class="' + (x.ready ? '' : 'missing') + '"><td><span class="dot2" style="background:' + PCOL[x.product] + '"></span><b>' + esc(x.name) + '</b>' + (x.ready ? '' : '<br><span class="small" style="color:var(--amber)">Waiting for pallet details</span>') + '</td>' +
+        '<td class="n"><input type="number" min="0" data-set="' + x.id + '" data-k="cpp" value="' + (x.cpp || '') + '"' + (A.canWrite ? '' : ' disabled') + '></td>' +
+        '<td class="n"><input type="number" min="0" data-set="' + x.id + '" data-k="ppt" value="' + (x.ppt || '') + '"' + (A.canWrite ? '' : ' disabled') + '></td>' +
+        '<td class="n"><input type="number" min="0" data-set="' + x.id + '" data-k="pptAlt" value="' + (x.pptAlt || '') + '"' + (A.canWrite ? '' : ' disabled') + '></td>' +
+        '<td class="n">' + ((m.bpc || {})[x.size] || '–') + '</td><td class="n">' + fmt(m.bpb[x.id], 1) + '</td><td class="n">' + fmt(c.S1 && c.S1.p50, 0) + '</td><td class="n">' + fmt(c.S2 && c.S2.p50, 0) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  h += '<div class="panel"><div class="fgrid"><div class="field">Saturdays by default' + seg('setSat', [['false', 'Off'], ['true', 'Working']], !!settings().saturdays) + '</div><div class="field w2"><span>&nbsp;</span><span class="small muted">You can still switch Saturdays on or off in each forecast.</span></div><div class="field"><button class="btn primary" id="setSave"' + (A.canWrite ? '' : ' disabled') + '>Save settings</button></div></div></div>';
+  h += '<p class="hint">Sample cartons are never added on their own: each order asks first. A mixed truck gets one sample carton per product.</p>';
+  return h;
+}
+
+/* ---------------- render & events ---------------- */
+var VIEWS = { order: vOrder, campaign: vCamp, saved: vSaved, settings: vSettings };
+function render() {
+  var y = window.scrollY, v = VIEWS[ST.view] ? ST.view : 'order';
+  $('#main').innerHTML = '<nav class="subbar" id="subbar"></nav>' + VIEWS[v]();
+  var bar = $('#subbar'); bar.innerHTML = A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === v ? ' aria-current="page"' : '') + '>' + esc(s.label) + '</a>'; }).join('');
+  A.setSub(v); wire(v); save(); window.scrollTo(0, y);
+}
+function on(sel, ev, fn) { document.querySelectorAll(sel).forEach(function (el) { el[ev] = fn; }); }
+function segOn(id, fn) { var s = document.getElementById(id); if (s) s.onclick = function (e) { var b = e.target.closest('button'); if (b) fn(b.dataset.v); }; }
+function wire(v) {
+  if (v === 'order') {
+    var o = ST.order;
+    on('#addFull', 'onclick', function () { o.lines.push({ kind: 'full', item: 'GM750', trucks: 1, ppt: 22 }); render(); });
+    on('#addMixed', 'onclick', function () { o.lines.push({ kind: 'mixed', parts: [{ item: 'GM750', pallets: 11 }, { item: 'BW750', pallets: 11 }] }); render(); });
+    on('[data-rm]', 'onclick', function () { o.lines.splice(+this.dataset.rm, 1); render(); });
+    on('[data-li]', 'onchange', function () { var ln = o.lines[+this.dataset.li], f = this.dataset.lf; if (f === 'item') { ln.item = this.value; ln.ppt = item(ln.item).ppt; } else ln[f] = +this.value || 0; render(); });
+    on('[data-mi]', 'onchange', function () { var p = o.lines[+this.dataset.mi].parts[+this.dataset.mk]; p[this.dataset.mf] = this.dataset.mf === 'item' ? this.value : (+this.value || 0); render(); });
+    on('[data-madd]', 'onclick', function () { o.lines[+this.dataset.madd].parts.push({ item: 'RW750', pallets: 0 }); render(); });
+    on('[data-mrm]', 'onclick', function () { var a = this.dataset.mrm.split('-'); o.lines[+a[0]].parts.splice(+a[1], 1); if (!o.lines[+a[0]].parts.length) o.lines.splice(+a[0], 1); render(); });
+    on('[data-malt]', 'onchange', function () { o.lines[+this.dataset.malt].alt = this.checked; render(); });
+    on('[data-smp]', 'onclick', function () { var x = this.dataset.smp; o.samples = x === 'yes' ? true : x === 'no' ? false : null; render(); });
+    on('#oStart', 'onchange', function () { o.start = this.value; render(); });
+    on('#oNeed', 'onchange', function () { o.needBy = this.value; render(); });
+    segOn('oSec', function (k) { o.sections = secArr(k); render(); });
+    segOn('oSat', function (k) { o.saturdays = k === 'true'; render(); });
+    on('#xlOrder', 'onchange', function () { var f = this.files[0]; if (f) importOrder(f); this.value = ''; });
+  }
+  if (v === 'campaign') {
+    var c = ST.camp;
+    on('#cItem', 'onchange', function () { c.item = this.value; render(); });
+    on('#cWeeks', 'onchange', function () { c.weeks = Math.max(1, Math.min(26, +this.value || 1)); render(); });
+    on('#cStart', 'onchange', function () { c.start = this.value; render(); });
+    segOn('cSec', function (k) { c.sections = secArr(k); render(); });
+    segOn('cSat', function (k) { c.saturdays = k === 'true'; render(); });
+    segOn('cAlt', function (k) { c.alt = k === 'true'; render(); });
+  }
+  if (v === 'order' || v === 'campaign') {
+    on('#svName', 'oninput', function () { (v === 'order' ? ST.order : ST.camp).name = this.value; save(); });
+    on('#svBtn', 'onclick', function () { saveForecast(v); });
+  }
+  if (v === 'saved') {
+    on('[data-open]', 'onclick', function () { var s = (settings().saved || []).filter(function (x) { return x.id === this.dataset.open; }, this)[0]; if (!s) return; if (s.kind === 'order') { ST.order = JSON.parse(JSON.stringify(s.input)); go('order'); } else { ST.camp = JSON.parse(JSON.stringify(s.input)); go('campaign'); } });
+    on('[data-del]', 'onclick', function () { var b = this; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Click again to delete'; return; } var s = Object.assign({}, settings()); s.saved = (s.saved || []).filter(function (x) { return x.id !== b.dataset.del; }); saveSettings(s, 'Deleted'); });
+  }
+  if (v === 'settings') {
+    var draftSat = !!settings().saturdays;
+    segOn('setSat', function (k) { draftSat = k === 'true'; document.querySelectorAll('#setSat button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === k)); }); });
+    on('#setSave', 'onclick', function () {
+      var s = Object.assign({}, settings()), ov = Object.assign({}, s.items || {});
+      document.querySelectorAll('[data-set]').forEach(function (i) { var id = i.dataset.set; ov[id] = Object.assign({}, ov[id] || {}); ov[id][i.dataset.k] = i.value === '' ? null : +i.value; });
+      s.items = ov; s.saturdays = draftSat; saveSettings(s, 'Settings saved');
+    });
+  }
+}
+function go(v) { ST.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} render(); window.scrollTo(0, 0); }
+window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (VIEWS[h] && h !== ST.view) { ST.view = h; render(); } });
+
+async function saveSettings(s, msg) {
+  try { var r = await A.docs.save('supply', s); D.docs.supply = r.data; D.items = SP.items(D.docs.supply); A.toast(msg || 'Saved'); render(); }
+  catch (e) { A.toast('Not saved: ' + (e.message || e)); }
+}
+function saveForecast(kind) {
+  if (!A.canWrite) { A.toast('View only: ask Hasan for edit access.'); return; }
+  var x = kind === 'order' ? ST.order : ST.camp, summary;
+  if (kind === 'order') {
+    var c = SP.orderCalc(x.lines, { samples: !!x.samples, sections: x.sections, start: x.start, saturdays: sats(x.saturdays), model: D.model, items: D.items });
+    if (!c.rows.length || c.errors.length) { A.toast('Fix the order first.'); return; }
+    if (x.samples == null) { A.toast('Answer the sample carton question first.'); return; }
+    summary = c.trucks + ' trucks · ' + fmt(c.cartons, 0) + ' cartons · ' + fmt(c.batches, 1) + ' batches · ' + c.workdays + ' days (' + nice(c.start) + ' → ' + nice(c.finish) + ')';
+  } else {
+    var cc = SP.campaignCalc({ item: x.item, weeks: x.weeks, start: x.start, sections: x.sections, saturdays: sats(x.saturdays), alt: x.alt, model: D.model, items: D.items });
+    if (cc.errors.length) { A.toast(cc.errors[0]); return; }
+    summary = item(x.item).name + ' · ' + x.weeks + ' weeks · ' + fmt(cc.total.cartons, 0) + ' cartons · ' + (cc.total.fullTrucks != null ? cc.total.fullTrucks + ' trucks · ' : '') + fmt(cc.total.batches, 0) + ' batches';
+  }
+  var name = (x.name || '').trim() || (kind === 'order' ? 'Order ' : 'Campaign ') + nice(TODAY);
+  var s = Object.assign({}, settings()); s.saved = (s.saved || []).concat([{ id: kind + '-' + Date.now(), kind: kind, name: name, summary: summary, input: JSON.parse(JSON.stringify(Object.assign({}, x, { saturdays: sats(x.saturdays) }))), savedAt: new Date().toISOString(), by: A.profile.full_name || A.profile.username }]);
+  saveSettings(s, 'Saved: ' + name);
+}
+
+/* Excel: an order file with product (and size) plus trucks, pallets or cartons */
+function importOrder(file) {
+  var spec = { fields: [
+    { key: 'product', label: 'Product', type: 'text', aliases: [/^item|product|description|sku|^name/], required: true },
+    { key: 'size', label: 'Size', type: 'size', aliases: [/size|pack|volume|ml|bottle/] },
+    { key: 'trucks', label: 'Trucks', type: 'number', aliases: [/truck|container|lorry/] },
+    { key: 'pallets', label: 'Pallets', type: 'number', aliases: [/pallet|plt/] },
+    { key: 'cartons', label: 'Cartons', type: 'number', aliases: [/carton|ctn|boxes|qty|quantity/] }],
+    derive: function (r, raw) { var txt = X.parse.productOf(raw.product), sz = r.size || X.parse.sizeOf(raw.product); r.item = null; if (txt && sz) { var m = D.items.filter(function (x) { return x.product === txt && x.size === sz; })[0]; if (m) r.item = m.id; } },
+    skip: function (r) { return !r.trucks && !r.pallets && !r.cartons; } };
+  X.importTable({ title: 'Import an order', intro: 'one row per product', file: file, spec: spec, columns: ['Read as', 'Trucks', 'Pallets', 'Cartons'],
+    render: function (r) { var it = item(r.item); return [{ v: it ? it.name : 'Not recognised', bad: !it || !it.ready }, r.trucks == null ? '' : r.trucks, r.pallets == null ? '' : r.pallets, r.cartons == null ? '' : r.cartons]; },
+    applyLabel: 'Use as the order',
+    onApply: function (recs) {
+      var lines = [], leftovers = [], bad = 0;
+      recs.forEach(function (r) {
+        var it = item(r.item); if (!it || !it.ready) { bad++; return; }
+        var pallets = r.trucks ? r.trucks * it.ppt : r.pallets ? r.pallets : Math.ceil(r.cartons / it.cpp);
+        var full = Math.floor(pallets / it.ppt), rest = pallets - full * it.ppt;
+        if (full) lines.push({ kind: 'full', item: it.id, trucks: full, ppt: it.ppt });
+        if (rest > 0) leftovers.push({ item: it.id, pallets: rest });
+      });
+      if (leftovers.length) lines.push({ kind: 'mixed', parts: leftovers });
+      ST.order.lines = lines; ST.order.samples = null; render();
+      A.toast('Read ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + (leftovers.length ? ' (part pallets put on a mixed truck)' : '') + (bad ? ' · ' + bad + ' row' + (bad === 1 ? '' : 's') + ' skipped: product not recognised or pallets not set' : ''));
+    } });
+}
+
+/* ---------------- start ---------------- */
+(async function () {
+  A = await ATIC.boot({ page: 'supply', subs: [{ id: 'order', label: 'Order by trucks' }, { id: 'campaign', label: 'Campaign' }, { id: 'saved', label: 'Saved forecasts' }, { id: 'settings', label: 'Pallets & trucks' }] });
+  if (!A) return;
+  try {
+    var r = await Promise.all([A.planner.config(), A.planner.list('actuals'), A.docs.loadAll().catch(function () { return { data: {}, meta: {} }; })]);
+    D.P0 = r[0].params; D.actuals = r[1].map(function (x) { return x.data; }).filter(function (x) { return x && x.date && x.sec; }); D.docs = r[2].data; D.meta = r[2].meta;
+    if (!D.P0) throw new Error('The Line Planner model is not in the database yet. Run the upgrade script in Supabase.');
+    D.model = SP.lineModel(window.ATIC_LINE_ENGINE, D.P0, D.actuals, TODAY);
+    D.items = SP.items(D.docs.supply);
+  } catch (e) { $('#main').innerHTML = '<div class="panel noacc"><h2>Could not load</h2><p class="muted">' + esc(e.message || e) + '</p></div>'; return; }
+  var h = location.hash.slice(1); if (VIEWS[h]) ST.view = h;
+  render();
+  A.docs.subscribe(async function () { var x = await A.docs.loadAll(); D.docs = x.data; D.items = SP.items(D.docs.supply); if (!document.activeElement || !document.activeElement.closest('input,select')) render(); });
+})();
+})();
+</script>
+</body></html>

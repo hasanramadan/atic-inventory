@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Forecast Results</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+.sec2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.fc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
+.fc .h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fc .h b{font:600 16px var(--f-display)}
+.range{position:relative;height:10px;border-radius:6px;background:var(--surface-2)}
+.range i{position:absolute;top:0;bottom:0;border-radius:6px;background:color-mix(in srgb,var(--brand) 30%,transparent)}
+.range b{position:absolute;top:-4px;width:3px;height:18px;border-radius:2px;background:var(--brand)}
+.range u{position:absolute;top:-6px;width:12px;height:12px;border-radius:50%;background:var(--gold);border:2px solid var(--surface);transform:translateX(-6px);top:-1px;text-decoration:none}
+.dl{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:13.5px}
+.dl span:nth-child(odd){color:var(--muted)}.dl span:nth-child(even){font-family:var(--f-mono);text-align:right}
+.sectitle{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:6px}
+.sectitle h2{font-size:20px}
+.e.g{color:var(--green)}.e.a{color:var(--amber)}.e.r{color:var(--red)}
+.mat{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:900px){.sec2{grid-template-columns:1fr}}
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading Forecast Results…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/line-engine.js"></script>
+<script src="js/materials-engine.js"></script>
+<script src="js/supply-engine.js"></script>
+<script>
+(function () {
+var A, E = window.ATIC_LINE_ENGINE, SP = window.ATICSupply, ME = window.ATICEngine;
+var D = {};
+var TODAY = (function () { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+function $(s) { return document.querySelector(s); }
+var esc = function (s) { return A.esc(s); };
+function fmt(x, d) { if (x == null || !isFinite(x)) return '–'; d = d == null ? (Math.abs(x) >= 100 ? 0 : 1) : d; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('en-US'); }
+function nice(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '–'; }
+function pct(x) { return x == null ? '–' : Math.round(x * 100) + '%'; }
+function link(key, href, text) { return A.allowed(A.profile, key) ? '<a class="small" href="' + href + '">' + text + '</a>' : ''; }
+function errCls(e) { e = Math.abs(e); return e <= 0.1 ? 'g' : e <= 0.25 ? 'a' : 'r'; }
+
+function dayCard(date, sec) {
+  var plan = D.plans.filter(function (p) { return p.date === date && p.sec === sec; })[0], act = D.actuals.filter(function (a) { return a.date === date && a.sec === sec; })[0];
+  var h = '<div class="fc"><div class="h"><b>' + (sec === 'S1' ? 'Section 1' : 'Section 2') + '</b><span class="small muted">' + nice(date) + '</span></div>';
+  if (!plan) return h + '<p class="small muted" style="margin:0">No forecast saved for this day yet.</p>' + link('line', 'line.html#timeline', 'Make one in the Line Planner →') + '</div>';
+  var o = plan.out || {}, items = (plan.inputs && plan.inputs.runs || []).map(function (r) { return (D.P0.products[r.product] || r.product) + ' ' + r.size; }).join(' + ');
+  var lo = o.boxesP10, hi = o.boxesP90, mid = o.boxesP50, max = Math.max(hi || 0, act ? E.actualTotals(act).boxes : 0) * 1.1 || 1;
+  h += '<div class="small muted">' + esc(items) + '</div><div class="big">' + fmt(mid, 0) + '<small>boxes forecast</small></div>';
+  h += '<div class="range" title="Likely range"><i style="left:' + (100 * lo / max) + '%;width:' + (100 * (hi - lo) / max) + '%"></i><b style="left:' + (100 * mid / max) + '%"></b>' + (act ? '<u style="left:' + (100 * E.actualTotals(act).boxes / max) + '%" title="Actual"></u>' : '') + '</div>';
+  h += '<div class="dl"><span>Likely range</span><span>' + fmt(lo, 0) + '–' + fmt(hi, 0) + '</span><span>Stoppage</span><span>' + pct(o.stopPct) + '</span><span>Last box</span><span>' + esc(o.finish || '–') + '</span><span>Batches left in tank</span><span>' + fmt(o.batchesLeft, 1) + '</span>';
+  if (act) { var ab = E.actualTotals(act).boxes, e = mid ? (mid - ab) / ab : null; h += '<span>Actual</span><span><b>' + fmt(ab, 0) + '</b> <span class="e ' + errCls(e) + '">(' + (e > 0 ? '+' : '') + Math.round(e * 100) + '%)</span></span>'; }
+  return h + '</div></div>';
+}
+function render() {
+  var next = SP.util.nextWorkday(TODAY), ws = SP.util.weekStart(TODAY), prevWeek = SP.util.addDays(ws, -7);
+  var h = '<div class="top"><div><h1>Forecast Results</h1><p class="sub" style="margin:4px 0 0">The Line Planner and the Supply Planner on one page · ' + nice(TODAY) + '</p></div><div class="row">' + link('model', 'model.html', 'How the model is doing (3D) →') + '</div></div>';
+  // ---- line planner
+  var isWork = SP.util.isWorkday(TODAY, false);
+  h += '<div class="sectitle"><h2>Line Planner</h2>' + link('line', 'line.html#timeline', 'Open the Line Planner →') + '</div>';
+  if (isWork) h += '<div class="sec2">' + dayCard(TODAY, 'S1') + dayCard(TODAY, 'S2') + '</div>';
+  h += '<div class="sec2">' + dayCard(next, 'S1') + dayCard(next, 'S2') + '</div>';
+  var wk = E.compare(D.P0, D.plans, D.actuals, { from: ws, to: TODAY }).summary, lw = E.compare(D.P0, D.plans, D.actuals, { from: prevWeek, to: SP.util.addDays(ws, -1) }).summary;
+  h += '<div class="kpis"><div class="kpi"><span class="l">This week · made</span><span class="v num">' + fmt(wk.actualBoxes, 0) + '</span><span class="small muted">boxes, forecast ' + fmt(wk.plannedBoxes, 0) + '</span></div>' +
+    '<div class="kpi"><span class="l">This week · error</span><span class="v num">' + pct(wk.mape) + '</span><span class="small muted">' + wk.scored + ' day-sections scored</span></div>' +
+    '<div class="kpi"><span class="l">Last week · made</span><span class="v num">' + fmt(lw.actualBoxes, 0) + '</span><span class="small muted">error ' + pct(lw.mape) + '</span></div>' +
+    '<div class="kpi"><span class="l">Inside the range</span><span class="v num">' + pct(lw.inRange) + '</span><span class="small muted">last week, P10–P90</span></div></div>';
+  var rows = E.compare(D.P0, D.plans, D.actuals, { from: SP.util.addDays(TODAY, -10), to: TODAY }).rows.filter(function (r) { return r.boxesErr != null; }).reverse();
+  if (rows.length) h += '<div class="tablewrap"><table><thead><tr><th>Day</th><th>Line</th><th>Product</th><th class="n">Forecast</th><th class="n">Actual</th><th class="n">Error</th><th>Main reason</th></tr></thead><tbody>' + rows.map(function (r) { return '<tr><td>' + nice(r.date) + '</td><td>' + (r.sec === 'S1' ? 'S1' : 'S2') + '</td><td class="small">' + esc(r.items) + '</td><td class="n">' + fmt(r.pm.boxes, 0) + '</td><td class="n">' + fmt(r.am.boxes, 0) + '</td><td class="n e ' + errCls(r.boxesErr) + '">' + (r.boxesErr > 0 ? '+' : '') + Math.round(r.boxesErr * 100) + '%</td><td class="small muted">' + esc(r.mainDriver ? r.mainDriver.name : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  // ---- supply planner
+  h += '<div class="sectitle"><h2>Supply Planner</h2>' + link('supply', 'supply.html#order', 'Open the Supply Planner →') + '</div>';
+  var saved = ((D.docs.supply || {}).saved || []).slice().sort(function (a, b) { return b.savedAt < a.savedAt ? -1 : 1; });
+  if (!saved.length) h += '<div class="panel empty">No saved order or campaign forecasts yet.</div>';
+  else h += '<div class="grid">' + saved.map(supplyCard).join('') + '</div>';
+  // ---- raw materials headline
+  if (D.docs.baseline) {
+    var fc = ME.forecast(D.docs.baseline, { materials: D.docs.materials, recipes: D.docs.recipes, stock: D.docs.stock, plan: D.docs.plan, orders: (D.docs.orders && D.docs.orders.items) || [], settings: D.docs.settings, actualDays: D.lpDays, actualSections: D.lpSecs }, TODAY);
+    var act = fc.results.filter(function (r) { return r.active && (r.status === 'order' || r.status === 'soon'); });
+    h += '<div class="sectitle"><h2>Raw materials</h2>' + link('materials', 'materials.html#overview', 'Open Raw Materials →') + '</div><div class="panel"><div class="mat">' + (act.length ? act.map(function (r) { return '<span class="chip ' + r.status + '"><span class="dot"></span>' + esc(r.name) + (r.status === 'order' ? ': order now' : ': by ' + nice(r.orderBy)) + '</span>'; }).join('') : '<span class="chip ok"><span class="dot"></span>Nothing to order in the next 3 weeks</span>') + '</div></div>';
+  }
+  $('#main').innerHTML = h;
+}
+function supplyCard(s) {
+  var h = '<div class="card ok" style="cursor:default"><div class="h"><div><h3>' + esc(s.name) + '</h3><span class="unit">' + (s.kind === 'order' ? 'Order by trucks' : 'Campaign') + ' · saved ' + esc((s.savedAt || '').slice(0, 10)) + ' by ' + esc(s.by || '') + '</span></div></div>';
+  try {
+    var x = s.input, items = SP.items(D.docs.supply), r, days;
+    if (s.kind === 'order') { r = SP.orderCalc(x.lines, { samples: !!x.samples, sections: x.sections, start: x.start, saturdays: !!x.saturdays, model: D.model, items: items }); days = r.days;
+      h += '<dl class="stat"><dt>Trucks</dt><dd>' + r.trucks + '</dd><dt>Cartons</dt><dd>' + fmt(r.cartons, 0) + '</dd><dt>Batches</dt><dd>' + fmt(r.batches, 1) + '</dd><dt>Production</dt><dd>' + nice(r.start) + ' → ' + nice(r.finish) + '</dd>' + (x.needBy ? '<dt>Needed by</dt><dd style="color:' + (r.finish > x.needBy ? 'var(--red)' : 'var(--green)') + '">' + nice(x.needBy) + '</dd>' : '') + '</dl>'; }
+    else { r = SP.campaignCalc({ item: x.item, weeks: x.weeks, start: x.start, sections: x.sections, saturdays: !!x.saturdays, alt: x.alt, model: D.model, items: items }); days = r.days;
+      h += '<dl class="stat"><dt>Cartons</dt><dd>' + fmt(r.total.cartons, 0) + '</dd><dt>Trucks</dt><dd>' + (r.total.fullTrucks != null ? r.total.fullTrucks : '–') + '</dd><dt>Batches</dt><dd>' + fmt(r.total.batches, 0) + '</dd><dt>Weeks</dt><dd>' + nice(r.start) + ' → ' + nice(r.finish) + '</dd></dl>'; }
+    if (D.docs.baseline && days && days.length) {
+      var mi = SP.materialsImpact(ME, D.docs.baseline, { materials: D.docs.materials, recipes: D.docs.recipes, stock: D.docs.stock, plan: D.docs.plan, orders: (D.docs.orders && D.docs.orders.items) || [], settings: D.docs.settings, actualDays: D.lpDays, actualSections: D.lpSecs }, days, TODAY);
+      var short = mi.rows.filter(function (m) { return m.runOut && m.runOut <= days[days.length - 1].date; });
+      h += '<p class="small" style="margin:0;color:' + (short.length ? 'var(--red)' : 'var(--green)') + '">' + (short.length ? 'Short before the end: ' + short.map(function (m) { return esc(m.name); }).join(', ') : 'Raw materials last to the end') + '</p>';
+    }
+  } catch (e) { h += '<p class="small muted">' + esc(s.summary || '') + '</p>'; }
+  return h + '</div>';
+}
+(async function () {
+  A = await ATIC.boot({ page: 'results' }); if (!A) return;
+  try {
+    var r = await Promise.all([A.planner.config(), A.planner.list('actuals'), A.planner.list('plans'), A.docs.loadAll().catch(function () { return { data: {} }; })]);
+    D.P0 = r[0].params; D.actuals = r[1].map(function (x) { return x.data; }).filter(function (x) { return x && x.date; }); D.plans = r[2].map(function (x) { return x.data; }).filter(function (x) { return x && x.date; }); D.docs = r[3].data;
+    if (!D.P0) throw new Error('The Line Planner model is not in the database yet.');
+    D.model = SP.lineModel(E, D.P0, D.actuals, TODAY);
+    D.lpDays = {}; D.lpSecs = {}; D.actuals.forEach(function (a) { var s = a.sec === 'S1' ? 'SEC-1' : 'SEC-2'; (D.lpSecs[a.date] = D.lpSecs[a.date] || {})[s] = 1; (a.runs || []).forEach(function (x) { if (x.batches > 0) { D.lpDays[a.date] = D.lpDays[a.date] || {}; var k = x.product + '|' + s; D.lpDays[a.date][k] = (D.lpDays[a.date][k] || 0) + x.batches; } }); });
+  } catch (e) { $('#main').innerHTML = '<div class="panel noacc"><h2>Could not load</h2><p class="muted">' + esc(e.message || e) + '</p></div>'; return; }
+  render();
+  A.planner.subscribe(function () { setTimeout(function () { location.reload(); }, 400); });
+})();
+})();
+</script>
+</body></html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.person{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow)}
+.person .h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.person h3{font-size:17px}
+.person .u{font:500 13px var(--f-mono);color:var(--muted)}
+.pages{display:flex;flex-direction:column;gap:6px}
+.pg{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:var(--bg)}
+.pg.off{opacity:.55}
+.pg input{width:18px;height:18px;accent-color:var(--brand)}
+.pg .mv{border:1px solid var(--line);background:var(--surface);border-radius:7px;width:30px;height:28px;color:var(--muted)}
+.pg .mv:disabled{opacity:.35}
+.pg small{color:var(--muted);font-size:12px;display:block}
+.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.acts input,.acts select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.form5{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:12px;align-items:end}
+@media (max-width:900px){.form5{grid-template-columns:1fr 1fr}}
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script>
+(function () {
+var A, USERS = [], DRAFT = {};
+var DESC = { results: 'Both forecasts on one page', line: 'Daily forecast, actuals, compare, 3D replay', model: 'How the model learns, in 3D', materials: 'Stock, orders, when to order', supply: 'Trucks, campaigns, raw materials' };
+function $(s) { return document.querySelector(s); }
+var esc = function (s) { return A.esc(s); };
+function pagesOf(u) { // [{key, on}] in the person's order
+  var keys = A.PAGES.filter(function (p) { return p.key !== 'admin'; }).map(function (p) { return p.key; });
+  var on = u.tabs ? u.tabs.filter(function (k) { return keys.indexOf(k) >= 0; }) : keys.slice();
+  return on.map(function (k) { return { key: k, on: true }; }).concat(keys.filter(function (k) { return on.indexOf(k) < 0; }).map(function (k) { return { key: k, on: false }; }));
+}
+function label(k) { return A.PAGES.filter(function (p) { return p.key === k; })[0].label; }
+function render() {
+  var h = '<div class="top"><div><h1>Admin</h1><p class="sub" style="margin:4px 0 0">Create accounts, choose who can edit, and choose which pages each person sees and in what order.</p></div></div>';
+  h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:10px">New account</h3><form class="form5" id="nu"><label class="field">Full name<input id="nuName" required placeholder="e.g. Yasser Mansour"></label><label class="field">Username<input id="nuUser" required autocapitalize="none" placeholder="e.g. yasser"></label><label class="field">Password<input id="nuPass" required minlength="6" placeholder="at least 6 characters"></label><label class="field">Access<select id="nuRole"><option value="viewer">View only</option><option value="editor">Can edit</option><option value="admin">Admin</option></select></label><button class="btn primary" style="padding:10px 16px">Create</button></form><p class="hint" style="margin:10px 0 0">Send the person the website link with their username and password. New accounts see every page until you choose below.</p></div>';
+  h += '<div class="people">' + USERS.map(function (u) {
+    var me = u.id === A.profile.id, d = DRAFT[u.id] || (DRAFT[u.id] = pagesOf(u)), adm = u.role === 'admin';
+    return '<div class="person"><div class="h"><div><h3>' + esc(u.full_name || u.username) + (me ? ' <span class="chip info">you</span>' : '') + '</h3><span class="u">' + esc(u.username) + '</span></div>' +
+      '<select data-role="' + u.id + '"' + (me ? ' disabled' : '') + ' style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">' + [['viewer', 'View only'], ['editor', 'Can edit'], ['admin', 'Admin']].map(function (o) { return '<option value="' + o[0] + '"' + (u.role === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div><div class="small muted" style="margin-bottom:6px">' + (adm ? 'Admins open every page. Ticks and arrows set the menu order.' : 'Pages this person sees, top to bottom as in their menu') + '</div><div class="pages">' + d.map(function (p, i) {
+        return '<div class="pg' + (p.on ? '' : ' off') + '"><input type="checkbox" data-pg="' + u.id + '|' + i + '"' + (p.on ? ' checked' : '') + ' aria-label="Show ' + esc(label(p.key)) + '"><span><b>' + esc(label(p.key)) + '</b><small>' + DESC[p.key] + '</small></span><button class="mv" data-up="' + u.id + '|' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="mv" data-dn="' + u.id + '|' + i + '"' + (i === d.length - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button></div>';
+      }).join('') + '</div></div>' +
+      '<div class="acts"><button class="btn primary" data-save="' + u.id + '">Save pages</button><input id="pw_' + u.id + '" placeholder="new password" style="width:140px"><button class="btn" data-pw="' + u.id + '">Set password</button>' + (me ? '' : '<button class="btn ghost" data-del="' + u.id + '" style="color:var(--red)">Delete</button>') + '</div></div>';
+  }).join('') + '</div>';
+  $('#main').innerHTML = h; wire();
+}
+function wire() {
+  $('#nu').onsubmit = async function (e) {
+    e.preventDefault();
+    var r = await A.sb.rpc('admin_create_user', { p_username: $('#nuUser').value.trim(), p_password: $('#nuPass').value, p_full_name: $('#nuName').value.trim(), p_role: $('#nuRole').value });
+    if (r.error) { A.toast(r.error.message); return; } A.toast('Account created for ' + $('#nuName').value); await load(); render();
+  };
+  document.querySelectorAll('[data-role]').forEach(function (s) { s.onchange = async function () { var u = USERS.filter(function (x) { return x.id === s.dataset.role; })[0]; var r = await A.sb.rpc('admin_update_user', { p_user: u.id, p_full_name: u.full_name, p_role: s.value }); A.toast(r.error ? r.error.message : 'Access updated'); await load(); render(); }; });
+  document.querySelectorAll('[data-pg]').forEach(function (c) { c.onchange = function () { var a = c.dataset.pg.split('|'); DRAFT[a[0]][+a[1]].on = c.checked; render(); }; });
+  function mv(id, i, j) { var d = DRAFT[id], t = d[i]; d[i] = d[j]; d[j] = t; render(); }
+  document.querySelectorAll('[data-up]').forEach(function (b) { b.onclick = function () { var a = b.dataset.up.split('|'); mv(a[0], +a[1], +a[1] - 1); }; });
+  document.querySelectorAll('[data-dn]').forEach(function (b) { b.onclick = function () { var a = b.dataset.dn.split('|'); mv(a[0], +a[1], +a[1] + 1); }; });
+  document.querySelectorAll('[data-save]').forEach(function (b) { b.onclick = async function () {
+    var id = b.dataset.save, tabs = DRAFT[id].filter(function (p) { return p.on; }).map(function (p) { return p.key; });
+    var u = USERS.filter(function (x) { return x.id === id; })[0];
+    if (!tabs.length && u.role !== 'admin') { A.toast('Leave at least one page.'); return; }
+    var r = await A.sb.rpc('admin_set_tabs', { p_user: id, p_tabs: tabs });
+    A.toast(r.error ? r.error.message : 'Pages saved for ' + (u.full_name || u.username)); delete DRAFT[id]; await load();
+    if (id === A.profile.id) { A.profile.tabs = tabs; location.reload(); return; } render();
+  }; });
+  document.querySelectorAll('[data-pw]').forEach(function (b) { b.onclick = async function () { var v = $('#pw_' + b.dataset.pw).value; if (v.length < 6) { A.toast('At least 6 characters.'); return; } var r = await A.sb.rpc('admin_set_password', { p_user: b.dataset.pw, p_password: v }); A.toast(r.error ? r.error.message : 'Password changed'); }; });
+  document.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = async function () { if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Click again to delete'; return; } var r = await A.sb.rpc('admin_delete_user', { p_user: b.dataset.del }); A.toast(r.error ? r.error.message : 'Account deleted'); await load(); render(); }; });
+}
+async function load() { var r = await A.sb.from('profiles').select('*').order('created_at'); if (!r.error) USERS = r.data; }
+(async function () { A = await ATIC.boot({ page: 'admin' }); if (!A) return; await load(); render(); })();
+})();
+</script>
+</body></html>
