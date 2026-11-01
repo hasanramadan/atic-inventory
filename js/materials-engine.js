@@ -61,11 +61,13 @@
     var basis = m.settings.basisWeeks === 'all' ? full : full.slice(-Number(m.settings.basisWeeks || 8));
     var out = {};
     m.products.forEach(function (p) {
-      var arr = m.weeklyBatches[p.id] || [];
-      var sum = 0; basis.forEach(function (i) { sum += arr[i] || 0; });
-      var avg = basis.length ? sum / basis.length : 0;
-      var vals = basis.map(function (i) { return arr[i] || 0; });
-      out[p.id] = { total: avg, weeks: basis.length, values: vals, sections: {} };
+      var arr = m.weeklyBatches[p.id] || [], use = basis;
+      var sum = 0; use.forEach(function (i) { sum += arr[i] || 0; });
+      // a product not made in the last weeks is still a product: fall back to its Jan–Sep average instead of "no use"
+      if (!sum && use !== full) { use = full; sum = 0; use.forEach(function (i) { sum += arr[i] || 0; }); }
+      var avg = use.length ? sum / use.length : 0;
+      var vals = use.map(function (i) { return arr[i] || 0; });
+      out[p.id] = { total: avg, weeks: use.length, values: vals, sections: {}, fallback: use !== basis };
       if (p.id === 'GM') {
         out[p.id].sections['SEC-1'] = avg * m.gmSectionShare['SEC-1'];
         out[p.id].sections['SEC-2'] = avg * m.gmSectionShare['SEC-2'];

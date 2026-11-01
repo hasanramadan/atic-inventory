@@ -390,7 +390,8 @@ function vInventory(fc) {
         '<td class="small">' + esc(i.packTxt || '') + '</td>' +
         '<td class="n">' + (S.canWrite ? '<input type="number" step="any" data-invq="' + esc(i.id) + '" value="' + (q == null ? '' : q) + '" style="width:110px">' : fmtN(q)) + estTxt + '</td>' +
         '<td class="small">' + esc(i.unit || '') + '</td>' +
-        '<td><label class="dd small"><input type="checkbox" data-invc="' + esc(i.id) + '"' + (cr ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>' + (cr ? '<span class="chip order" style="padding:1px 8px">Critical</span>' : '') + '</label>' + (cr && i.critFrom ? '<span class="small muted" style="display:block">' + esc(i.critFrom) + '</span>' : '') + '</td>' +
+        '<td><label class="dd small"><input type="checkbox" data-invc="' + esc(i.id) + '"' + (cr ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>' + (cr ? '<span class="chip order" style="padding:1px 8px">Critical</span>' : 'Critical') + '</label>' + (cr && i.critFrom ? '<span class="small muted" style="display:block">' + esc(i.critFrom) + '</span>' : '') +
+          (i.cat === 'raw' && i.mat ? '<label class="dd small" style="display:flex;margin-top:4px" title="Only you set this: the Overview shows Not in use only when it is ticked"><input type="checkbox" data-invu="' + esc(i.id) + '"' + ((dv.notInUse !== undefined ? dv.notInUse : i.notInUse) ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>Not in use</label>' : '') + '</td>' +
         '<td class="small">' + esc([i.enough, i.use].filter(Boolean).join(' · ')) + (i.needOrder ? ' <span class="chip soon" style="padding:1px 8px">Need to order</span>' : '') + '</td>' +
         '<td class="small">' + invFcCell(i) + '</td>' +
         '<td class="n">' + (oo ? fmtN(oo) : '') + '</td>' +
@@ -414,6 +415,7 @@ after.inventory = function () {
   document.querySelectorAll('[data-invq]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invq, it = invById(id), v = el.value === '' ? null : +el.value; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v === it.qty) delete dv.qty; else dv.qty = v; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   document.querySelectorAll('[data-invc]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invc, it = invById(id); var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (el.checked === !!it.critical) delete dv.critical; else dv.critical = el.checked; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   document.querySelectorAll('[data-invf2]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invf2, v = +el.value || null; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v) dv.toApp = v; else delete dv.toApp; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
+  document.querySelectorAll('[data-invu]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invu, it = invById(id); var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (el.checked === !!it.notInUse) delete dv.notInUse; else dv.notInUse = el.checked; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   var sv = $('#invSave'); if (sv) sv.onclick = invSaveEdits;
   var un = $('#invUndo'); if (un) un.onclick = function () { S.inv.dirty = {}; render(); };
   var ad = $('#invAdd'); if (ad) ad.onclick = invAddDialog;
@@ -433,6 +435,7 @@ function invSaveEdits() {
     if (dv.qty !== undefined) { i.qty = dv.qty; i.asOf = TODAY; i.countAsOf = TODAY; i.source = 'Changed by hand'; i.qtyText = ''; i.qtyNote = ''; d.moves.push({ at: new Date().toISOString(), date: TODAY, id: i.id, qty: dv.qty, kind: 'edit', by: by }); }
     if (dv.critical !== undefined) { i.critical = dv.critical; i.critFrom = dv.critical ? 'marked by hand ' + U.nice(TODAY) : ''; }
     if (dv.toApp !== undefined) i.toApp = dv.toApp;
+    if (dv.notInUse !== undefined) { i.notInUse = dv.notInUse; i.useFrom = dv.notInUse ? 'set by hand ' + U.nice(TODAY) : ''; }
   });
   d.moves = d.moves.slice(-300); d.updatedAt = new Date().toISOString();
   var conv = {}; d.items.forEach(function (i) { var dv = S.inv.dirty[i.id]; if (dv && dv.toApp > 0 && i.mat) conv[i.mat] = { countUnit: INV.unitWord(i.unit), countFactor: dv.toApp }; });
@@ -694,6 +697,33 @@ function unitsToSheet() {
   };
 })();
 
+/* ---------- statuses stay as you set them: "Not in use" only when ticked on the Inventory page ---------- */
+var STATUS_RANK = { order: 0, soon: 1, ok: 2, idle: 3 };
+function unusedByHand(id) { var l = invItems().filter(function (i) { return i.mat === id && !i.missing; }); return l.length > 0 && l.every(function (i) { return i.notInUse; }); }
+(function () {
+  var _run = run;
+  run = function () {
+    var fc = _run();
+    fc.results.forEach(function (r) {
+      if (unusedByHand(r.id)) { r.status = 'idle'; r.byHand = true; r.why = ['Marked "Not in use" on the Inventory page. Untick it there to forecast it again.'].concat(r.why || []); }
+      else if (r.status === 'idle') { r.status = 'ok'; r.why = ['No production that uses it is planned or in the history pace right now, so nothing is being used up. It stays "Enough stock" until production uses it or you mark it Not in use.'].concat((r.why || []).filter(function (w) { return !/None of the current recipes/.test(w); })); }
+    });
+    fc.results.sort(function (a, b) { return (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || ((a.daysToOrder == null ? 1e9 : a.daysToOrder) - (b.daysToOrder == null ? 1e9 : b.daysToOrder)); });
+    return fc;
+  };
+})();
+/* the name ATIC uses: Orange Blossom Flavour (saved once, so every page shows it) */
+function fixNames() {
+  if (!S.canWrite || fixNames.done || !BASE) return; fixNames.done = true;
+  var mats = JSON.parse(JSON.stringify((S.saved.materials && S.saved.materials.items) || {})), ch = false;
+  BASE.materials.forEach(function (m) {
+    var cur = (mats[m.id] && mats[m.id].name) || m.name;
+    if (/orange/i.test(cur) && /flavou?r|aroma/i.test(cur) && !/water/i.test(cur) && cur !== 'Orange Blossom Flavour') { mats[m.id] = Object.assign({}, mats[m.id] || {}, { name: 'Orange Blossom Flavour' }); ch = true; }
+  });
+  if (ch) saveDoc('materials', { items: mats });
+}
+(function waitNames() { if (window.ATIC && ATIC.profile && BASE && S.saved) setTimeout(fixNames, 200); else setTimeout(waitNames, 300); })();
+
 /* ---------- Overview cards: what the inventory says ---------- */
 (function () {
   var _card = card;
@@ -762,7 +792,7 @@ function ofMatch(r, fc) {
   if (f.order === 'none' && (!r.active || (r.openOrders && r.openOrders.length))) return false;
   return true;
 }
-var OF_LAB = { status: { order: 'Order now', soon: 'Order within 3 weeks', ok: 'Enough stock', idle: 'Not in use' }, within: { 7: 'Runs out in 7 days', 14: 'Runs out in 14 days', 30: 'Runs out in 30 days' }, order: { onway: 'Order on the way', none: 'Nothing ordered yet' } };
+var OF_LAB = { status: { order: 'Order now', soon: 'Order within 3 weeks', ok: 'Enough stock', idle: 'Not in use (set by you)' }, within: { 7: 'Runs out in 7 days', 14: 'Runs out in 14 days', 30: 'Runs out in 30 days' }, order: { onway: 'Order on the way', none: 'Nothing ordered yet' } };
 function ofBar(fc) {
   var f = S.of, R = fc.results;
   var prods = fc.model.products.map(function (p) { return p.id; }).filter(function (p) { return R.some(function (r) { return ofUses(fc, r, p); }); });
