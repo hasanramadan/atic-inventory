@@ -497,7 +497,7 @@ function invImportDialog(book, p) {
       d.items.forEach(function (i) { if (!i.missing) i.countAsOf = date; });
       S.inv.dirty = {};
       Promise.resolve(saveDoc('inventory', d)).then(function () { return syncForecastFromInventory(d.items, 'Inventory count ' + book.name); }).then(function (pl) {
-        toast(pl.missing.length ? 'Saved. Overview updated; ' + pl.missing.length + ' line(s) need a conversion (see the Forecast column).' : 'Saved. The Overview now uses this count.');
+        if (pl.missing.length) setTimeout(unitsToSheet, 200); else toast('Saved. The Overview now uses this count.');
       });
     };
   }
@@ -626,6 +626,48 @@ function receiveDialog(items, idx) {
   }
   draw();
 }
+
+/* ---------- one unit with the sheet: a tracked material whose sheet unit cannot be converted (e.g. orange flavour:
+   sheet in 10 kg cans, forecast in gal) is switched to the sheet's unit, so every count fills it directly.
+   The recipe per batch follows: from kg it is exact (kg ÷ kg per can); from the old unit it keeps the same number
+   (a "galon" at ATIC is the container), shown on the Recipes page to check. Runs once per material, for editors. */
+function unitsToSheet() {
+  if (!S.canWrite || unitsToSheet.busy || !BASE || !run.cache) return;
+  var inv = invDoc(), items = inv.items || [], model = run.cache.model, todo = {};
+  items.forEach(function (i) { if (i.cat === 'raw' && i.mat && !i.missing && !(i.toApp > 0) && i.unit) todo[i.mat] = todo[i.mat] || i; });
+  var ids = Object.keys(todo); if (!ids.length) return;
+  unitsToSheet.busy = true;
+  var mats = JSON.parse(JSON.stringify((S.saved.materials && S.saved.materials.items) || {})), rec = JSON.parse(JSON.stringify(model.recipes)), notes = [];
+  ids.forEach(function (id) {
+    var m = mat(id); if (!m) return;
+    var line = todo[id], nu = String(line.unit).toLowerCase(), pack = line.pack || INV.parsePack(line.packTxt);
+    var ru = unitWord(m.recipeUnit || m.unit), rf = Number(m.recipeFactor) || 1, k, how;
+    if (pack && pack.size && (ru === 'kg' || ru === 'l') && INV.unitWord(pack.of) === ru) { k = rf / pack.size; how = 'recipe in ' + ru + ' ÷ ' + pack.size + ' ' + ru + ' per ' + nu; }
+    else { k = 1; how = 'recipe kept at the same number per batch (1 ' + m.unit + ' read as 1 ' + nu + ')'; }
+    Object.keys(rec).forEach(function (p) { Object.keys(rec[p] || {}).forEach(function (sec) { var r = rec[p][sec]; if (r && r[id] != null) r[id] = Math.round(r[id] * k * 10000) / 10000; }); });
+    mats[id] = Object.assign({}, mats[id] || {}, { unit: nu, recipeUnit: nu, recipeFactor: 1, countUnit: INV.unitWord(nu), countFactor: 1, unitFrom: m.unit, unitChanged: TODAY, unitHow: how });
+    items.forEach(function (i) { if (i.mat === id && INV.unitWord(i.unit) === INV.unitWord(nu)) i.toApp = 1; });
+    notes.push(m.name + ': now counted in ' + nu + 's like the sheet (' + how + ')');
+  });
+  var d = JSON.parse(JSON.stringify(inv)); d.items = items;
+  // stock already saved in the old unit for these materials is replaced by the inventory count below
+  Promise.resolve(saveDoc('materials', { items: mats }))
+    .then(function () { return saveDoc('recipes', { recipes: rec, updatedAt: new Date().toISOString() }); })
+    .then(function () { return saveDoc('inventory', d); })
+    .then(function () { return syncForecastFromInventory(d.items, 'Unit set to the sheet\'s unit'); })
+    .then(function () { S.unitNotes = notes; unitsToSheet.busy = false; render(); toast(notes.length + ' material' + (notes.length === 1 ? '' : 's') + ' now filled from the sheet.'); })
+    .catch(function () { unitsToSheet.busy = false; });
+}
+(function waitUnits() { if (window.ATIC && ATIC.profile && BASE && run.cache && S.saved) { setTimeout(unitsToSheet, 300); } else setTimeout(waitUnits, 300); })();
+(function () {
+  var _vRec2 = vRecipes;
+  vRecipes = function (fc) {
+    var h = _vRec2(fc), ch = fc.model.materials.filter(function (m) { return m.unitChanged; });
+    if (!ch.length) return h;
+    var note = '<div class="callout"><span><b>Counted like the inventory sheet:</b> ' + ch.map(function (m) { return esc(m.name) + ' in ' + esc(m.unit) + 's since ' + U.nice(m.unitChanged) + ' (was ' + esc(m.unitFrom) + '; ' + esc(m.unitHow) + ')'; }).join(' · ') + '. Check the per-batch amounts below are in that unit.</span></div>';
+    var i = h.indexOf('<div class="panel'); return i < 0 ? h + note : h.slice(0, i) + note + h.slice(i);
+  };
+})();
 
 /* ---------- Overview cards: what the inventory says ---------- */
 (function () {
