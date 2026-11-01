@@ -296,9 +296,21 @@ function invDoc() { return S.saved.inventory || { items: [], history: [], moves:
 function invItems() { return (invDoc().items || []).filter(function (i) { return !INV_ONLY || i.cat === INV_ONLY; }); }
 function invById(id) { return invItems().filter(function (i) { return i.id === id; })[0]; }
 /* link a raw inventory line to a tracked forecast material, and how many app units one counted unit holds */
+/* aroma = flavour = flavor = essence at ATIC: "Orange Aroma" on the sheet is the orange blossom flavour of the forecast,
+   "Rose Aroma" is the rose flavour. Match on the fruit/flower word when the name says aroma/flavour. */
+var FLAV = /aroma|flavou?r|essence|essential/i, NOT_FLAV_WORD = /^(aroma|flavou?r|flavor|essence|essential|oil|natural|liquid|new|old|stock|the|of)$/i;
+function flavourMatch(name, mats) {
+  if (!FLAV.test(name)) return null;
+  var word = String(name).toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(function (w) { return w.length > 2 && !NOT_FLAV_WORD.test(w); })[0];
+  if (!word) return null;
+  var c = mats.filter(function (m) { var all = [m.name].concat(m.aliases || []).join(' | ').toLowerCase(); return all.indexOf(word) >= 0 && /aroma|flavou?r|essence|oil/.test(all) && !/water/.test(m.name.toLowerCase()); });
+  return c.length === 1 ? { item: c[0], score: 0.95 } : null;
+}
 function invLink(it) {
   if (it.cat !== 'raw') return { mat: null, toApp: null };
-  var mm = X.parse.matchName(it.name, matList(), 0.62); if (!mm) return { mat: null, toApp: null };
+  var ml = matList(), mm = X.parse.matchName(it.name, ml, 0.62);
+  if (!mm || mm.score < 0.8) { var fm = flavourMatch(it.name, ml); if (fm) mm = fm; }
+  if (!mm) return { mat: null, toApp: null };
   var m = mm.item, au = unitWord(m.unit), iu = INV.unitWord(it.unit), pack = it.pack || INV.parsePack(it.packTxt);
   var f = null;
   if (!iu || iu === au) f = 1;
@@ -633,9 +645,22 @@ function receiveDialog(items, idx) {
    (a "galon" at ATIC is the container), shown on the Recipes page to check. Runs once per material, for editors. */
 function unitsToSheet() {
   if (!S.canWrite || unitsToSheet.busy || !BASE || !run.cache) return;
-  var inv = invDoc(), items = inv.items || [], model = run.cache.model, todo = {};
+  var inv = invDoc(), items = inv.items || [], model = run.cache.model, todo = {}, relinked = [];
+  items.forEach(function (i) {
+    if (i.cat !== 'raw' || i.missing) return;
+    var fm = FLAV.test(i.name) ? flavourMatch(i.name, matList()) : null;
+    if ((!i.mat || (fm && fm.item.id !== i.mat)) && (fm || !i.mat)) { var l = invLink(i); if (l.mat && l.mat !== i.mat) { i.mat = l.mat; i.toApp = l.toApp; relinked.push(i.name + ' → ' + mat(l.mat).name); } }
+  });
   items.forEach(function (i) { if (i.cat === 'raw' && i.mat && !i.missing && !(i.toApp > 0) && i.unit) todo[i.mat] = todo[i.mat] || i; });
-  var ids = Object.keys(todo); if (!ids.length) return;
+  var ids = Object.keys(todo);
+  if (!ids.length) {
+    if (!relinked.length) return;
+    unitsToSheet.busy = true;
+    var d0 = JSON.parse(JSON.stringify(inv)); d0.items = items;
+    Promise.resolve(saveDoc('inventory', d0)).then(function () { return syncForecastFromInventory(d0.items, 'Inventory lines linked: ' + relinked.join(', ')); })
+      .then(function () { unitsToSheet.busy = false; toast('Linked ' + relinked.join(', ')); render(); }).catch(function () { unitsToSheet.busy = false; });
+    return;
+  }
   unitsToSheet.busy = true;
   var mats = JSON.parse(JSON.stringify((S.saved.materials && S.saved.materials.items) || {})), rec = JSON.parse(JSON.stringify(model.recipes)), notes = [];
   ids.forEach(function (id) {
@@ -655,7 +680,7 @@ function unitsToSheet() {
     .then(function () { return saveDoc('recipes', { recipes: rec, updatedAt: new Date().toISOString() }); })
     .then(function () { return saveDoc('inventory', d); })
     .then(function () { return syncForecastFromInventory(d.items, 'Unit set to the sheet\'s unit'); })
-    .then(function () { S.unitNotes = notes; unitsToSheet.busy = false; render(); toast(notes.length + ' material' + (notes.length === 1 ? '' : 's') + ' now filled from the sheet.'); })
+    .then(function () { S.unitNotes = notes; unitsToSheet.busy = false; render(); toast((relinked.length ? 'Linked ' + relinked.join(', ') + '. ' : '') + notes.length + ' material' + (notes.length === 1 ? '' : 's') + ' now filled from the sheet.'); })
     .catch(function () { unitsToSheet.busy = false; });
 }
 (function waitUnits() { if (window.ATIC && ATIC.profile && BASE && run.cache && S.saved) { setTimeout(unitsToSheet, 300); } else setTimeout(waitUnits, 300); })();
@@ -720,30 +745,50 @@ function registerIO() {
 }
 (function waitIO() { if (window.ATIC && ATIC.profile && BASE) registerIO(); else setTimeout(waitIO, 200); })();
 
-/* ---------- Overview filters: status (click a tile), critical, product, runs out within, order on the way ---------- */
-S.of = { status: null, crit: false, prod: null, within: null, order: null };
+/* ---------- Overview filters: one "Filters" button with a menu, active filters as removable chips ---------- */
+S.of = { status: null, crit: false, fin: false, prod: null, within: null, order: null }; S.ofOpen = false;
+function ofCrit(r) { return invItems().some(function (i) { return i.mat === r.id && i.critical && !i.missing; }); }
+/* finished = nothing left: the inventory lines are all 0 (e.g. caramel), or the forecast says none is left today */
+function ofFinished(r) { var l = invItems().filter(function (i) { return i.mat === r.id && !i.missing; }); return l.length ? l.every(function (i) { return !(Number(i.qty) > 0); }) : r.stockNow <= 0.0001; }
+function ofUses(fc, r, p) { var rp = fc.model.recipes[p] || {}; return Object.keys(rp).some(function (s) { return Number((rp[s] || {})[r.id]) > 0; }); }
 function ofMatch(r, fc) {
   var f = S.of;
   if (f.status && r.status !== f.status) return false;
-  if (f.crit && !invItems().some(function (i) { return i.mat === r.id && i.critical && !i.missing; })) return false;
-  if (f.prod) { var rp = fc.model.recipes[f.prod] || {}; if (!Object.keys(rp).some(function (s) { return Number((rp[s] || {})[r.id]) > 0; })) return false; }
+  if (f.crit && !ofCrit(r)) return false;
+  if (f.fin && !ofFinished(r)) return false;
+  if (f.prod && !ofUses(fc, r, f.prod)) return false;
   if (f.within && !(r.runOut && U.diffDays(TODAY, r.runOut) <= f.within)) return false;
   if (f.order === 'onway' && !(r.openOrders && r.openOrders.length)) return false;
   if (f.order === 'none' && (!r.active || (r.openOrders && r.openOrders.length))) return false;
   return true;
 }
+var OF_LAB = { status: { order: 'Order now', soon: 'Order within 3 weeks', ok: 'Enough stock', idle: 'Not in use' }, within: { 7: 'Runs out in 7 days', 14: 'Runs out in 14 days', 30: 'Runs out in 30 days' }, order: { onway: 'Order on the way', none: 'Nothing ordered yet' } };
 function ofBar(fc) {
-  var f = S.of, prods = fc.model.products.map(function (p) { return p.id; }).filter(function (p) { var rp = fc.model.recipes[p] || {}; return Object.keys(rp).some(function (s) { return Object.keys(rp[s] || {}).length; }); });
-  var btn = function (k, v, label) { var on = f[k] === v; return '<button data-of="' + k + '" data-v="' + v + '" aria-pressed="' + on + '">' + label + '</button>'; };
-  var nCrit = fc.results.filter(function (r) { return invItems().some(function (i) { return i.mat === r.id && i.critical && !i.missing; }); }).length;
-  var any = f.status || f.crit || f.prod || f.within || f.order;
-  return '<div class="panel ofbar"><div class="ofrow"><span class="ofl">Show</span><div class="tabs">' +
-      '<button data-ofcrit="1" aria-pressed="' + f.crit + '">Critical only (' + nCrit + ')</button>' +
-      btn('within', 7, 'Runs out in 7 days') + btn('within', 14, '14 days') + btn('within', 30, '30 days') +
-      btn('order', 'onway', 'Order on the way') + btn('order', 'none', 'Nothing ordered yet') + '</div></div>' +
-    '<div class="ofrow"><span class="ofl">Used by</span><div class="tabs">' + prods.map(function (p) { return btn('prod', p, esc(PN[p] || p)); }).join('') + '</div>' +
-      '<span class="small muted" id="ofCount" style="margin-left:auto"></span>' + (any ? '<button class="btn ghost" id="ofClear">Clear filters</button>' : '') + '</div>' +
-    '<p class="small muted" style="margin:0">Tip: click a tile above (Order now, Order within 3 weeks, Enough stock) to show only those.</p></div>';
+  var f = S.of, R = fc.results;
+  var prods = fc.model.products.map(function (p) { return p.id; }).filter(function (p) { return R.some(function (r) { return ofUses(fc, r, p); }); });
+  var n = function (fn) { return R.filter(fn).length; };
+  var opt = function (k, v, label, cnt) { var on = f[k] === v; return '<button type="button" class="ofo" data-of="' + k + '" data-v="' + v + '" aria-pressed="' + on + '"><span class="ck" aria-hidden="true"></span><span>' + label + '</span><span class="ofn">' + cnt + '</span></button>'; };
+  var tog = function (k, label, cnt) { return '<button type="button" class="ofo" data-oft="' + k + '" aria-pressed="' + !!f[k] + '"><span class="ck" aria-hidden="true"></span><span>' + label + '</span><span class="ofn">' + cnt + '</span></button>'; };
+  var chips = [];
+  if (f.status) chips.push(['status', OF_LAB.status[f.status]]);
+  if (f.crit) chips.push(['crit', 'Critical']);
+  if (f.fin) chips.push(['fin', 'Finished']);
+  if (f.within) chips.push(['within', OF_LAB.within[f.within]]);
+  if (f.order) chips.push(['order', OF_LAB.order[f.order]]);
+  if (f.prod) chips.push(['prod', 'Used by ' + (PN[f.prod] || f.prod)]);
+  var h = '<div class="oftool"><div class="ofwrap"><button type="button" class="btn ofbtn' + (chips.length ? ' on' : '') + '" id="ofBtn" aria-expanded="' + S.ofOpen + '" aria-haspopup="true"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18l-7 8v6l-4 2v-8z"/></svg> Filters' + (chips.length ? ' <span class="ofc">' + chips.length + '</span>' : '') + ' <span aria-hidden="true">▾</span></button>';
+  if (S.ofOpen) {
+    h += '<div class="ofmenu" role="dialog" aria-label="Filters">' +
+      '<div class="ofg"><h4>Status</h4>' + ['order', 'soon', 'ok', 'idle'].map(function (k) { return opt('status', k, OF_LAB.status[k], n(function (r) { return r.status === k; })); }).join('') + '</div>' +
+      '<div class="ofg"><h4>Stock</h4>' + tog('crit', 'Critical (inventory sheet)', n(ofCrit)) + tog('fin', 'Finished: nothing left', n(ofFinished)) +
+        [7, 14, 30].map(function (d) { return opt('within', d, OF_LAB.within[d], n(function (r) { return r.runOut && U.diffDays(TODAY, r.runOut) <= d; })); }).join('') + '</div>' +
+      '<div class="ofg"><h4>Orders</h4>' + opt('order', 'onway', OF_LAB.order.onway, n(function (r) { return r.openOrders && r.openOrders.length; })) + opt('order', 'none', OF_LAB.order.none, n(function (r) { return r.active && !(r.openOrders && r.openOrders.length); })) + '</div>' +
+      '<div class="ofg"><h4>Used by</h4>' + prods.map(function (p) { return opt('prod', p, esc(PN[p] || p), n(function (r) { return ofUses(fc, r, p); })); }).join('') + '</div>' +
+      '<div class="offoot"><button type="button" class="btn ghost" data-ofx="clear">Clear all</button><button type="button" class="btn primary" data-ofx="done">Done</button></div></div>';
+  }
+  h += '</div>' + chips.map(function (c) { return '<span class="ofchip">' + esc(c[1]) + '<button type="button" data-ofrm="' + c[0] + '" aria-label="Remove ' + esc(c[1]) + '">×</button></span>'; }).join('') +
+    '<span class="small muted" id="ofCount" style="margin-left:auto"></span></div>';
+  return h;
 }
 (function () {
   var _vOv = vOverview, _aOv = after.overview;
@@ -757,17 +802,23 @@ function ofBar(fc) {
     var shown = 0;
     document.querySelectorAll('.card[data-m]').forEach(function (el) { var r = fc.results.filter(function (x) { return x.id === el.dataset.m; })[0]; var ok = !r || ofMatch(r, fc); el.hidden = !ok; if (ok) shown++; });
     var c = $('#ofCount'); if (c) c.textContent = 'Showing ' + shown + ' of ' + fc.results.length;
-    var grid = document.querySelector('#main .grid'); if (grid && !shown && !$('#ofNone')) grid.insertAdjacentHTML('afterend', '<div class="panel empty" id="ofNone">No material matches these filters.</div>');
-    // tiles as status filters
-    var map = { order: 'order', soon: 'soon', ok: 'ok' };
+    var grid = document.querySelector('#main .grid'); if (grid && !shown) grid.insertAdjacentHTML('afterend', '<div class="panel empty" id="ofNone">No material matches these filters. <button class="btn ghost" data-ofx="clear">Clear filters</button></div>');
     document.querySelectorAll('#main .kpis .kpi').forEach(function (k) {
-      var st = Object.keys(map).filter(function (c) { return k.classList.contains(c); })[0]; if (!st) return;
-      k.classList.add('ofk'); k.setAttribute('role', 'button'); k.tabIndex = 0; k.setAttribute('aria-pressed', S.of.status === st);
+      var st = ['order', 'soon', 'ok'].filter(function (x) { return k.classList.contains(x); })[0]; if (!st) return;
+      k.classList.add('ofk'); k.setAttribute('role', 'button'); k.tabIndex = 0; k.setAttribute('aria-pressed', S.of.status === st); k.title = 'Show only these';
       if (S.of.status === st) k.classList.add('on');
       k.onclick = k.onkeydown = function (e) { if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return; S.of.status = S.of.status === st ? null : st; keep(); };
     });
-    document.querySelectorAll('[data-of]').forEach(function (b) { b.onclick = function () { var k = b.dataset.of, v = k === 'within' ? +b.dataset.v : b.dataset.v; S.of[k] = S.of[k] === v ? null : v; keep(); }; });
-    var cb = document.querySelector('[data-ofcrit]'); if (cb) cb.onclick = function () { S.of.crit = !S.of.crit; keep(); };
-    var cl = $('#ofClear'); if (cl) cl.onclick = function () { S.of = { status: null, crit: false, prod: null, within: null, order: null }; keep(); };
+    var b = $('#ofBtn'); if (b) b.onclick = function (e) { e.stopPropagation(); S.ofOpen = !S.ofOpen; keep(); };
+    document.querySelectorAll('[data-of]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); var k = x.dataset.of, v = k === 'within' ? +x.dataset.v : x.dataset.v; S.of[k] = S.of[k] === v ? null : v; keep(); }; });
+    document.querySelectorAll('[data-oft]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); S.of[x.dataset.oft] = !S.of[x.dataset.oft]; keep(); }; });
+    document.querySelectorAll('[data-ofrm]').forEach(function (x) { x.onclick = function () { var k = x.dataset.ofrm; S.of[k] = (k === 'crit' || k === 'fin') ? false : null; keep(); }; });
+    document.querySelectorAll('[data-ofx]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); if (x.dataset.ofx === 'clear') S.of = { status: null, crit: false, fin: false, prod: null, within: null, order: null }; S.ofOpen = x.dataset.ofx === 'clear' && !!$('.ofmenu'); keep(); }; });
+    var menu = document.querySelector('.ofmenu'); if (menu) menu.onclick = function (e) { e.stopPropagation(); };
+    if (S.ofOpen) setTimeout(function () {
+      var off = function () { document.removeEventListener('click', off); document.removeEventListener('keydown', esc1); if (S.ofOpen) { S.ofOpen = false; keep(); } };
+      var esc1 = function (e) { if (e.key === 'Escape') off(); };
+      document.addEventListener('click', off); document.addEventListener('keydown', esc1);
+    }, 0);
   };
 })();
