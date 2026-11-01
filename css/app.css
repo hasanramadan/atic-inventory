@@ -178,5 +178,5 @@ html,body{min-height:100%}
   .big{font-size:28px}
 }
 
-.rail nav a.p .chev{margin-left:auto;opacity:.7;font-size:12px}.rail nav a.p{display:flex;align-items:center;gap:4px}.rail nav .subs[hidden]{display:none}
+.rail nav .part{position:relative}.rail nav .part .chev{position:absolute;right:4px;top:4px;width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:inherit;opacity:.75;font-size:13px;cursor:pointer}.rail nav .part .chev:hover{opacity:1;background:rgba(255,255,255,.12)}.rail nav a.p{display:flex;align-items:center;gap:4px}.rail nav .subs[hidden]{display:none}
 .rail nav a.p.ic{justify-content:flex-start}.rail nav a.p.ic .badge{margin-left:auto}

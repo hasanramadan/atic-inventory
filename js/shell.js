@@ -48,7 +48,7 @@
     var h = '<div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>Planning &amp; forecasting</small></div></div><nav id="shellNav" aria-label="Sections">';
     ordered(p).forEach(function (x) {
       var on = x.key === A.page;
-      h += '<div class="part"><a class="p' + (x.icon ? ' ic' : '') + '" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + (x.icon === 'msg' ? ICON_MSG : '') + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + (x.key === 'team' ? ' <span class="badge" id="teamBadge" hidden></span>' : '') + (on && A.subs.length ? '<span class="chev" aria-hidden="true">' + (subsClosed() ? '▸' : '▾') + '</span>' : '') + '</a>';
+      h += '<div class="part"><a class="p' + (x.icon ? ' ic' : '') + '" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + (x.icon === 'msg' ? ICON_MSG : '') + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + (x.key === 'team' ? ' <span class="badge" id="teamBadge" hidden></span>' : '') + '</a>' + (on && A.subs.length ? '<button type="button" class="chev" id="railChev" aria-label="' + (subsClosed() ? 'Show' : 'Hide') + ' the sections of ' + esc(x.label) + '" aria-expanded="' + !subsClosed() + '">' + (subsClosed() ? '▸' : '▾') + '</button>' : '');
       if (on && A.subs.length) h += '<div class="subs"' + (subsClosed() ? ' hidden' : '') + '>' + A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === cur ? ' aria-current="page"' : '') + '>' + esc(s.label) + (s.badge ? ' <span class="badge" id="sb_' + s.id + '"' + (s.badgeHidden ? ' hidden' : '') + '>' + esc(s.badge) + '</span>' : '') + '</a>'; }).join('') + '</div>';
       h += '</div>';
     });
@@ -71,7 +71,10 @@
     rail.innerHTML = railHTML();
     $('#signOut').onclick = A.signOut;
     var cur = rail.querySelector('a.p[aria-current="page"]'), subs = cur && cur.parentNode.querySelector('.subs');
-    if (cur && subs) { cur.setAttribute('aria-expanded', !subs.hidden); cur.onclick = function (e) { e.preventDefault(); subs.hidden = !subs.hidden; setSubsClosed(subs.hidden); cur.setAttribute('aria-expanded', !subs.hidden); var c = cur.querySelector('.chev'); if (c) c.textContent = subs.hidden ? '▸' : '▾'; }; }
+    var chev = document.getElementById('railChev');
+    if (chev && subs) chev.onclick = function (e) { e.preventDefault(); e.stopPropagation(); subs.hidden = !subs.hidden; setSubsClosed(subs.hidden); chev.setAttribute('aria-expanded', !subs.hidden); chev.textContent = subs.hidden ? '▸' : '▾'; };
+    // the page name always takes you to the page's main view (its first section), and shows the sections again
+    if (cur && A.subs.length) cur.onclick = function (e) { e.preventDefault(); if (subs && subs.hidden) { subs.hidden = false; setSubsClosed(false); if (chev) { chev.textContent = '▾'; chev.setAttribute('aria-expanded', true); } } var first = '#' + A.subs[0].id; if (location.hash !== first) location.hash = first; else window.scrollTo(0, 0); };
     var bar = $('#subbar'); if (bar) { bar.innerHTML = subbarHTML(); bar.hidden = !A.subs.length; }
     teamBadge();
   }

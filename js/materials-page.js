@@ -376,17 +376,17 @@ function vInventory(fc) {
     '<div class="kpi ok"><span class="l">Received since count</span><span class="v num">' + since.length + '</span><span class="small muted">deliveries added</span></div></div>';
   h += '<div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="tabs">' + (INV_ONLY ? [['all', 'All']] : [['all', 'All'], ['raw', 'Raw materials'], ['pack', 'Packaging']]).concat([['critical', 'Critical (' + crit + ')'], ['low', 'Need to order (' + need + ')']]).map(function (t) { return '<button data-invf="' + t[0] + '" aria-pressed="' + (S.inv.filter === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
     '<input id="invQ" type="search" placeholder="Search items" value="' + esc(S.inv.q) + '" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);min-width:220px"></div>';
-  var list = invFiltered(), groups = [];
+  var list = invItems(), groups = [];
   list.forEach(function (i) { var g = (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group; if (groups.indexOf(g) < 0) groups.push(g); });
   var est = {}; (fc.results || []).forEach(function (r) { est[r.id] = r; });
   h += '<div class="tablewrap"><table class="inv"><thead><tr><th>Item</th><th>Packing</th><th class="n">Quantity</th><th>Unit</th><th>Critical</th><th>Cover / use</th><th>Forecast</th><th class="n">On order</th><th>Last change</th></tr></thead><tbody>';
   groups.forEach(function (g) {
-    h += '<tr class="grp"><td colspan="9">' + esc(g) + '</td></tr>';
+    h += '<tr class="grp" data-grp="' + esc(g) + '"><td colspan="9">' + esc(g) + '</td></tr>';
     list.filter(function (i) { return (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group === g; }).forEach(function (i) {
       var dv = S.inv.dirty[i.id] || {}, q = dv.qty !== undefined ? dv.qty : i.qty, cr = dv.critical !== undefined ? dv.critical : i.critical;
       var r = i.mat && est[i.mat], estTxt = r && i.toApp ? '<br><span class="small muted" title="Forecast estimate for today from the batches prepared">≈ ' + fmtN(Math.max(0, r.stockNow) / i.toApp) + ' now</span>' : '';
       var oo = openOnItem(i.id);
-      h += '<tr class="' + (cr ? 'crit' : '') + (i.missing ? ' gone' : '') + '"><td><b>' + esc(i.name) + '</b>' + (i.note ? '<br><span class="small muted">' + esc(i.note) + '</span>' : '') + (i.qtyText ? '<br><span class="small muted">In the file: "' + esc(i.qtyText) + '"' + (i.qtyNote ? ' · ' + esc(i.qtyNote) : '') + '</span>' : '') + (i.missing ? '<br><span class="small" style="color:var(--amber)">Not in the count of ' + U.nice(i.missing) + ', kept as it was</span>' : '') + '</td>' +
+      h += '<tr data-iid="' + esc(i.id) + '" data-g="' + esc(g) + '" class="' + (cr ? 'crit' : '') + (i.missing ? ' gone' : '') + '"><td><b>' + esc(i.name) + '</b>' + (i.note ? '<br><span class="small muted">' + esc(i.note) + '</span>' : '') + (i.qtyText ? '<br><span class="small muted">In the file: "' + esc(i.qtyText) + '"' + (i.qtyNote ? ' · ' + esc(i.qtyNote) : '') + '</span>' : '') + (i.missing ? '<br><span class="small" style="color:var(--amber)">Not in the count of ' + U.nice(i.missing) + ', kept as it was</span>' : '') + '</td>' +
         '<td class="small">' + esc(i.packTxt || '') + '</td>' +
         '<td class="n">' + (S.canWrite ? '<input type="number" step="any" data-invq="' + esc(i.id) + '" value="' + (q == null ? '' : q) + '" style="width:110px">' : fmtN(q)) + estTxt + '</td>' +
         '<td class="small">' + esc(i.unit || '') + '</td>' +
@@ -398,7 +398,7 @@ function vInventory(fc) {
         '<td class="small muted">' + (i.asOf ? U.nice(i.asOf) : '') + (i.source ? '<br>' + esc(i.source) : '') + '</td></tr>';
     });
   });
-  if (!list.length) h += '<tr><td colspan="9" class="muted">No item matches.</td></tr>';
+  h += '<tr id="invNone" hidden><td colspan="9" class="muted">No item matches.</td></tr>';
   h += '</tbody></table></div>';
   var nd = Object.keys(S.inv.dirty).length;
   if (S.canWrite) h += '<div class="row"><button class="btn primary" id="invSave"' + (nd ? '' : ' disabled') + '>Save changes' + (nd ? ' (' + nd + ')' : '') + '</button>' + (nd ? '<button class="btn ghost" id="invUndo">Undo changes</button>' : '') + '<span class="small muted">Change a quantity or the critical tick, then save. Every change is kept in the history below.</span></div>';
@@ -410,8 +410,9 @@ function vInventory(fc) {
 }
 after.inventory = function () {
   var f = $('#xlInv'); if (f) f.onchange = function () { if (this.files[0]) invImport(this.files[0]); this.value = ''; };
-  document.querySelectorAll('[data-invf]').forEach(function (b) { b.onclick = function () { S.inv.filter = b.dataset.invf; render(); }; });
-  var q = $('#invQ'); if (q) q.oninput = function () { S.inv.q = q.value; var y = window.scrollY; render(); window.scrollTo(0, y); var n = $('#invQ'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } };
+  document.querySelectorAll('[data-invf]').forEach(function (b) { b.onclick = function () { S.inv.filter = b.dataset.invf; invApply(); }; });
+  var q = $('#invQ'); if (q) q.oninput = function () { S.inv.q = q.value; invApply(); };
+  invApply();
   document.querySelectorAll('[data-invq]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invq, it = invById(id), v = el.value === '' ? null : +el.value; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v === it.qty) delete dv.qty; else dv.qty = v; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   document.querySelectorAll('[data-invc]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invc, it = invById(id); var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (el.checked === !!it.critical) delete dv.critical; else dv.critical = el.checked; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   document.querySelectorAll('[data-invf2]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invf2, v = +el.value || null; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v) dv.toApp = v; else delete dv.toApp; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
@@ -426,6 +427,15 @@ function invFcCell(i) {
   var dv = S.inv.dirty[i.id] || {}, f = dv.toApp !== undefined ? dv.toApp : i.toApp;
   if (f > 0 && dv.toApp === undefined) return esc(m.name) + (f !== 1 ? '<br><span class="muted">1 ' + esc(i.unit.toLowerCase()) + ' = ' + fmtN(f) + ' ' + esc(m.unit) + '</span>' : '');
   return esc(m.name) + '<br><span class="dd" title="Needed so the forecast can use this count">1 ' + esc(i.unit.toLowerCase()) + ' =<input type="number" step="any" min="0" data-invf2="' + esc(i.id) + '" value="' + (f > 0 ? f : '') + '" style="width:70px;padding:4px 6px;border:1px solid var(--amber);border-radius:7px;background:var(--bg)">' + esc(m.unit) + '</span>';
+}
+/* Inventory filters and search: show / hide rows in place, no rebuild */
+function invApply() {
+  var ok = {}; invFiltered().forEach(function (i) { ok[i.id] = 1; });
+  var vis = {}, n = 0;
+  document.querySelectorAll('tr[data-iid]').forEach(function (tr) { var on = !!ok[tr.dataset.iid]; tr.hidden = !on; if (on) { vis[tr.dataset.g] = 1; n++; } });
+  document.querySelectorAll('tr[data-grp]').forEach(function (tr) { tr.hidden = !vis[tr.dataset.grp]; });
+  var e = $('#invNone'); if (e) e.hidden = n > 0;
+  document.querySelectorAll('[data-invf]').forEach(function (b) { b.setAttribute('aria-pressed', S.inv.filter === b.dataset.invf); });
 }
 function invSaveEdits() {
   var d = JSON.parse(JSON.stringify(invDoc())), by = (S.profile && (S.profile.full_name || S.profile.username)) || '';
@@ -831,29 +841,35 @@ function ofBar(fc) {
   };
   after.overview = function (fc) {
     _aOv(fc);
-    var keep = function () { var y = window.scrollY; render(); window.scrollTo(0, y); };
+    ofRefresh(fc, true);
+  };
+  /* filters change the page in place: no rebuild, no reload, the menu stays where it is */
+  function ofRefresh(fc, first) {
+    var keep = function () { ofRefresh(fc); };
+    var tool = document.querySelector('#main .oftool');
+    if (!first && tool) { var tmp = document.createElement('div'); tmp.innerHTML = ofBar(fc); tool.replaceWith(tmp.firstChild); }
     var shown = 0;
     document.querySelectorAll('.card[data-m]').forEach(function (el) { var r = fc.results.filter(function (x) { return x.id === el.dataset.m; })[0]; var ok = !r || ofMatch(r, fc); el.hidden = !ok; if (ok) shown++; });
     var c = $('#ofCount'); if (c) c.textContent = 'Showing ' + shown + ' of ' + fc.results.length;
+    var none = $('#ofNone'); if (none) none.remove();
     var grid = document.querySelector('#main .grid'); if (grid && !shown) grid.insertAdjacentHTML('afterend', '<div class="panel empty" id="ofNone">No material matches these filters. <button class="btn ghost" data-ofx="clear">Clear filters</button></div>');
     document.querySelectorAll('#main .kpis .kpi').forEach(function (k) {
       var st = ['order', 'soon', 'ok'].filter(function (x) { return k.classList.contains(x); })[0]; if (!st) return;
       k.classList.add('ofk'); k.setAttribute('role', 'button'); k.tabIndex = 0; k.setAttribute('aria-pressed', S.of.status === st); k.title = 'Show only these';
-      if (S.of.status === st) k.classList.add('on');
+      k.classList.toggle('on', S.of.status === st);
       k.onclick = k.onkeydown = function (e) { if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return; S.of.status = S.of.status === st ? null : st; keep(); };
     });
     var b = $('#ofBtn'); if (b) b.onclick = function (e) { e.stopPropagation(); S.ofOpen = !S.ofOpen; keep(); };
     document.querySelectorAll('[data-of]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); var k = x.dataset.of, v = k === 'within' ? +x.dataset.v : x.dataset.v; S.of[k] = S.of[k] === v ? null : v; keep(); }; });
     document.querySelectorAll('[data-oft]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); S.of[x.dataset.oft] = !S.of[x.dataset.oft]; keep(); }; });
-    document.querySelectorAll('[data-ofrm]').forEach(function (x) { x.onclick = function () { var k = x.dataset.ofrm; S.of[k] = (k === 'crit' || k === 'fin') ? false : null; keep(); }; });
-    document.querySelectorAll('[data-ofx]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); if (x.dataset.ofx === 'clear') S.of = { status: null, crit: false, fin: false, prod: null, within: null, order: null }; S.ofOpen = x.dataset.ofx === 'clear' && !!$('.ofmenu'); keep(); }; });
+    document.querySelectorAll('[data-ofrm]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); var k = x.dataset.ofrm; S.of[k] = (k === 'crit' || k === 'fin') ? false : null; keep(); }; });
+    document.querySelectorAll('[data-ofx]').forEach(function (x) { x.onclick = function (e) { e.stopPropagation(); if (x.dataset.ofx === 'clear') S.of = { status: null, crit: false, fin: false, prod: null, within: null, order: null }; else S.ofOpen = false; keep(); }; });
     var menu = document.querySelector('.ofmenu'); if (menu) menu.onclick = function (e) { e.stopPropagation(); };
-    if (S.ofOpen) setTimeout(function () {
-      var off = function () { document.removeEventListener('click', off); document.removeEventListener('keydown', esc1); if (S.ofOpen) { S.ofOpen = false; keep(); } };
-      var esc1 = function (e) { if (e.key === 'Escape') off(); };
-      document.addEventListener('click', off); document.addEventListener('keydown', esc1);
-    }, 0);
-  };
+    if (!ofRefresh.bound) { ofRefresh.bound = true;
+      document.addEventListener('click', function () { if (S.ofOpen && document.querySelector('.ofmenu')) { S.ofOpen = false; ofRefresh(run.cache); } });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.ofOpen) { S.ofOpen = false; if (document.querySelector('.ofmenu')) ofRefresh(run.cache); } });
+    }
+  }
 })();
 
 
