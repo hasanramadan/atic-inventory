@@ -1535,7 +1535,7 @@ async function connect() {
     if (kind === 'plans' && first.plans) applySavedPlan();
     first[kind] = false;
     update({ keepTime: true });
-    if (!first.plans && !first.actuals) seedConfirmed();
+    if (!first.plans && !first.actuals) ATIC.whenShown(() => seedConfirmed());
     if (!$('p-actual').hidden && A.loadedKey && !document.activeElement?.closest?.('#actForm')) aFill(A.loadedKey);
   };
   try {

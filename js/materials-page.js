@@ -699,7 +699,7 @@ function unitsToSheet() {
     .then(function () { S.unitNotes = notes; unitsToSheet.busy = false; render(); toast((relinked.length ? 'Linked ' + relinked.join(', ') + '. ' : '') + notes.length + ' material' + (notes.length === 1 ? '' : 's') + ' now filled from the sheet.'); })
     .catch(function () { unitsToSheet.busy = false; });
 }
-(function waitUnits() { if (window.ATIC && ATIC.profile && BASE && run.cache && S.saved) { setTimeout(unitsToSheet, 300); } else setTimeout(waitUnits, 300); })();
+(function waitUnits() { if (window.ATIC && ATIC.profile && BASE && run.cache && S.saved) { ATIC.whenShown(function () { setTimeout(unitsToSheet, 300); }); } else setTimeout(waitUnits, 300); })();
 (function () {
   var _vRec2 = vRecipes;
   vRecipes = function (fc) {
@@ -735,7 +735,7 @@ function fixNames() {
   });
   if (ch) saveDoc('materials', { items: mats });
 }
-(function waitNames() { if (window.ATIC && ATIC.profile && BASE && S.saved) setTimeout(fixNames, 200); else setTimeout(waitNames, 300); })();
+(function waitNames() { if (window.ATIC && ATIC.profile && BASE && S.saved) ATIC.whenShown(function () { setTimeout(fixNames, 200); }); else setTimeout(waitNames, 300); })();
 
 /* ---------- Overview cards: what the inventory says ---------- */
 (function () {

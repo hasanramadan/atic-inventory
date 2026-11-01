@@ -98,18 +98,20 @@
   };
   window.addEventListener('hashchange', function () { A.setSub(curSub()); });
 
-  A.signOut = async function () { try { await sb.auth.signOut(); } catch (e) {} location.replace('index.html'); };
+  A.signOut = async function () { try { localStorage.removeItem('aticProfileCache'); } catch (e) {} try { await sb.auth.signOut(); } catch (e) {} location.replace('index.html'); };
 
   /* boot({page, subs}) → resolves with A when the person may see this page, or null after showing a message. */
   A.boot = async function (opts) {
     A.page = opts.page; A.subs = opts.subs || [];
     var main = $('#main');
     if (!sb) { if (main) main.innerHTML = '<div class="panel noacc"><h2>Could not load</h2><p class="muted">Check the internet connection and refresh the page.</p></div>'; return null; }
+    try { var cp = JSON.parse(localStorage.getItem('aticProfileCache') || 'null'); if (cp && !A.profile) { A.profile = cp; drawRail(); A.profile = null; } } catch (e) {}
     var s = await sb.auth.getSession();
     if (!s.data || !s.data.session) { location.replace('index.html?next=' + encodeURIComponent(location.pathname.split('/').pop() + location.hash)); return null; }
     var pr = await sb.from('profiles').select('*').eq('id', s.data.session.user.id).single();
     if (pr.error || !pr.data) { await sb.auth.signOut(); location.replace('index.html?err=noaccess'); return null; }
     A.profile = pr.data; A.session = s.data.session;
+    try { localStorage.setItem('aticProfileCache', JSON.stringify(pr.data)); } catch (e) {}
     A.canWrite = pr.data.role === 'admin' || pr.data.role === 'editor';
     drawRail();
     if (!allowed(A.profile, A.page)) {
@@ -168,5 +170,16 @@
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: type || 'text/csv' })); a.download = filename;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   };
+  A.whenShown = function (fn) { if (document.prerendering) document.addEventListener('prerenderingchange', function () { fn(); }, { once: true }); else fn(); };
+  /* load pages ahead: hovering a menu item loads that page in the background (Chrome / Edge), so the click is instant */
+  (function () {
+    try {
+      if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('speculationrules')) return;
+      var sr = document.createElement('script'); sr.type = 'speculationrules';
+      sr.textContent = JSON.stringify({ prerender: [{ source: 'document', where: { and: [{ selector_matches: '.rail a.p' }, { not: { selector_matches: '[aria-current="page"]' } }] }, eagerness: 'moderate' }],
+        prefetch: [{ source: 'document', where: { selector_matches: '.rail a.p' }, eagerness: 'eager' }] });
+      document.head.appendChild(sr);
+    } catch (e) {}
+  })();
   window.ATIC = A;
 })();
