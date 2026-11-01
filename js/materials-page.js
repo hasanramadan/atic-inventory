@@ -275,11 +275,11 @@ function fileBtn(id, label) { return '<label class="btn" for="' + id + '" style=
 
 /* ---------- start ---------- */
 (async function () {
-  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
+  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'usage', label: 'Usage: real vs plan' }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
   if (!A) return;
   S.profile = A.profile; S.canWrite = A.canWrite;
   try { var acts = await A.planner.list('actuals'); buildLP(acts.map(function (x) { return x.data; })); } catch (e) { /* no Line Planner access: forecast uses plan / average pace */ }
-  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
+  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'usage', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
   await loadDocs();
   if (!S.channel) S.channel = A.docs.subscribe(function () { loadDocs(); });
 })();
@@ -852,3 +852,112 @@ function ofBar(fc) {
     }, 0);
   };
 })();
+
+
+/* =====================================================================================================
+   USAGE: REAL VS PLAN. Every saved inventory count (weekly or month-end) is compared with the one before:
+   really used = before + received − after (inventory units × conversion = forecast units)
+   batches say = batches prepared in the Line Planner actuals × recipe. Plus this month: what the plan expects.
+   ===================================================================================================== */
+S.us = { period: null, month: null };
+function usCounts() {
+  var h = (invDoc().history || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.at < b.at ? -1 : 1); });
+  var by = {}; h.forEach(function (x) { if (x.date) by[x.date] = x; }); // the last save of a day wins
+  return Object.keys(by).sort().map(function (d) { return by[d]; });
+}
+/* inventory snapshot {itemId: qty} → {materialId: qty in forecast units}; lines with no conversion are listed */
+function usToMat(snap) {
+  var out = {}, miss = {};
+  invItems().forEach(function (i) {
+    if (!i.mat || snap[i.id] == null) return;
+    if (!(i.toApp > 0)) { miss[i.mat] = 1; return; }
+    out[i.mat] = (out[i.mat] || 0) + (Number(snap[i.id]) || 0) * i.toApp;
+  });
+  return { qty: out, miss: miss };
+}
+function usReceived(from, to) { // receipts after `from`, up to and including `to`
+  var out = {};
+  E.orderEvents((S.saved.orders && S.saved.orders.items) || []).forEach(function (o) { if (o.received && o.eta > from && o.eta <= to) out[o.material] = (out[o.material] || 0) + (Number(o.qty) || 0); });
+  return out;
+}
+function usExpected(model, from, to) { // days after `from` up to `to`: batches prepared × recipe
+  var out = {}, days = 0, missing = [];
+  for (var d = U.addDays(from, 1); d <= to; d = U.addDays(d, 1)) {
+    if (new Date(d + 'T00:00:00Z').getUTCDay() === 5) continue; // Friday off
+    var ad = LP.days[d];
+    if (!ad && !LP.secs[d]) { missing.push(d); continue; }
+    days++;
+    Object.keys(ad || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}; Object.keys(r).forEach(function (m) { out[m] = (out[m] || 0) + (Number(r[m]) || 0) * ad[k]; }); });
+  }
+  return { qty: out, days: days, missing: missing };
+}
+function usPeriod(model, a, b) {
+  var A0 = usToMat(a.qty || {}), B0 = usToMat(b.qty || {}), rec = usReceived(a.date, b.date), ex = usExpected(model, a.date, b.date);
+  var rows = model.materials.filter(function (m) { return A0.qty[m.id] != null && B0.qty[m.id] != null; }).map(function (m) {
+    var before = A0.qty[m.id], after = B0.qty[m.id], got = rec[m.id] || 0, used = before + got - after, exp = ex.qty[m.id] || 0, gap = used - exp;
+    return { id: m.id, name: m.name, unit: m.unit, before: before, received: got, after: after, used: used, expected: exp, gap: gap, pct: exp > 0 ? gap / exp : null };
+  });
+  var skipped = model.materials.filter(function (m) { return (A0.miss[m.id] || B0.miss[m.id]); }).map(function (m) { return m.name; });
+  return { from: a.date, to: b.date, fromSrc: a.source, toSrc: b.source, rows: rows, missing: ex.missing, days: ex.days, skipped: skipped };
+}
+function usGapCls(r) { return r.pct == null ? (Math.abs(r.gap) > 0.5 && r.used > 0 ? 'warn' : '') : Math.abs(r.pct) > 0.25 ? 'bad' : Math.abs(r.pct) > 0.1 ? 'warn' : 'good'; }
+function usTable(per) {
+  return '<div class="tablewrap"><table class="rec"><thead><tr><th>Material</th><th class="n">Count ' + U.nice(per.from) + '</th><th class="n">Received</th><th class="n">Count ' + U.nice(per.to) + '</th><th class="n">Really used</th><th class="n">Batches say</th><th class="n">Gap</th></tr></thead><tbody>' +
+    per.rows.map(function (r) { var c = usGapCls(r); return '<tr><td><b>' + esc(r.name) + '</b> <span class="small muted">' + esc(r.unit) + '</span></td><td class="n">' + fmtN(r.before) + '</td><td class="n">' + (r.received ? '+' + fmtN(r.received) : '') + '</td><td class="n">' + fmtN(r.after) + '</td><td class="n"><b>' + fmtN(r.used) + '</b></td><td class="n">' + fmtN(r.expected) + '</td><td class="n ' + c + '">' + (Math.abs(r.gap) < 0.05 ? '0' : (r.gap > 0 ? '+' : '') + fmtN(r.gap)) + (r.pct != null ? ' <span class="small">(' + (r.pct > 0 ? '+' : '') + Math.round(r.pct * 100) + '%)</span>' : '') + '</td></tr>'; }).join('') +
+    (per.rows.length ? '' : '<tr><td colspan="7" class="muted">No material has both counts.</td></tr>') + '</tbody></table></div>';
+}
+function usMonthKey(d) { return d.slice(0, 7); }
+function usMonthName(k) { var t = new Date(k + '-01T00:00:00Z'); return t.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+function vUsage(fc) {
+  var model = fc.model, counts = usCounts(), d = invDoc();
+  var h = head('Usage: real vs plan', 'What really left the store between two counts, against what the batches in the Line Planner say, and what this month\'s plan will use.');
+  if (counts.length < 1) return h + '<div class="panel empty"><h3 style="font-size:17px;margin-bottom:6px">No inventory count yet</h3><p class="hint" style="margin:0">Import a count on the <a href="#inventory">Inventory</a> page. Every count you save comes here by itself and is compared with the one before.</p></div>';
+  // ---- this month
+  var mk = usMonthKey(TODAY), mStart = mk + '-01', mEnd = U.addDays(usMonthKey(U.addDays(mStart, 32)) + '-01', -1);
+  var mo = (d.months || {})[mk] || {}, open = mo.opening ? usToMat(mo.opening).qty : null;
+  var last = counts[counts.length - 1], lastIn = last.date >= mStart ? last : null;
+  var res = {}; fc.results.forEach(function (r) { res[r.id] = r; });
+  var pastEx = usExpected(model, U.addDays(mStart, -1), U.addDays(TODAY, -1));
+  var rows = model.materials.map(function (m) {
+    var r = res[m.id]; if (!r) return null;
+    var futureUse = 0, closing = null;
+    (r.daily || []).forEach(function (x) { if (x.date >= TODAY && x.date <= mEnd) { futureUse += x.use; } if (x.date === mEnd) closing = x.closing; });
+    var planUse = (pastEx.qty[m.id] || 0) + futureUse, o = open ? open[m.id] : null;
+    var recM = usReceived(U.addDays(mStart, -1), mEnd)[m.id] || 0;
+    var real = lastIn && o != null ? (function () { var nowQ = usToMat(lastIn.qty || {}).qty[m.id]; return nowQ == null ? null : o + (usReceived(U.addDays(mStart, -1), lastIn.date)[m.id] || 0) - nowQ; })() : null;
+    if (o == null && !planUse && !r.active) return null;
+    return { m: m, open: o, received: recM, plan: planUse, closing: closing, real: real, crit: invItems().some(function (i) { return i.mat === m.id && i.critical; }) };
+  }).filter(Boolean);
+  var periods = []; for (var i = 1; i < counts.length; i++) periods.push(usPeriod(model, counts[i - 1], counts[i]));
+  var sel = periods.filter(function (p) { return p.to === S.us.period; })[0] || periods[periods.length - 1];
+  var big = sel ? sel.rows.filter(function (r) { return usGapCls(r) === 'bad'; }).length : 0;
+  h += '<div class="kpis"><div class="kpi"><span class="l">Counts saved</span><span class="v num">' + counts.length + '</span><span class="small muted">last ' + U.nice(last.date) + '</span></div>' +
+    '<div class="kpi ' + (big ? 'order' : 'ok') + '"><span class="l">Big gaps (over 25%)</span><span class="v num">' + (sel ? big : '–') + '</span><span class="small muted">' + (sel ? U.nice(sel.from) + ' → ' + U.nice(sel.to) : 'needs two counts') + '</span></div>' +
+    '<div class="kpi ' + (sel && sel.missing.length ? 'soon' : '') + '"><span class="l">Working days with no actual</span><span class="v num">' + (sel ? sel.missing.length : '–') + '</span><span class="small muted">in the Line Planner, same period</span></div>' +
+    '<div class="kpi"><span class="l">' + esc(usMonthName(mk)) + ' plan uses</span><span class="v" style="font-size:20px">' + rows.filter(function (x) { return x.plan > 0; }).length + ' materials</span><span class="small muted">from the line plan and factory plan</span></div></div>';
+  // this month
+  h += '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="font-size:16px">' + esc(usMonthName(mk)) + ': plan</h3><span class="small muted">' + (mo.openingDate ? 'Opening = closing count of ' + U.nice(mo.openingDate) : 'No month-end count opens this month yet') + '</span></div>' +
+    '<div class="tablewrap"><table class="rec"><thead><tr><th>Material</th><th class="n">Opening</th><th class="n">Received</th><th class="n">Plan will use</th><th class="n">Expected closing ' + U.nice(mEnd) + '</th>' + (lastIn ? '<th class="n">Really used so far</th>' : '') + '</tr></thead><tbody>' +
+    rows.map(function (x) { return '<tr><td><b>' + esc(x.m.name) + '</b> <span class="small muted">' + esc(x.m.unit) + '</span>' + (x.crit ? ' <span class="chip order" style="padding:1px 8px">Critical</span>' : '') + '</td><td class="n">' + (x.open == null ? '–' : fmtN(x.open)) + '</td><td class="n">' + (x.received ? '+' + fmtN(x.received) : '') + '</td><td class="n"><b>' + fmtN(x.plan) + '</b></td><td class="n ' + (x.closing != null && x.closing <= 0 ? 'bad' : '') + '">' + (x.closing == null ? '–' : fmtN(Math.max(0, x.closing)) + (x.closing <= 0 ? ' <span class="small">runs out</span>' : '')) + '</td>' + (lastIn ? '<td class="n">' + (x.real == null ? '–' : fmtN(x.real)) + '</td>' : '') + '</tr>'; }).join('') +
+    '</tbody></table></div><p class="hint" style="margin:10px 0 0">Plan will use = batches already entered in the Line Planner this month × recipe, plus the factory plan (or the normal pace) for the days left. At the month-end count you see real use next to it.</p></div>';
+  // between counts
+  h += '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="font-size:16px">Between two counts</h3>' + (periods.length > 1 ? '<select id="usPer" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">' + periods.slice().reverse().map(function (p) { return '<option value="' + p.to + '"' + (p === sel ? ' selected' : '') + '>' + U.nice(p.from) + ' → ' + U.nice(p.to) + '</option>'; }).join('') + '</select>' : '') + '</div>';
+  if (!sel) h += '<p class="hint" style="margin:0">One count so far (' + U.nice(last.date) + '). The comparison starts with the next count you save.</p>';
+  else {
+    if (sel.missing.length) h += '<div class="callout" style="margin-bottom:10px"><span><b>' + sel.missing.length + ' working day' + (sel.missing.length === 1 ? '' : 's') + ' with no actual in the Line Planner</b> (' + sel.missing.map(function (x) { return U.nice(x); }).join(', ') + '). Batches from those days are missing from "Batches say", so gaps look bigger than they are. <a href="line.html#actual">Enter them</a>.</span></div>';
+    h += usTable(sel);
+    if (sel.skipped.length) h += '<p class="small muted" style="margin:8px 0 0">Left out (no unit conversion): ' + esc(sel.skipped.join(', ')) + '.</p>';
+    h += '<p class="hint" style="margin:10px 0 0">Really used = count before + received − count after. Batches say = batches prepared in the Line Planner (' + sel.days + ' day' + (sel.days === 1 ? '' : 's') + ') × recipe. A positive gap means more left the store than the batches explain: a recipe that is too low, waste, or a delivery not marked received.</p>';
+  }
+  h += '</div>';
+  // months
+  var mks = Object.keys(d.months || {}).filter(function (k) { return d.months[k].opening && d.months[k].closing; }).sort().reverse();
+  h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:8px">Month to month</h3>';
+  if (!mks.length) h += '<p class="hint" style="margin:0">A month shows here once it has both an opening and a closing count. ' + esc(usMonthName(mk)) + ' opens with your ' + (mo.openingDate ? U.nice(mo.openingDate) : 'month-end') + ' count; the first full month appears after its month-end count.</p>';
+  else mks.forEach(function (k) { var x = d.months[k]; h += '<h4 style="font-size:14px;margin:6px 0">' + esc(usMonthName(k)) + '</h4>' + usTable(usPeriod(model, { date: x.openingDate, qty: x.opening, source: x.source }, { date: x.closingDate, qty: x.closing, source: x.source })); });
+  h += '</div>';
+  return h;
+}
+after.usage = function () { var p = $('#usPer'); if (p) p.onchange = function () { S.us.period = p.value; render(); }; };
+/* the small Count vs production panel on the Stock page now points here */
+reconHTML = function () { return '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Count vs production</h3><p class="hint" style="margin:0">The full comparison (real use between counts, against the batches, and this month\'s plan) is on the <a href="#usage">Usage: real vs plan</a> tab.</p></div>'; };
