@@ -24,7 +24,7 @@
 .tm-m .bub a{color:inherit;text-decoration:underline}.tm-m .bub a.share{color:var(--ink);text-decoration:none}
 .share{display:flex;gap:10px;align-items:center;margin-top:6px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-decoration:none!important;white-space:normal}
 .share .ic{width:30px;height:30px;border-radius:8px;background:var(--green-soft);color:var(--brand);display:grid;place-items:center;flex-shrink:0}
-.share b{display:block;font-size:13.5px}.share small{color:var(--muted);font-size:12px}
+.share b{display:block;font-size:13.5px}.share small{color:var(--muted);font-size:12px}.share.pt{border-left:4px solid var(--gold);align-items:flex-start}.share.pt .ic{background:var(--gold-soft,#fdf3d7);font-size:16px}.share.pt small{display:block}.share.pt .d{color:var(--ink);font-family:var(--f-mono);font-size:11.5px;margin-top:2px}.share.pt .go{color:var(--brand);font-weight:600;margin-top:4px}
 .tm-comp{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .tm-comp textarea{width:100%;resize:none;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background:var(--bg);color:var(--ink);min-height:44px;max-height:160px}
 .tm-comp .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -99,14 +99,14 @@
       if (m.kind === 'event') { h += '<div class="tm-ev"><span class="i">' + esc(m.icon || '⚡') + '</span><div>' + linkify(m.text || '') + (m.share ? ' <a href="' + esc(m.share.href) + '">Open</a>' : '') + '<div class="small muted">' + esc(m.byName || '') + '</div></div><span class="w">' + when(m.at) + '</span></div>'; return; }
       var isMe = m.by === me.id, canDel = isMe || me.role === 'admin';
       h += '<div class="tm-m' + (isMe ? ' me' : '') + '"><span class="av">' + esc(initials(m.byName)) + '</span><div><div class="meta"><b>' + esc(isMe ? 'You' : m.byName) + '</b><span>' + when(m.at) + '</span>' + (canDel ? '<button class="del" data-del="' + esc(m.id) + '">Delete</button>' : '') + '</div><div class="bub">' + (m.decision ? '<span class="tm-dec">DECISION</span><br>' : '') + (m.task ? '<div class="tm-task' + (m.task.done ? ' done' : '') + '"><label><input type="checkbox" data-done="' + esc(m.id) + '"' + (m.task.done ? ' checked' : '') + (A.canWrite ? '' : ' disabled') + '> <span class="t">Task</span></label><span>' + esc(m.task.who ? nameOf(m.task.who) : 'Anyone') + (m.task.due ? ' · due ' + niceD(m.task.due) : '') + (m.task.done ? ' · done by ' + esc(m.task.doneBy || '') : '') + '</span></div>' : '') + (m.text ? linkify(m.text) : '') +
-        (m.share ? '<a class="share" href="' + esc(m.share.href) + '"><span class="ic">' + ICON_PAGE + '</span><span><b>' + esc(m.share.title || pageLabel(m.share.href)) + '</b><small>' + esc(pageLabel(m.share.href)) + ' · open</small></span></a>' : '') + '</div></div></div>';
+        (m.share ? (m.share.point ? '<a class="share pt" href="' + esc(m.share.href) + '"><span class="ic">📍</span><span><small>Pointing at · ' + esc(m.share.title || pageLabel(m.share.href)) + '</small><b>' + esc(m.share.point) + '</b>' + (m.share.detail ? '<small class="d">' + esc(m.share.detail) + '</small>' : '') + '<small class="go">Open and show me →</small></span></a>' : '<a class="share" href="' + esc(m.share.href) + '"><span class="ic">' + ICON_PAGE + '</span><span><b>' + esc(m.share.title || pageLabel(m.share.href)) + '</b><small>' + esc(pageLabel(m.share.href)) + ' · open</small></span></a>') : '') + '</div></div></div>';
     });
     h += '</div><div class="tm-comp">';
     if (T.ch === 'feed') h += '<p class="small muted" style="margin:0">The site posts here by itself: new inventory counts, deliveries received and Line Planner actuals.</p>';
     else if (!A.canWrite) h += '<p class="small muted" style="margin:0">You have view access, so you can read the Team chat but not post. Ask Hasan for edit access.</p>';
     else if (T.ch !== 'feed') {
       var pages = ATIC.ordered(me).filter(function (p) { return p.key !== 'team'; });
-      h += (T.att ? '<div><span class="tm-att">📄 ' + esc(T.att.title) + '<button id="tmAttX" aria-label="Remove page">×</button></span></div>' : '') +
+      h += (T.att ? '<div><span class="tm-att">' + (T.att.point ? '📍 ' + esc(T.att.point) + ' · ' + esc(T.att.title) : '📄 ' + esc(T.att.title)) + '<button id="tmAttX" aria-label="Remove page">×</button></span></div>' : '') +
         '<div class="row"><div class="tm-kind" role="group" aria-label="Type">' + [['msg', 'Idea / message'], ['task', 'Task'], ['decision', 'Decision']].map(function (k) { return '<button type="button" data-kind="' + k[0] + '" aria-pressed="' + (T.kind === k[0]) + '">' + k[1] + '</button>'; }).join('') + '</div>' +
           (T.kind === 'task' ? '<select id="tmWho" aria-label="Owner"><option value="">Owner: anyone</option>' + T.people.map(function (p) { return '<option value="' + esc(p.id) + '"' + (T.who === p.id ? ' selected' : '') + '>' + esc(p.full_name || p.username) + (p.id === me.id ? ' (me)' : '') + '</option>'; }).join('') + '</select><input type="date" id="tmDue" value="' + esc(T.due) + '" aria-label="Due date" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)">' : '') + '</div>' +
         '<textarea id="tmText" rows="1" placeholder="' + (T.kind === 'task' ? 'What needs to be done?' : T.kind === 'decision' ? 'What did we decide, and why?' : 'Share an idea… (Enter to send, Shift+Enter for a new line)') + '"></textarea>' +
@@ -158,7 +158,7 @@
     try { var r = await ATIC.sb.from('profiles').select('id,full_name,username,role'); if (!r.error && r.data) T.people = r.data; } catch (e) {}
     // shared from another page: team.html?share=<page>&title=<title>
     var q = new URLSearchParams(location.search);
-    if (q.get('share')) { T.att = { href: q.get('share'), title: q.get('title') || pageLabel(q.get('share')) }; history.replaceState(null, '', 'team.html'); }
+    if (q.get('share')) { T.att = { href: q.get('share'), title: q.get('title') || pageLabel(q.get('share')) }; if (q.get('ptl')) { T.att.point = q.get('ptl'); T.att.detail = q.get('ptd') || ''; } history.replaceState(null, '', 'team.html'); }
     await load();
     ATIC.planner.subscribe(function (p) { var c = p && ((p.new && p.new.coll) || (p.old && p.old.coll)); if (!c || c === 'team') load(); });
   })();

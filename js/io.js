@@ -113,6 +113,9 @@
     '.io-pan{background:var(--surface);color:var(--ink);width:min(440px,100%);height:100%;overflow:auto;padding:20px 22px;display:flex;flex-direction:column;gap:16px;box-shadow:-10px 0 40px rgba(0,0,0,.25)}' +
     '.io-pan h2{font-size:19px;margin:0}.io-pan h3{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 8px}.io-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}' +
     '.io-row b{font-size:14px}.io-row small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.io-fmt{display:flex;gap:6px;flex-shrink:0}.io-fmt button,.io-fmt label{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:600;cursor:pointer}' +
+    '.io-ptbar{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:70;background:var(--brand);color:var(--brand-ink);border-radius:999px;padding:9px 10px 9px 18px;display:flex;gap:12px;align-items:center;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.25)}.io-ptbar button{border:0;border-radius:999px;padding:5px 12px;background:rgba(255,255,255,.18);color:inherit;cursor:pointer;font-weight:600}' +
+    '.io-pthover{outline:3px solid var(--gold)!important;outline-offset:3px;cursor:crosshair!important;border-radius:12px}' +
+    '@keyframes ioPt{0%,100%{box-shadow:0 0 0 0 rgba(212,160,23,.0)}50%{box-shadow:0 0 0 8px rgba(212,160,23,.45)}}.io-pt{outline:3px solid var(--gold)!important;outline-offset:3px;animation:ioPt 1.2s ease 3;border-radius:12px}' +
     '.io-fmt button:hover,.io-fmt label:hover{border-color:var(--brand)}.io-fmt label.pri{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}@media print{.io-fab{display:none}}';
   function fmtBtns(key) { return '<div class="io-fmt"><button data-io="' + key + '" data-f="xlsx">Excel</button><button data-io="' + key + '" data-f="pdf">PDF</button><button data-io="' + key + '" data-f="doc">Word</button></div>'; }
   /* pages that register nothing still get their own file buttons listed (e.g. the daily Word report on the Line Planner) */
@@ -129,7 +132,7 @@
     var IMPS = pageImports();
     var back = document.createElement('div'); back.className = 'io-back'; document.body.appendChild(back);
     var h = '<div class="io-pan" role="dialog" aria-modal="true" aria-label="Import and export"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Import / Export</h2><button class="btn ghost" data-x="close" aria-label="Close">✕</button></div>';
-    if (A.allowed(A.profile, 'team') && A.page !== 'team') { var cur = location.pathname.split('/').pop() + location.hash, h1 = (document.querySelector('#main h1') || {}).textContent || document.title; h += '<div><h3>Share</h3><div class="io-row"><div><b>Share this page to Team</b><small>Posts a card that opens this exact view</small></div><div class="io-fmt"><a class="btn" style="text-decoration:none;font-size:12.5px;padding:6px 10px" href="team.html?share=' + encodeURIComponent(cur) + '&title=' + encodeURIComponent(String(h1).trim()) + '">Share</a></div></div></div>'; }
+    if (A.allowed(A.profile, 'team') && A.page !== 'team') { var cur = location.pathname.split('/').pop() + location.hash, h1 = (document.querySelector('#main h1') || {}).textContent || document.title; h += '<div><h3>Share to Team</h3><div class="io-row"><div><b>📍 Point at something</b><small>Click the card, row or tile you mean; the team sees it with its numbers and lands right on it</small></div><div class="io-fmt"><button data-x="point" class="pri" style="background:var(--brand);color:var(--brand-ink);border-color:var(--brand)">Point</button></div></div><div class="io-row"><div><b>This whole page</b><small>A card that opens this view</small></div><div class="io-fmt"><a class="btn" style="text-decoration:none;font-size:12.5px;padding:6px 10px" href="team.html?share=' + encodeURIComponent(cur) + '&title=' + encodeURIComponent(String(h1).trim()) + '">Share</a></div></div></div>'; }
     h += '<div><h3>Export</h3><div class="io-row"><div><b>This view</b><small>Every table on the screen right now</small></div>' + fmtBtns('page') + '</div>' +
       REG.exports.map(function (e, i) { return '<div class="io-row"><div><b>' + esc(e.label) + '</b>' + (e.hint ? '<small>' + esc(e.hint) + '</small>' : '') + '</div>' + fmtBtns(i) + '</div>'; }).join('') + '</div>';
     if (IMPS.length) h += '<div><h3>Import</h3>' + IMPS.map(function (m, i) { return '<div class="io-row"><div><b>' + esc(m.label) + '</b>' + (m.hint ? '<small>' + esc(m.hint) + '</small>' : '') + '</div><div class="io-fmt"><label class="pri" for="ioIn' + i + '">Choose file</label><input type="file" id="ioIn' + i + '" data-imp="' + i + '" accept="' + esc(m.accept || '.xlsx,.xls,.xlsm,.csv') + '"' + (m.multiple ? ' multiple' : '') + ' hidden></div></div>'; }).join('') + '</div>';
@@ -140,8 +143,55 @@
     function close() { back.remove(); }
     back.onclick = function (e) { if (e.target === back) close(); };
     back.querySelector('[data-x="close"]').onclick = close;
+    var pb = back.querySelector('[data-x="point"]'); if (pb) pb.onclick = function () { close(); pointMode(); };
     back.querySelectorAll('[data-io]').forEach(function (b) { b.onclick = function () { var k = b.dataset.io, rep; try { rep = k === 'page' ? pageReport() : REG.exports[+k].build(); } catch (e) { A.toast(e.message || String(e)); return; } close(); exportReport(rep, b.dataset.f); }; });
     back.querySelectorAll('[data-imp]').forEach(function (inp) { inp.onchange = function () { var files = [].slice.call(inp.files); if (!files.length) return; close(); var m = IMPS[+inp.dataset.imp]; m.run(m.multiple ? files : files[0]); }; });
+  }
+  /* ---------- 📍 point at something ---------- */
+  var PT_SEL = '.card[data-m], tr[data-iid], .kpi, tbody tr, .fc, .panel, .cards .card';
+  function ptTarget(el) { if (!el || !el.closest) return null; var m = el.closest('#main') ? el.closest(PT_SEL) : null; return m && m.closest('#main') ? m : null; }
+  function clean(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
+  function ptCapture(el) {
+    var label = '', detail = [], anchor = '';
+    if (el.dataset.m) anchor = 'm:' + el.dataset.m; else if (el.dataset.iid) anchor = 'i:' + el.dataset.iid;
+    var hh = el.querySelector('h2,h3,.l,td b,b,strong');
+    label = clean(hh ? hh.textContent : el.textContent).slice(0, 60);
+    var dts = el.querySelectorAll('dl dt'); if (dts.length) dts.forEach(function (dt) { var dd = dt.nextElementSibling; if (dd) detail.push(clean(dt.textContent) + ' ' + clean(dd.textContent)); });
+    var chip = el.querySelector('.chip'); if (chip) detail.unshift(clean(chip.textContent));
+    if (el.classList.contains('kpi')) detail = [clean(el.textContent).replace(label, '').trim()];
+    if (el.tagName === 'TR') { var cells = [].map.call(el.children, function (td) { return clean(td.textContent); }).filter(Boolean); label = cells[0].slice(0, 60); var head = el.closest('table') ? [].map.call(el.closest('table').querySelectorAll('thead th'), function (th) { return clean(th.textContent); }) : []; detail = cells.slice(1, 6).map(function (c, k) { return (head[k + 1] ? head[k + 1] + ' ' : '') + c; }); }
+    if (!detail.length) detail = [clean(el.textContent).replace(label, '').slice(0, 140)];
+    if (!anchor) anchor = 't:' + label;
+    var il = el.querySelector('.invline'); if (il) detail.push([].map.call(il.children, function (c) { return clean(c.textContent); }).filter(Boolean).join(' · '));
+    return { anchor: anchor, label: label, detail: detail.filter(Boolean).join(' · ').slice(0, 220) };
+  }
+  function pointMode() {
+    var bar = document.createElement('div'); bar.className = 'io-ptbar'; bar.innerHTML = '<span>📍 Click what you want to point at</span><button type="button">Cancel</button>'; document.body.appendChild(bar);
+    var last = null;
+    function over(e) { var t = ptTarget(e.target); if (t === last) return; if (last) last.classList.remove('io-pthover'); last = t; if (t) t.classList.add('io-pthover'); }
+    function stop() { document.removeEventListener('mouseover', over, true); document.removeEventListener('click', pick, true); document.removeEventListener('keydown', key, true); if (last) last.classList.remove('io-pthover'); bar.remove(); }
+    function key(e) { if (e.key === 'Escape') stop(); }
+    function pick(e) {
+      if (bar.contains(e.target)) { stop(); return; }
+      var t = ptTarget(e.target); if (!t) return; e.preventDefault(); e.stopPropagation(); stop();
+      var c = ptCapture(t), page = location.pathname.split('/').pop() || 'index.html', hash = location.hash, h1 = clean((document.querySelector('#main h1') || {}).textContent || document.title);
+      var href = page + '?pt=' + encodeURIComponent(c.anchor) + hash;
+      location.href = 'team.html?share=' + encodeURIComponent(href) + '&title=' + encodeURIComponent(h1) + '&ptl=' + encodeURIComponent(c.label) + '&ptd=' + encodeURIComponent(c.detail);
+    }
+    document.addEventListener('mouseover', over, true); document.addEventListener('click', pick, true); document.addEventListener('keydown', key, true);
+  }
+  /* arriving from a pointer: find it, scroll to it, highlight it */
+  function ptArrive() {
+    var q = new URLSearchParams(location.search), a = q.get('pt'); if (!a) return;
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+    var tries = 0, t = setInterval(function () {
+      var el = null, kind = a.slice(0, 2), v = a.slice(2);
+      if (kind === 'm:') el = document.querySelector('.card[data-m="' + window.CSS.escape(v) + '"]');
+      else if (kind === 'i:') el = document.querySelector('tr[data-iid="' + window.CSS.escape(v) + '"]');
+      else el = [].filter.call(document.querySelectorAll('#main ' + PT_SEL.split(', ').join(', #main ')), function (x) { return clean(x.textContent).indexOf(v) === 0 || clean((x.querySelector('h2,h3,.l,td b,b,strong') || {}).textContent) === v; }).pop();
+      if (el) { clearInterval(t); el.hidden = false; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('io-pt'); setTimeout(function () { el.classList.remove('io-pt'); }, 6000); }
+      else if (++tries > 60) clearInterval(t);
+    }, 150);
   }
   function mount() {
     if (document.getElementById('ioFab') || !document.getElementById('rail')) return;
@@ -153,5 +203,5 @@
     exportReport: exportReport, pageReport: pageReport, mount: mount, open: open
   };
   // show the button once the page is signed in (the rail is drawn by ATIC.boot)
-  var tries = 0, t = setInterval(function () { if (A.profile && document.getElementById('rail') && document.getElementById('rail').innerHTML) { mount(); clearInterval(t); } else if (++tries > 600) clearInterval(t); }, 100);
+  var tries = 0, t = setInterval(function () { if (A.profile && document.getElementById('rail') && document.getElementById('rail').innerHTML) { mount(); ptArrive(); clearInterval(t); } else if (++tries > 600) clearInterval(t); }, 100);
 })();
