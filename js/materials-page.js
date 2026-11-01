@@ -304,7 +304,38 @@ function invLink(it) {
   if (!iu || iu === au) f = 1;
   else if (pack && pack.size && INV.unitWord(pack.of) === au) f = pack.size;
   else if (au === 'kg' && iu === 'g') f = 0.001;
+  if (f == null) { var sv = ((S.saved.materials && S.saved.materials.items) || {})[m.id] || {}; if (sv.countUnit && unitWord(sv.countUnit) === iu && sv.countFactor > 0) f = sv.countFactor; }
   return { mat: m.id, toApp: f };
+}
+/* ---------- the forecast reads the inventory: one source for stock counts ----------
+   Every tracked raw material = sum of its inventory lines × conversion, dated with the count.
+   Receipts are NOT copied here (the forecast adds them on the day they arrive), so nothing is counted twice. */
+function invForecastPlan(items) {
+  var by = {}, missing = [];
+  (items || []).forEach(function (i) {
+    if (i.cat !== 'raw' || !i.mat || i.missing) return;
+    var b = by[i.mat] = by[i.mat] || { qty: 0, asOf: null, lines: [], ok: true };
+    b.lines.push(i);
+    if (!(i.toApp > 0)) { if (Number(i.qty)) { b.ok = false; missing.push(i); } return; }
+    b.qty += (Number(i.qty) || 0) * i.toApp;
+    var d = i.countAsOf || i.asOf; if (d && (!b.asOf || d > b.asOf)) b.asOf = d;
+  });
+  return { by: by, missing: missing };
+}
+function syncForecastFromInventory(items, why) {
+  var pl = invForecastPlan(items), st = Object.assign({}, (S.saved.stock && S.saved.stock.items) || {}), prev = {}, changed = {};
+  Object.keys(pl.by).forEach(function (id) {
+    var b = pl.by[id]; if (!b.ok || !b.asOf) return;
+    var q = Math.round(b.qty * 1000) / 1000, o = st[id] || {};
+    if (o.qty === q && o.asOf === b.asOf) return;
+    prev[id] = o.qty != null ? o : (BASE.stock[id] || null);
+    st[id] = changed[id] = { qty: q, asOf: b.asOf, source: 'Inventory: ' + b.lines.map(function (l) { return fmtN(l.qty) + ' ' + l.unit + ' ' + l.name; }).join(' + ') };
+  });
+  if (!Object.keys(changed).length) return Promise.resolve(pl);
+  var hist = ((S.saved.stock && S.saved.stock.history) || []).slice();
+  hist.push({ at: new Date().toISOString(), date: Object.keys(changed).map(function (k) { return changed[k].asOf; }).sort().pop(), items: changed, prev: prev, source: why || 'Inventory' });
+  S.recon = { date: hist[hist.length - 1].date, prev: prev, items: changed, source: why || 'Inventory' };
+  return Promise.resolve(saveDoc('stock', { items: st, history: hist.slice(-80), updatedAt: new Date().toISOString() })).then(function () { return pl; });
 }
 function openOnItem(id) {
   var o = (S.saved.orders && S.saved.orders.items) || [], t = 0;
@@ -336,9 +367,9 @@ function vInventory(fc) {
   var list = invFiltered(), groups = [];
   list.forEach(function (i) { var g = (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group; if (groups.indexOf(g) < 0) groups.push(g); });
   var est = {}; (fc.results || []).forEach(function (r) { est[r.id] = r; });
-  h += '<div class="tablewrap"><table class="inv"><thead><tr><th>Item</th><th>Packing</th><th class="n">Quantity</th><th>Unit</th><th>Critical</th><th>Cover / use</th><th class="n">On order</th><th>Last change</th></tr></thead><tbody>';
+  h += '<div class="tablewrap"><table class="inv"><thead><tr><th>Item</th><th>Packing</th><th class="n">Quantity</th><th>Unit</th><th>Critical</th><th>Cover / use</th><th>Forecast</th><th class="n">On order</th><th>Last change</th></tr></thead><tbody>';
   groups.forEach(function (g) {
-    h += '<tr class="grp"><td colspan="8">' + esc(g) + '</td></tr>';
+    h += '<tr class="grp"><td colspan="9">' + esc(g) + '</td></tr>';
     list.filter(function (i) { return (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group === g; }).forEach(function (i) {
       var dv = S.inv.dirty[i.id] || {}, q = dv.qty !== undefined ? dv.qty : i.qty, cr = dv.critical !== undefined ? dv.critical : i.critical;
       var r = i.mat && est[i.mat], estTxt = r && i.toApp ? '<br><span class="small muted" title="Forecast estimate for today from the batches prepared">≈ ' + fmtN(Math.max(0, r.stockNow) / i.toApp) + ' now</span>' : '';
@@ -349,11 +380,12 @@ function vInventory(fc) {
         '<td class="small">' + esc(i.unit || '') + '</td>' +
         '<td><label class="dd small"><input type="checkbox" data-invc="' + esc(i.id) + '"' + (cr ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>' + (cr ? '<span class="chip order" style="padding:1px 8px">Critical</span>' : '') + '</label>' + (cr && i.critFrom ? '<span class="small muted" style="display:block">' + esc(i.critFrom) + '</span>' : '') + '</td>' +
         '<td class="small">' + esc([i.enough, i.use].filter(Boolean).join(' · ')) + (i.needOrder ? ' <span class="chip soon" style="padding:1px 8px">Need to order</span>' : '') + '</td>' +
+        '<td class="small">' + invFcCell(i) + '</td>' +
         '<td class="n">' + (oo ? fmtN(oo) : '') + '</td>' +
         '<td class="small muted">' + (i.asOf ? U.nice(i.asOf) : '') + (i.source ? '<br>' + esc(i.source) : '') + '</td></tr>';
     });
   });
-  if (!list.length) h += '<tr><td colspan="8" class="muted">No item matches.</td></tr>';
+  if (!list.length) h += '<tr><td colspan="9" class="muted">No item matches.</td></tr>';
   h += '</tbody></table></div>';
   var nd = Object.keys(S.inv.dirty).length;
   if (S.canWrite) h += '<div class="row"><button class="btn primary" id="invSave"' + (nd ? '' : ' disabled') + '>Save changes' + (nd ? ' (' + nd + ')' : '') + '</button>' + (nd ? '<button class="btn ghost" id="invUndo">Undo changes</button>' : '') + '<span class="small muted">Change a quantity or the critical tick, then save. Every change is kept in the history below.</span></div>';
@@ -369,20 +401,35 @@ after.inventory = function () {
   var q = $('#invQ'); if (q) q.oninput = function () { S.inv.q = q.value; var y = window.scrollY; render(); window.scrollTo(0, y); var n = $('#invQ'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } };
   document.querySelectorAll('[data-invq]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invq, it = invById(id), v = el.value === '' ? null : +el.value; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v === it.qty) delete dv.qty; else dv.qty = v; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   document.querySelectorAll('[data-invc]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invc, it = invById(id); var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (el.checked === !!it.critical) delete dv.critical; else dv.critical = el.checked; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
+  document.querySelectorAll('[data-invf2]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invf2, v = +el.value || null; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v) dv.toApp = v; else delete dv.toApp; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   var sv = $('#invSave'); if (sv) sv.onclick = invSaveEdits;
   var un = $('#invUndo'); if (un) un.onclick = function () { S.inv.dirty = {}; render(); };
   var ad = $('#invAdd'); if (ad) ad.onclick = invAddDialog;
 };
+function invFcCell(i) {
+  if (i.cat !== 'raw') return '';
+  var m = i.mat && mat(i.mat); if (!m) return '<span class="muted">not tracked</span>';
+  var dv = S.inv.dirty[i.id] || {}, f = dv.toApp !== undefined ? dv.toApp : i.toApp;
+  if (f > 0 && dv.toApp === undefined) return esc(m.name) + (f !== 1 ? '<br><span class="muted">1 ' + esc(i.unit.toLowerCase()) + ' = ' + fmtN(f) + ' ' + esc(m.unit) + '</span>' : '');
+  return esc(m.name) + '<br><span class="dd" title="Needed so the forecast can use this count">1 ' + esc(i.unit.toLowerCase()) + ' =<input type="number" step="any" min="0" data-invf2="' + esc(i.id) + '" value="' + (f > 0 ? f : '') + '" style="width:70px;padding:4px 6px;border:1px solid var(--amber);border-radius:7px;background:var(--bg)">' + esc(m.unit) + '</span>';
+}
 function invSaveEdits() {
   var d = JSON.parse(JSON.stringify(invDoc())), by = (S.profile && (S.profile.full_name || S.profile.username)) || '';
   d.moves = d.moves || [];
   d.items.forEach(function (i) {
     var dv = S.inv.dirty[i.id]; if (!dv) return;
-    if (dv.qty !== undefined) { i.qty = dv.qty; i.asOf = TODAY; i.source = 'Changed by hand'; i.qtyText = ''; i.qtyNote = ''; d.moves.push({ at: new Date().toISOString(), date: TODAY, id: i.id, qty: dv.qty, kind: 'edit', by: by }); }
+    if (dv.qty !== undefined) { i.qty = dv.qty; i.asOf = TODAY; i.countAsOf = TODAY; i.source = 'Changed by hand'; i.qtyText = ''; i.qtyNote = ''; d.moves.push({ at: new Date().toISOString(), date: TODAY, id: i.id, qty: dv.qty, kind: 'edit', by: by }); }
     if (dv.critical !== undefined) { i.critical = dv.critical; i.critFrom = dv.critical ? 'marked by hand ' + U.nice(TODAY) : ''; }
+    if (dv.toApp !== undefined) i.toApp = dv.toApp;
   });
   d.moves = d.moves.slice(-300); d.updatedAt = new Date().toISOString();
-  S.inv.dirty = {}; saveDoc('inventory', d);
+  var conv = {}; d.items.forEach(function (i) { var dv = S.inv.dirty[i.id]; if (dv && dv.toApp > 0 && i.mat) conv[i.mat] = { countUnit: INV.unitWord(i.unit), countFactor: dv.toApp }; });
+  S.inv.dirty = {};
+  Promise.resolve(saveDoc('inventory', d)).then(function () {
+    if (!Object.keys(conv).length) return;
+    var mats = JSON.parse(JSON.stringify((S.saved.materials && S.saved.materials.items) || {})); Object.keys(conv).forEach(function (k) { mats[k] = Object.assign({}, mats[k] || {}, conv[k]); });
+    return saveDoc('materials', { items: mats });
+  }).then(function () { return syncForecastFromInventory(d.items, 'Inventory changed by hand ' + U.nice(TODAY)); }).then(function (pl) { if (pl && pl.missing.length) toast(pl.missing.length + ' line(s) still need a conversion before the forecast can use them.'); });
 }
 function invAddDialog() {
   var back = document.createElement('div'); back.className = 'xd-back'; X.ensureCss(); document.body.appendChild(back);
@@ -433,22 +480,25 @@ function invImportDialog(book, p) {
         '<td>' + (it.critical ? '<span class="chip order" style="padding:1px 8px">Critical</span>' + (c.critNew ? '' : ' <span class="small muted">' + esc(it.critFrom || '') + '</span>') : '') + '</td>' +
         '<td class="small muted">' + (c.missing ? 'not in file' : src ? esc(src.sheet.trim()) + ' row ' + src.row + (src.qtyText ? ': "' + esc(src.qtyText) + '"' : '') : '') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
-    var tracked = p.items.filter(function (i) { return i.mat; }).length;
-    h += '<label class="dd small" style="margin:0"><input type="checkbox" id="icFc" checked> Also update the forecast counts of the ' + tracked + ' tracked raw materials (you check the units next)</label>';
+    var fp = invForecastPlan(mg.items), okN = Object.keys(fp.by).filter(function (k) { return fp.by[k].ok; }).length;
+    h += '<p class="small" style="margin:0">The Overview and forecast take their counts from this inventory: <b>' + okN + '</b> materials update when you save' + (fp.missing.length ? ', <b style="color:var(--amber)">' + fp.missing.length + '</b> line(s) need a conversion first (' + esc(fp.missing.map(function (i) { return i.name + ' ' + i.unit; }).join(', ')) + '): set it in the Forecast column after saving.' : '.') + '</p>';
     h += '</div><footer><span class="small muted" style="margin-right:auto">Nothing is saved until you press Save inventory. Critical items stay critical until you clear them.</span><button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="apply"' + (S.canWrite ? '' : ' disabled') + '>Save inventory</button></footer></div>';
     back.innerHTML = h;
     back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
     back.querySelector('#icDate').onchange = function () { date = this.value || date; draw(); };
     back.querySelector('[data-x="apply"]').onclick = function () {
-      var alsoFc = back.querySelector('#icFc').checked; back.remove();
+      back.remove();
       var d = JSON.parse(JSON.stringify(invDoc())); d.items = mg.items.concat(hiddenItems); d.asOf = date; d.source = book.name; d.updatedAt = new Date().toISOString();
       var snap = {}; mg.items.forEach(function (i) { if (!i.missing || i.missing !== date) snap[i.id] = i.qty; });
       var me = INV.monthEnd(date), kind = me ? 'Closing of ' + me.close + ' = opening of ' + me.open : p.kind.replace(/^month-end count: [^+]*/, 'weekly ');
       d.history = (d.history || []).concat([{ at: d.updatedAt, date: date, source: book.name, kind: kind, monthEnd: !!me, qty: snap }]).slice(-60);
       if (me) { d.months = d.months || {}; d.months[me.closeKey] = Object.assign({}, d.months[me.closeKey], { closing: snap, closingDate: date, source: book.name }); d.months[me.openKey] = Object.assign({}, d.months[me.openKey], { opening: snap, openingDate: date, source: book.name }); }
       d.kind = kind;
+      d.items.forEach(function (i) { if (!i.missing) i.countAsOf = date; });
       S.inv.dirty = {};
-      Promise.resolve(saveDoc('inventory', d)).then(function () { if (alsoFc) { S.afterCount = 'inventory'; stockFromBook(book, date); } });
+      Promise.resolve(saveDoc('inventory', d)).then(function () { return syncForecastFromInventory(d.items, 'Inventory count ' + book.name); }).then(function (pl) {
+        toast(pl.missing.length ? 'Saved. Overview updated; ' + pl.missing.length + ' line(s) need a conversion (see the Forecast column).' : 'Saved. The Overview now uses this count.');
+      });
     };
   }
   draw();
@@ -576,6 +626,19 @@ function receiveDialog(items, idx) {
   }
   draw();
 }
+
+/* ---------- Overview cards: what the inventory says ---------- */
+(function () {
+  var _card = card;
+  card = function (r) {
+    var h = _card(r), lines = invItems().filter(function (i) { return i.mat === r.id && !i.missing; });
+    if (!lines.length) return h;
+    var crit = lines.some(function (i) { return i.critical; }), need = lines.filter(function (i) { return !(i.toApp > 0) && Number(i.qty); }).length;
+    var txt = lines.map(function (i) { return fmtN(i.qty) + ' ' + esc(String(i.unit).toLowerCase()); }).join(' + ');
+    var add = '<div class="invline small"><span>Inventory ' + (lines[0].countAsOf || lines[0].asOf ? U.nice(lines[0].countAsOf || lines[0].asOf) : '') + ': <b>' + txt + '</b></span>' + (crit ? '<span class="chip order" style="padding:1px 8px">Critical</span>' : '') + (need ? '<span style="color:var(--amber)">needs a unit conversion</span>' : '') + '</div>';
+    return h.replace(/<\/button>$/, add + '</button>');
+  };
+})();
 
 /* ---------- Import / Export button: what this page can read and write ---------- */
 function invReport(onlyCrit) {
