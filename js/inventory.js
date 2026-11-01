@@ -152,13 +152,23 @@
     }
     return out;
   }
+  /* the count on the last working day of a month (only Fridays left after it) closes that month and opens the next */
+  var MN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function monthEnd(date) {
+    if (!date) return null;
+    var t = new Date(date + 'T00:00:00Z'), m = t.getUTCMonth(), y = t.getUTCFullYear();
+    for (var d = new Date(t.getTime() + 864e5); d.getUTCMonth() === m; d = new Date(d.getTime() + 864e5)) if (d.getUTCDay() !== 5) return null;
+    var n = new Date(Date.UTC(y, m + 1, 1));
+    return { close: MN[m] + ' ' + y, open: MN[n.getUTCMonth()] + ' ' + n.getUTCFullYear(), closeKey: y + '-' + String(m + 1).padStart(2, '0'), openKey: n.getUTCFullYear() + '-' + String(n.getUTCMonth() + 1).padStart(2, '0') };
+  }
   function parseBook(book, opts) {
     opts = opts || {}; var ref = opts.ref, year = ref ? +ref.slice(0, 4) : new Date().getFullYear();
-    var items = [], dates = [], crit = [], notes = [], sheetsRead = [];
+    var items = [], dates = [], crit = [], notes = [], sheetsRead = [], skipped = [];
     book.sheets.forEach(function (sh) {
       if (sh.hidden || !sh.rows.length) return;
-      if (/critical/i.test(sh.name)) { crit = crit.concat(readCriticalSheet(sh)); sheetsRead.push(sh.name + ' (critical list)'); return; }
+      if (/critical/i.test(sh.name)) { crit = crit.concat(readCriticalSheet(sh).filter(function (c) { return !opts.only || c.cat === opts.only; })); sheetsRead.push(sh.name.trim() + ' (critical list' + (opts.only ? ', ' + opts.only + ' only' : '') + ')'); return; }
       var cat = /pack/i.test(sh.name) ? 'pack' : /raw/i.test(sh.name) ? 'raw' : null;
+      if (opts.only && cat && cat !== opts.only) { skipped.push(sh.name.trim()); return; }
       var res = readStockSheet(sh, cat || 'raw', { year: year, ref: ref });
       if (!res || !res.items.length) { notes.push('Sheet "' + sh.name + '": no item list with quantities found.'); return; }
       if (!cat) { // unknown sheet name: guess from the items
@@ -167,6 +177,8 @@
       }
       items = items.concat(res.items); if (res.date) dates.push(res.date); sheetsRead.push(sh.name);
     });
+    if (opts.only) items = items.filter(function (i) { return i.cat === opts.only; });
+    if (skipped.length) notes.push('Left out for now: ' + skipped.join(', ') + '.');
     // critical sheet → mark the matching items (same category, closest name; qty breaks ties)
     var unmatched = [];
     crit.forEach(function (c) {
@@ -183,8 +195,10 @@
     if (unmatched.length) notes.push('On the critical list but not found in the item sheets: ' + unmatched.join(', ') + '.');
     var date = dates.sort()[dates.length - 1] || null;
     if (!date) { var fm = String(book.name || '').match(/(\d{1,2})[._\-](\d{1,2})[._\-](\d{2,4})/); if (fm) date = X().toDate(fm[1] + '/' + fm[2] + '/' + fm[3]); }
-    var monthly = items.some(function (i) { return i.monthly; });
-    return { date: date, items: items, critical: crit, notes: notes, sheets: sheetsRead, kind: monthly ? 'monthly' : (crit.length ? 'weekly + critical list' : 'weekly') };
+    var monthly = items.some(function (i) { return i.monthly; }), me = monthEnd(date);
+    var kind = me ? 'month-end count: closing of ' + me.close + ' = opening of ' + me.open : monthly ? 'monthly' : 'weekly';
+    if (crit.length) kind += ' + critical list';
+    return { date: date, items: items, critical: crit, notes: notes, sheets: sheetsRead, kind: kind, monthEnd: me };
   }
   /* new count over the saved inventory. Critical stays critical until someone clears it by hand
      (and the file marks it again → critical again). Items missing from the file are kept. */
@@ -211,5 +225,5 @@
     ((saved && saved.items) || []).forEach(function (o) { if (!used[o.id] && !parsed.items.some(function (n) { return n.id === o.id; })) { out.push(Object.assign({}, o, { missing: info.date })); changes.push({ id: o.id, name: o.name, cat: o.cat, before: o.qty, after: o.qty, missing: true, critical: o.critical }); } });
     return { items: out, changes: changes };
   }
-  root.ATICInventory = { parseBook: parseBook, merge: merge, parseQty: parseQty, parsePack: parsePack, unitWord: unitWord, slug: slug, norm: norm };
+  root.ATICInventory = { monthEnd: monthEnd, parseBook: parseBook, merge: merge, parseQty: parseQty, parsePack: parsePack, unitWord: unitWord, slug: slug, norm: norm };
 })(typeof window !== 'undefined' ? window : globalThis);

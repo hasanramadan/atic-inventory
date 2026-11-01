@@ -290,9 +290,10 @@ function fileBtn(id, label) { return '<label class="btn" for="' + id + '" style=
    Saved in app_docs "inventory": { items:[…], asOf, source, kind, history:[counts], moves:[receipts & edits] }
    ===================================================================================================== */
 var INV = window.ATICInventory;
+var INV_ONLY = 'raw'; /* raw materials only for now; set to null to bring packaging back (reader, page, orders and reports) */
 S.inv = { filter: 'all', q: '', dirty: {} };
 function invDoc() { return S.saved.inventory || { items: [], history: [], moves: [] }; }
-function invItems() { return invDoc().items || []; }
+function invItems() { return (invDoc().items || []).filter(function (i) { return !INV_ONLY || i.cat === INV_ONLY; }); }
 function invById(id) { return invItems().filter(function (i) { return i.id === id; })[0]; }
 /* link a raw inventory line to a tracked forecast material, and how many app units one counted unit holds */
 function invLink(it) {
@@ -320,17 +321,17 @@ function invFiltered() {
 }
 function vInventory(fc) {
   var d = invDoc(), items = invItems();
-  var h = head('Inventory', 'Raw materials and packaging as counted' + (d.asOf ? ' · last count <b>' + U.nice(d.asOf) + '</b>' + (d.source ? ' (' + esc(d.source) + ')' : '') : ' · no count yet'),
+  var h = head('Inventory', (INV_ONLY ? 'Raw materials as counted (packaging comes later)' : 'Raw materials and packaging as counted') + (d.asOf ? ' · last count <b>' + U.nice(d.asOf) + '</b>' + (INV.monthEnd(d.asOf) ? ' = closing of ' + INV.monthEnd(d.asOf).close + ', opening of ' + INV.monthEnd(d.asOf).open : '') + (d.source ? ' (' + esc(d.source) + ')' : '') : ' · no count yet'),
     fileBtn('xlInv', 'Import inventory (Excel)') + (S.canWrite ? '<button class="btn" id="invAdd">Add item</button>' : ''));
   h += accessNote(); h += lastSaved('inventory');
-  if (!items.length) return h + '<div class="panel empty"><h3 style="font-size:17px;margin-bottom:6px">No inventory yet</h3><p class="hint" style="margin:0">Press <b>Import inventory (Excel)</b> and pick the weekly or monthly inventory file (sheets "Raw Material", "Packaging Material" and, when there is one, "CRITICAL STOCK"). Every line is read, and you check it before saving.</p></div>';
+  if (!items.length) return h + '<div class="panel empty"><h3 style="font-size:17px;margin-bottom:6px">No inventory yet</h3><p class="hint" style="margin:0">Press <b>Import inventory (Excel)</b> and pick the weekly inventory file or the month-end one (closing of the month = opening of the next). The "Raw Material" sheet and the raw part of "CRITICAL STOCK" are read; packaging is left out for now. You check every line before saving.</p></div>';
   var crit = items.filter(function (i) { return i.critical; }).length, need = items.filter(function (i) { return i.needOrder || (i.min != null && i.qty != null && i.qty <= i.min); }).length;
   var since = (d.moves || []).filter(function (m) { return m.kind === 'receipt' && (!d.asOf || m.date > d.asOf); });
-  h += '<div class="kpis"><div class="kpi"><span class="l">Items</span><span class="v num">' + items.length + '</span><span class="small muted">' + items.filter(function (i) { return i.cat === 'raw'; }).length + ' raw · ' + items.filter(function (i) { return i.cat === 'pack'; }).length + ' packaging</span></div>' +
+  h += '<div class="kpis"><div class="kpi"><span class="l">Items</span><span class="v num">' + items.length + '</span><span class="small muted">' + (INV_ONLY ? 'raw materials' : items.filter(function (i) { return i.cat === 'raw'; }).length + ' raw · ' + items.filter(function (i) { return i.cat === 'pack'; }).length + ' packaging') + '</span></div>' +
     '<div class="kpi order"><span class="l">Critical</span><span class="v num">' + crit + '</span><span class="small muted">stay critical until you clear them</span></div>' +
     '<div class="kpi soon"><span class="l">Need to order / low</span><span class="v num">' + need + '</span><span class="small muted">from the file or your minimums</span></div>' +
     '<div class="kpi ok"><span class="l">Received since count</span><span class="v num">' + since.length + '</span><span class="small muted">deliveries added</span></div></div>';
-  h += '<div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="tabs">' + [['all', 'All'], ['raw', 'Raw materials'], ['pack', 'Packaging'], ['critical', 'Critical (' + crit + ')'], ['low', 'Need to order (' + need + ')']].map(function (t) { return '<button data-invf="' + t[0] + '" aria-pressed="' + (S.inv.filter === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+  h += '<div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="tabs">' + (INV_ONLY ? [['all', 'All']] : [['all', 'All'], ['raw', 'Raw materials'], ['pack', 'Packaging']]).concat([['critical', 'Critical (' + crit + ')'], ['low', 'Need to order (' + need + ')']]).map(function (t) { return '<button data-invf="' + t[0] + '" aria-pressed="' + (S.inv.filter === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
     '<input id="invQ" type="search" placeholder="Search items" value="' + esc(S.inv.q) + '" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);min-width:220px"></div>';
   var list = invFiltered(), groups = [];
   list.forEach(function (i) { var g = (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group; if (groups.indexOf(g) < 0) groups.push(g); });
@@ -387,7 +388,7 @@ function invAddDialog() {
   var back = document.createElement('div'); back.className = 'xd-back'; X.ensureCss(); document.body.appendChild(back);
   var groups = []; invItems().forEach(function (i) { if (groups.indexOf(i.group) < 0) groups.push(i.group); });
   back.innerHTML = '<div class="xd" role="dialog" aria-modal="true" aria-label="Add item" style="width:min(560px,100%)"><header><h2>Add an inventory item</h2><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body"><div class="top">' +
-    '<label>Kind<select id="iaCat"><option value="raw">Raw material</option><option value="pack">Packaging</option></select></label>' +
+    '<label>Kind<select id="iaCat"><option value="raw">Raw material</option>' + (INV_ONLY ? '' : '<option value="pack">Packaging</option>') + '</select></label>' +
     '<label>Group<input id="iaGrp" list="iaGrps" placeholder="e.g. Caps"><datalist id="iaGrps">' + groups.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist></label></div>' +
     '<div class="top"><label style="flex:1">Name<input id="iaName" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label><label>Packing<input id="iaPack" placeholder="25 Kg/bag" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:120px"></label></div>' +
     '<div class="top"><label>Quantity<input id="iaQty" type="number" step="any" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:120px"></label><label>Unit<input id="iaUnit" placeholder="BAG" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:100px"></label><label class="dd" style="flex-direction:row;align-items:center"><input type="checkbox" id="iaCrit"> Critical</label></div>' +
@@ -406,7 +407,7 @@ function invAddDialog() {
 /* ---------- import: weekly or monthly inventory workbook ---------- */
 function invImport(file) {
   X.readFile(file).then(function (book) {
-    var p = INV.parseBook(book, { ref: TODAY });
+    var p = INV.parseBook(book, { ref: TODAY, only: INV_ONLY });
     if (!p.items.length) { toast('No inventory lines were found in ' + book.name + '.'); return; }
     p.items.forEach(function (it) { var l = invLink(it); it.mat = l.mat; it.toApp = l.toApp; });
     invImportDialog(book, p);
@@ -416,10 +417,11 @@ function invImportDialog(book, p) {
   X.ensureCss();
   var date = p.date || TODAY, back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
   function draw() {
-    var mg = INV.merge(invDoc(), p, { date: date, source: book.name }), ch = mg.changes;
+    var all = invDoc().items || [], hiddenItems = all.filter(function (i) { return INV_ONLY && i.cat !== INV_ONLY; });
+    var mg = INV.merge({ items: all.filter(function (i) { return !INV_ONLY || i.cat === INV_ONLY; }) }, p, { date: date, source: book.name }), ch = mg.changes;
     var nNew = ch.filter(function (c) { return c.isNew; }).length, nMiss = ch.filter(function (c) { return c.missing; }).length, nCrit = mg.items.filter(function (i) { return i.critical; }).length, nCritNew = ch.filter(function (c) { return c.critNew; }).length;
     var nChg = ch.filter(function (c) { return !c.isNew && !c.missing && c.before !== c.after; }).length;
-    var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Inventory count"><header><div><h2>Inventory count from Excel</h2><p class="small muted" style="margin:4px 0 0">' + esc(book.name) + ' · read as <b>' + esc(p.kind) + '</b> · sheets: ' + esc(p.sheets.join(', ')) + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
+    var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Inventory count"><header><div><h2>Inventory count from Excel</h2><p class="small muted" style="margin:4px 0 0">' + esc(book.name) + ' · read as <b>' + esc(INV.monthEnd(date) ? 'closing of ' + INV.monthEnd(date).close + ' = opening of ' + INV.monthEnd(date).open + (p.critical.length ? ' + critical list' : '') : (p.critical.length ? 'weekly + critical list' : 'weekly')) + '</b> · sheets: ' + esc(p.sheets.join(', ')) + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
     h += '<div class="top" style="align-items:center"><label>Count date<input type="date" id="icDate" value="' + esc(date) + '" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label><span class="small muted">Read from the sheet. Change it if needed.</span></div>';
     h += '<p class="sum" style="margin:0"><b>' + p.items.length + '</b> lines read · <b>' + nChg + '</b> quantities changed' + (nNew ? ' · <b>' + nNew + '</b> new items' : '') + (nMiss ? ' · <b>' + nMiss + '</b> saved items not in this file (kept as they were)' : '') + ' · <b style="color:var(--red)">' + nCrit + '</b> critical' + (nCritNew ? ' (' + nCritNew + ' newly critical)' : '') + '.</p>';
     if (p.notes.length) h += '<ul class="skips">' + p.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>';
@@ -439,9 +441,12 @@ function invImportDialog(book, p) {
     back.querySelector('#icDate').onchange = function () { date = this.value || date; draw(); };
     back.querySelector('[data-x="apply"]').onclick = function () {
       var alsoFc = back.querySelector('#icFc').checked; back.remove();
-      var d = JSON.parse(JSON.stringify(invDoc())); d.items = mg.items; d.asOf = date; d.source = book.name; d.kind = p.kind; d.updatedAt = new Date().toISOString();
+      var d = JSON.parse(JSON.stringify(invDoc())); d.items = mg.items.concat(hiddenItems); d.asOf = date; d.source = book.name; d.updatedAt = new Date().toISOString();
       var snap = {}; mg.items.forEach(function (i) { if (!i.missing || i.missing !== date) snap[i.id] = i.qty; });
-      d.history = (d.history || []).concat([{ at: d.updatedAt, date: date, source: book.name, kind: p.kind, qty: snap }]).slice(-60);
+      var me = INV.monthEnd(date), kind = me ? 'Closing of ' + me.close + ' = opening of ' + me.open : p.kind.replace(/^month-end count: [^+]*/, 'weekly ');
+      d.history = (d.history || []).concat([{ at: d.updatedAt, date: date, source: book.name, kind: kind, monthEnd: !!me, qty: snap }]).slice(-60);
+      if (me) { d.months = d.months || {}; d.months[me.closeKey] = Object.assign({}, d.months[me.closeKey], { closing: snap, closingDate: date, source: book.name }); d.months[me.openKey] = Object.assign({}, d.months[me.openKey], { opening: snap, openingDate: date, source: book.name }); }
+      d.kind = kind;
       S.inv.dirty = {};
       Promise.resolve(saveDoc('inventory', d)).then(function () { if (alsoFc) { S.afterCount = 'inventory'; stockFromBook(book, date); } });
     };
@@ -492,7 +497,7 @@ vOrders = function (fc) {
     '<input id="oQty" type="number" step="any" placeholder="Quantity" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)"><span class="small muted" id="oUnit"></span>' +
     '<input id="oEta" type="date" title="Expected arrival" style="padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' +
     '<input id="oRef" placeholder="PO / supplier" style="padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' +
-    '<button class="btn primary" id="oAdd">Add order</button></div>' + (invItems().length ? '' : '<p class="hint" style="margin:8px 0 0">Import the inventory first to order packaging items too.</p>') + '</div>';
+    '<button class="btn primary" id="oAdd">Add order</button></div>' + '' + '</div>';
   function rows(list, isOpen) {
     return '<div class="tablewrap"><table><thead><tr><th>Item</th><th class="n">Ordered</th><th class="n">Received</th><th class="n">Still to come</th><th>Expected</th><th>Reference</th><th>Status</th><th></th></tr></thead><tbody>' + list.map(function (x) {
       var o = x.o, it = orderItem(o), got = orderGot(o), st = orderStatus(o), rest = Math.max(0, (Number(o.qty) || 0) - got);
@@ -575,7 +580,7 @@ function receiveDialog(items, idx) {
 /* ---------- Import / Export button: what this page can read and write ---------- */
 function invReport(onlyCrit) {
   var d = invDoc(), its = invItems().filter(function (i) { return !onlyCrit || i.critical; }), secs = [];
-  ['raw', 'pack'].forEach(function (c) {
+  (INV_ONLY ? [INV_ONLY] : ['raw', 'pack']).forEach(function (c) {
     var rows = its.filter(function (i) { return i.cat === c; }).map(function (i) { return [i.group, i.name, i.packTxt || '', i.qty == null ? '' : i.qty, i.unit || '', i.critical ? 'CRITICAL' : '', [i.enough, i.use].filter(Boolean).join(' · '), i.needOrder ? 'Need to order' : '', openOnItem(i.id) || '', [i.qtyText ? 'File: ' + i.qtyText : '', i.note].filter(Boolean).join(' · '), i.asOf || '']; });
     if (rows.length) secs.push({ title: c === 'raw' ? 'Raw materials' : 'Packaging', columns: ['Group', 'Item', 'Packing', 'Quantity', 'Unit', 'Critical', 'Cover / use', 'Order', 'On order', 'Notes', 'As of'], rows: rows });
   });
@@ -595,13 +600,13 @@ function registerIO() {
   if (!window.ATIC || !ATIC.io || registerIO.done) return; registerIO.done = true;
   ATIC.io.register({
     exports: [
-      { label: 'Inventory (all items)', hint: 'Raw materials and packaging, critical marked', build: function () { return invReport(false); } },
+      { label: 'Inventory', hint: 'Raw materials, critical marked', build: function () { return invReport(false); } },
       { label: 'Critical stock', hint: 'Only the critical items', build: function () { return invReport(true); } },
       { label: 'Orders & receiving', hint: 'Ordered, received, still to come', build: ordersReport },
       { label: 'Raw material outlook', hint: 'Status, cover, run-out and order dates', build: outlookReport }
     ],
     imports: [
-      { label: 'Inventory count (weekly or monthly)', hint: 'Sheets Raw Material, Packaging Material, CRITICAL STOCK', run: function (f) { go('inventory'); invImport(f); } },
+      { label: 'Inventory count (weekly or monthly)', hint: 'Weekly or month-end file: Raw Material and CRITICAL STOCK sheets', run: function (f) { go('inventory'); invImport(f); } },
       { label: 'Factory plan', hint: 'The weekly production plan', run: function (f) { go('forecast'); importPlan(f, function (rs, source) { var dv = deriveDays(rs); S.saved.plan = { runs: rs, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; render(); }); } },
       { label: 'Open orders', hint: 'One row per order line', run: function (f) { go('orders'); ordersImport(f); } },
       { label: 'Recipes', hint: 'Per batch, per product and section', run: function (f) { go('recipes'); recipesImport(f); } }
