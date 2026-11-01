@@ -236,6 +236,8 @@
 
 
 <div class="wrap">
+  <div class="callout" id="friBanner" hidden style="margin-bottom:12px"><b>Friday is the day off.</b> <span>ATIC does not produce on Fridays, so there is nothing to plan or log for this day. Pick another date.</span></div>
+  <div class="seedmsg" id="seedMsg" hidden></div>
   <div class="cards" id="cards"></div>
 
   <section class="viewer" aria-label="Forecast replay">
@@ -347,6 +349,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="js/shell.js"></script>
+<script src="js/io.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/word.js"></script>
 <script src="js/line-engine.js"></script>
@@ -377,6 +380,7 @@ const num = x => x == null || x === '' || !isFinite(+x) ? null : +x;
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const addDays = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); };
 const todayIso = () => iso(new Date());
+const isFriday = d => !!d && new Date(d + 'T12:00:00').getDay() === 5; // ATIC never works on Fridays
 const nice = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 function opts(list, sel) { return list.map(([v, t]) => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(t)}</option>`).join(''); }
@@ -598,7 +602,7 @@ function renderCards() {
       <div class="closing"><span class="l" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600">Left in the tank for tomorrow</span>${closing}</div>
       <ul class="why">${f.why.map(w => `<li>${esc(w.t)}</li>`).join('')}</ul>`;
     const btn = $(`${sec}-save`);
-    btn.disabled = !S.db || !S.canWrite || !!S.saving['plan' + sec];
+    btn.disabled = !S.db || !S.canWrite || !!S.saving['plan' + sec] || isFriday(S.date);
     btn.textContent = saved ? 'Update saved forecast' : 'Save forecast';
     const del = $(`${sec}-del`); del.hidden = !saved || !S.db || !S.canWrite; if (!del.dataset.arm) del.textContent = 'Delete saved forecast';
     const msg = $(`${sec}-msg`);
@@ -608,7 +612,8 @@ function renderCards() {
     }
   }
   const wd = ENGINE.weekdayIdx(S.date);
-  $('wday').textContent = ENGINE.WD[wd] + (wd === 4 ? ' · normally off' : '');
+  $('wday').textContent = ENGINE.WD[wd] + (wd === 4 ? ' · day off' : '');
+  $('friBanner').hidden = wd !== 4;
   const n = S.Lall ? S.Lall.n : 0;
   $('learnChip').querySelector('span').textContent = n ? `Model learned from ${n} logged day${n === 1 ? '' : 's'}` : 'History model · no logged days yet';
   $('learnChip').className = 'chip' + (n ? '' : ' warn');
@@ -642,6 +647,7 @@ async function deletePlan(sec) {
 async function savePlan(sec) {
   const f = S.fc[sec], i = S.inp[sec], msg = $(`${sec}-msg`);
   if (!S.db || !f || S.saving['plan' + sec]) return;
+  if (isFriday(S.date)) { msg.dataset.sticky = '1'; msg.className = 'msg err'; msg.textContent = 'Friday is the day off: no forecast is saved for Fridays.'; setTimeout(() => { delete msg.dataset.sticky; renderCards(); }, 3000); return; }
   S.saving['plan' + sec] = true; $(`${sec}-save`).disabled = true; msg.dataset.sticky = '1'; msg.className = 'msg note'; msg.textContent = 'Saving…';
   const inp = engineInput(sec);
   const r0 = inp.runs[0];
@@ -777,7 +783,7 @@ function initActualForm() {
   $('a_date').value = S.date <= todayIso() ? S.date : todayIso();
   $('a_date').max = addDays(todayIso(), 1);
   $('a_sec').value = 'S1';
-  const reload = () => { if ($('a_date').value) aFill(aKey()); $('a_msg').textContent = ''; };
+  const reload = () => { if ($('a_date').value) aFill(aKey()); $('a_msg').className = 'msg ' + (isFriday($('a_date').value) ? 'err' : ''); $('a_msg').textContent = isFriday($('a_date').value) ? 'Friday is the day off: nothing is logged for Fridays.' : ''; };
   $('a_date').onchange = reload; $('a_sec').onchange = reload;
   $('a_pprod').onchange = () => { const p = $('a_pprod').value; $('a_psize').innerHTML = p ? opts(sizeList(p), P0.sizes[p][0]) : '<option value="">–</option>'; };
   const rows = $('a_runs');
@@ -801,6 +807,7 @@ async function saveActual() {
   const msg = $('a_msg');
   const n = id => num($(id).value);
   const date = $('a_date').value, sec = $('a_sec').value;
+  if (isFriday(date)) { msg.className = 'msg err'; msg.textContent = `${nice(date)} is a Friday, the day off. Nothing was saved. If the sheet is dated Friday, it belongs to Thursday or Saturday: pick that date.`; return; }
   const noRun = $('a_norun').checked || A.runs.every(r => r.prepOnly);
   const runs = A.runs.map(r => { const po = noRun || !!r.prepOnly; return { product: r.product, size: r.size, batches: num(r.batches), opening: num(r.opening), closing: num(r.closing), boxes: po ? 0 : num(r.boxes), fillMin: po ? 0 : num(r.fillMin), changeoverMin: po ? null : num(r.changeoverMin), ...(po && !noRun ? { prepOnly: true } : {}) }; });
   const errs = [];
@@ -820,9 +827,9 @@ async function saveActual() {
     return;
   }
   if (!date) errs.push('a date');
-  if (runs.some(r => !r.prepOnly && (r.boxes == null || r.boxes < 0))) errs.push('boxes for every filled run');
+  runs.forEach((r, k) => { if (!r.prepOnly && (r.boxes == null || r.boxes < 0)) errs.push(`boxes for Run ${k + 1} (${pname(r.product)} ${r.size})${r.batches > 0 ? ', or tick “Prep only” if those batches were only prepared and not filled' : ''}`); });
   if (runs.some(r => r.prepOnly && r.closing == null)) errs.push('the closing balance of the prep-only run');
-  if (n('a_fill') == null || n('a_fill') <= 0) errs.push('filling minutes');
+  if (n('a_fill') == null || n('a_fill') <= 0) errs.push('the day\'s filling minutes');
   if (errs.length) { msg.className = 'msg err'; msg.textContent = 'Enter ' + errs.join(' and ') + ' before saving.'; return; }
   const work = n('a_work') ?? 600, fill = n('a_fill'), stop = n('a_stop') ?? Math.max(0, work - fill);
   if (fill > work) { msg.className = 'msg err'; msg.textContent = 'Filling minutes cannot be more than working minutes.'; return; }
@@ -1526,6 +1533,7 @@ async function connect() {
     if (kind === 'plans' && first.plans) applySavedPlan();
     first[kind] = false;
     update({ keepTime: true });
+    if (!first.plans && !first.actuals) seedConfirmed();
     if (!$('p-actual').hidden && A.loadedKey && !document.activeElement?.closest?.('#actForm')) aFill(A.loadedKey);
   };
   try {
@@ -1534,6 +1542,64 @@ async function connect() {
   } catch (e) { onErr(e); }
 }
 connect();
+
+// ---------------------------------------------------------------- confirmed days sent on 1 Nov 2026 (production sheets of 29 and 31 Oct)
+// Saved once, together with the forecast the model gives for that day. Never overwrites an actual typed in the planner;
+// an older, different actual is shown with a button to replace it. Friday 30 Oct was the day off.
+const SEED_TAG = 'confirmed-sheet-2026-11-01', SEED_SINCE = '2026-11-01T04:00:00Z';
+const SEED_DAYS = [
+  { date: '2026-10-29', sec: 'S1', prev: ['WV', '1L'], runs: [{ product: 'WV', size: '1L', batches: 4, opening: 1.5, closing: 1.2, boxes: 1153 }], work: 600, fill: 555, stop: 45, last: '16:31', start: 8, rc: 24, deep: null, notes: '' },
+  { date: '2026-10-29', sec: 'S2', prev: ['GM', '750ml'], runs: [{ product: 'GM', size: '750ml', batches: 13, opening: 8, closing: 7.5, boxes: 1470 }], work: 600, fill: 524, stop: 76, last: '16:07', start: 7, rc: null, deep: 51, notes: '' },
+  { date: '2026-10-31', sec: 'S1', prev: ['WV', '1L'], runs: [{ product: 'WV', size: '1L', batches: 2, opening: 1.2, closing: null, boxes: 897 }, { product: 'LS', size: '1L', batches: 1, opening: 0, closing: 1, prepOnly: true }], work: 600, fill: 498, stop: 102, last: '16:06', start: 12, rc: 50, deep: null,
+    notes: 'Lemon Substitute: 1 batch prepared only, the line was not used for it. Routine cleaning 50 min includes the line change (split not recorded). Gallons also on the sheet: 41 + 39 boxes, not counted in the boxes. Closing balance of White Vinegar not given.' },
+  { date: '2026-10-31', sec: 'S2', prev: ['GM', '750ml'], runs: [{ product: 'GM', size: '750ml', batches: 13, opening: 7.5, closing: 7.5, boxes: 1485 }], work: 600, fill: 550, stop: 50, last: '16:35', start: 4, rc: 19, deep: null,
+    notes: 'Cartons: 768 dated 24/10/2026 + 717 dated 31/10/2026.' }
+];
+function seedSize(p, z) { const l = (P0.sizes && P0.sizes[p]) || []; return l.includes(z) ? z : (l[0] || z); }
+function seedActualDoc(d) {
+  const runs = d.runs.map(r => ({ product: r.product, size: seedSize(r.product, r.size), batches: r.batches, opening: r.opening, closing: r.closing ?? null, boxes: r.prepOnly ? 0 : r.boxes, fillMin: r.prepOnly ? 0 : null, changeoverMin: null, ...(r.prepOnly ? { prepOnly: true } : {}) }));
+  const prev = { product: d.prev[0], size: seedSize(d.prev[0], d.prev[1]) };
+  let chain = prev; const types = runs.map(r => { if (r.prepOnly) return 'none'; const t = ENGINE.changeType(chain, r); chain = r; return t; });
+  const firstOpen = runs.filter((r, i) => !runs.slice(0, i).some(q => q.product === r.product)), lastClose = runs.filter((r, i) => !runs.slice(i + 1).some(q => q.product === r.product));
+  return { kind: 'actual', schema: 2, date: d.date, sec: d.sec, prevProduct: prev.product, prevSize: prev.size, runs,
+    product: runs[0].product, size: runs[0].size, batches: runs.reduce((s, r) => s + (r.batches || 0), 0), boxes: runs.reduce((s, r) => s + r.boxes, 0),
+    openingBalance: firstOpen.some(r => r.opening != null) ? firstOpen.reduce((s, r) => s + (r.opening || 0), 0) : null,
+    closingBalance: lastClose.every(r => r.closing != null) ? lastClose.reduce((s, r) => s + (r.closing || 0), 0) : null,
+    workMin: d.work, fillMin: d.fill, stopMin: d.stop, changeover: { done: types.some(t => t !== 'none'), type: types.find(t => t !== 'none') || null, min: 0, count: types.filter(t => t !== 'none').length },
+    cleanRoutineMin: d.rc, cleanDeepMin: d.deep, prepMin: null, startMin: d.start, lastBox: d.last, reasons: '', notes: d.notes, excludeFromLearning: false,
+    seed: SEED_TAG, savedAt: new Date().toISOString(), by: S.userId || null };
+}
+function seedPlanDoc(d, known) {
+  const filled = d.runs.filter(r => !r.prepOnly);
+  const inp = { date: d.date, sec: d.sec, prev: { product: d.prev[0], size: seedSize(d.prev[0], d.prev[1]) }, runs: filled.map(r => ({ product: r.product, size: seedSize(r.product, r.size), batches: r.batches, opening: r.opening, start: null, target: null })) };
+  const L = ENGINE.learn(P0, known.filter(a => a.date < d.date), { before: d.date }), f = ENGINE.forecast(L.P, inp);
+  return { kind: 'plan', schema: 2, date: d.date, sec: d.sec,
+    inputs: { product: inp.runs[0].product, size: inp.runs[0].size, batches: f.batches, targetBoxes: f.target, prev: inp.prev, prevSource: 'Saved with the confirmed actual', targetOn: false,
+      runs: inp.runs.map((r, k) => ({ product: r.product, size: r.size, batches: r.batches, opening: r.opening, openingResolved: f.runs[k].opening, start: null, target: null })) },
+    out: { ...ENGINE.planSummary(f), timeline: f.timeline.map(x => [x.s, x.d, x.cat, x.run]) }, why: f.why.map(w => w.t),
+    model: { version: f.modelVersion, learnedFrom: f.learnedFrom, historyBuilt: P0.built }, seed: SEED_TAG, savedAt: new Date().toISOString(), by: S.userId || null };
+}
+function seedSame(a, b) { const ra = ENGINE.actualRuns(a), rb = ENGINE.actualRuns(b); return a.boxes === b.boxes && a.fillMin === b.fillMin && ra.length === rb.length && ra.every((r, i) => r.product === rb[i].product && r.batches === rb[i].batches); }
+let seedRunning = false;
+async function seedConfirmed(force) {
+  if (seedRunning || !S.db || !S.canWrite || (S.seedDone && !force)) return; seedRunning = true;
+  const conflicts = [], saved = [], known = S.actuals.slice();
+  try {
+    for (const d of SEED_DAYS) {
+      const key = d.date + '_' + d.sec, a = S.actuals.find(x => x.date === d.date && x.sec === d.sec), p = S.plans.find(x => x.date === d.date && x.sec === d.sec);
+      if (!p) { try { await S.db.doc(`plans/${key}`).set(seedPlanDoc(d, known)); saved.push(`forecast ${nice(d.date)} ${SECN[d.sec]}`); } catch (e) { console.warn('seed plan', e); } }
+      const doc = seedActualDoc(d);
+      if (!a) { await S.db.doc(`actuals/${key}`).set(doc); known.push(doc); saved.push(`actual ${nice(d.date)} ${SECN[d.sec]}`); }
+      else if (a.seed !== SEED_TAG && !(a.savedAt > SEED_SINCE) && !seedSame(a, doc)) conflicts.push(d);
+      if (force && conflicts.includes(d)) { await S.db.doc(`actuals/${key}`).set(doc); saved.push(`actual ${nice(d.date)} ${SECN[d.sec]} (replaced)`); conflicts.splice(conflicts.indexOf(d), 1); }
+    }
+    S.seedDone = true;
+    const box = $('seedMsg');
+    if (saved.length) { box.hidden = false; box.className = 'seedmsg callout'; box.innerHTML = `<b>Saved the confirmed days.</b> <span>${esc(saved.join(' · '))}. Compare them on <a href="#compare">Compare &amp; weekly report</a>.</span>`; setTimeout(() => { box.hidden = true; }, 15000); }
+    if (conflicts.length) { box.hidden = false; box.className = 'seedmsg callout'; box.innerHTML = `<b>Different numbers are already saved for ${esc(conflicts.map(d => nice(d.date) + ' ' + SECN[d.sec]).join(', '))}.</b> <span>The production sheets you sent on 1 Nov say otherwise.</span> <button class="btn primary" id="seedFix" type="button">Replace with the sheet numbers</button>`; $('seedFix').onclick = () => { box.hidden = true; seedConfirmed(true); }; }
+  } catch (e) { console.warn('seed', e); const box = $('seedMsg'); box.hidden = false; box.className = 'seedmsg callout'; box.innerHTML = `<b>The 29 and 31 Oct actuals could not be saved.</b> <span>${esc(saveErr(e))}</span>`; }
+  finally { seedRunning = false; }
+}
 
 
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (['timeline', 'actual', 'compare', 'how'].includes(h)) { showTab(h); document.querySelector('.tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); } });

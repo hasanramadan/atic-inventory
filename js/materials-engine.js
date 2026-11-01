@@ -10,6 +10,23 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function round(x, n) { var p = Math.pow(10, n || 0); return Math.round(x * p) / p; }
 
+  /* Purchase orders → stock events in the app's units. Each receipt adds what really arrived on the day it arrived;
+     what is still to come of an open (or partly received) order arrives on its expected date.
+     toApp converts the order's own unit into the app unit (orders typed on the Inventory items, e.g. bags → kg).
+     Old orders marked "received" before receipts were recorded have no date and stay out, as before. */
+  function orderEvents(list) {
+    var out = [];
+    (list || []).forEach(function (o) {
+      if (!o || !o.material || o.status === 'cancelled') return;
+      var f = Number(o.toApp) > 0 ? Number(o.toApp) : 1, got = 0;
+      (o.receipts || []).forEach(function (r) { var q = Number(r.qty) || 0; got += q; if (q && r.date) out.push({ material: o.material, eta: r.date, qty: q * f, received: true, ref: o.ref }); });
+      if (o.status === 'received' || o.status === 'closed') return;
+      var rest = (Number(o.qty) || 0) - got;
+      if (rest > 0 && o.eta) out.push({ material: o.material, eta: o.eta, qty: rest * f, received: false, ref: o.ref });
+    });
+    return out;
+  }
+
   /* Merge saved edits (db) over the baseline built from the Jan–Sep sheets. */
   function buildModel(base, saved) {
     saved = saved || {};
@@ -26,7 +43,7 @@
     var st = (saved.stock && saved.stock.items) || {};
     Object.keys(st).forEach(function (k) { m.stock[k] = st[k]; });
     m.plan = (saved.plan && saved.plan.days) ? saved.plan : { days: {}, weeks: [] };
-    m.orders = (saved.orders || []).filter(function (o) { return o && o.status !== 'received' && o.status !== 'cancelled'; });
+    m.orders = orderEvents(saved.orders || []);
     m.settings = Object.assign({ basisWeeks: 8 }, saved.settings || {});
     m.actualDays = saved.actualDays || {};
     m.actualSections = saved.actualSections || {}; /* sections with an actual entered that day (even 0 batches) */ /* batches really prepared, from the Line Planner actuals: { date: { 'GM|SEC-2': 13 } } */
@@ -60,6 +77,7 @@
   /* Batches expected on one day: the factory plan when that week is planned, otherwise the average pace. */
   function batchesOn(m, day, avg, sc) {
     var wk = weekStart(day);
+    if (dow(day) === 5 && !(m.actualDays && m.actualDays[day])) return []; // Friday is always a day off at ATIC
     if (m.actualDays && m.actualDays[day]) {
       var ad = m.actualDays[day], out = [];
       Object.keys(ad).forEach(function (k) { var b = Number(ad[k]) || 0; if (b > 0) { var q = k.split('|'); out.push({ product: q[0], section: q[1], batches: b, source: 'actual' }); } });
@@ -144,6 +162,7 @@
         var ws = addDays(start, w * 7), open = cur, use = 0, rec = 0, fromPlan = (m.plan.weeks || []).indexOf(ws) >= 0, planUse = 0;
         for (var j = 0; j < 7; j++) {
           var day = addDays(ws, j);
+          if (day <= st.asOf) { daily.push({ date: day, use: 0, received: 0, closing: cur, planned: false, beforeCount: true }); continue; } // already inside the count
           var r = useOn(m, mat.id, items(day));
           m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === day) { cur += Number(o.qty) || 0; rec += Number(o.qty) || 0; } });
           cur -= r.total; use += r.total;
@@ -169,7 +188,7 @@
       })();
       var suggested = weekly > 0 ? Math.max(0, safety + weekly * mat.orderCoverWeeks - Math.max(0, projAtArrival)) : 0;
       suggested = Math.ceil(suggested / 10) * 10;
-      var openOrders = m.orders.filter(function (o) { return o.material === mat.id; });
+      var openOrders = m.orders.filter(function (o) { return o.material === mat.id && !o.received; });
       var top = Object.keys(byProd).sort(function (a, b) { return byProd[b] - byProd[a]; });
       var res = {
         id: mat.id, name: mat.name, unit: mat.unit, note: mat.note, active: active, status: status,
@@ -240,6 +259,6 @@
     return h;
   }
 
-  var api = { forecast: forecast, buildModel: buildModel, avgWeekly: avgWeekly, emailHTML: emailHTML, util: { iso: iso, addDays: addDays, weekStart: weekStart, nice: nice, fmt: fmt, diffDays: diffDays } };
+  var api = { forecast: forecast, buildModel: buildModel, avgWeekly: avgWeekly, orderEvents: orderEvents, emailHTML: emailHTML, util: { iso: iso, addDays: addDays, weekStart: weekStart, nice: nice, fmt: fmt, diffDays: diffDays } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ATICEngine = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -115,7 +115,10 @@ function parseQty(v, pack, unitCol) {
   return { qty: cont + add, unit: unit, given: given, exact: !small || !!(pack && pack.size), note: small ? fmtN(cont) + ' ' + unit + ' + ' + fmtN(small) + ' ' + (pack ? pack.of : 'kg') : '' };
 }
 function stockImport(file) {
-  X.readFile(file).then(function (book) {
+  X.readFile(file).then(function (book) { stockFromBook(book); }).catch(function (e) { toast(e.message || String(e)); });
+}
+function stockFromBook(book, knownDate) {
+  (function () {
     var spec = { fields: [
       { key: 'name', label: 'Material', aliases: [/raw material|material|item|description|name/], required: true },
       { key: 'pack', label: 'Pack size', aliases: [/^unit$|pack|packing|size/] },
@@ -127,8 +130,8 @@ function stockImport(file) {
     var date = null;
     for (var r = 0; r < Math.min(best.t.row + 1, 6) && !date; r++) (best.sh.rows[r] || []).forEach(function (c) { if (!date) date = X.parse.cellDate(c, +TODAY.slice(0, 4), TODAY); });
     if (!date) { var fm = book.name.match(/(\d{1,2})[._\-](\d{1,2})[._\-](\d{2,4})/); if (fm) date = X.parse.toDate(fm[1] + '/' + fm[2] + '/' + fm[3]); }
-    stockDialog(book, best.sh, best.t, date || TODAY);
-  }).catch(function (e) { toast(e.message || String(e)); });
+    stockDialog(book, best.sh, best.t, knownDate || date || TODAY);
+  })();
 }
 function stockDialog(book, sh, t, date) {
   var mats = matList(), fc = run.cache, saved = (S.saved.materials && S.saved.materials.items) || {};
@@ -190,7 +193,7 @@ function saveCount(totals, rows, date, fname) {
   var mats = JSON.parse(JSON.stringify((S.saved.materials && S.saved.materials.items) || {}));
   rows.forEach(function (x) { if (x.typed && x.mat && x.factor > 0) { mats[x.mat] = Object.assign({}, mats[x.mat] || {}, { countUnit: unitWord(x.q.unit), countFactor: x.factor }); } });
   S.recon = { date: date, prev: prev, items: items, source: fname };
-  saveDoc('stock', { items: st, history: hist.slice(-80), updatedAt: new Date().toISOString() }).then(function () { return saveDoc('materials', { items: mats }); }).then(function () { go('stock'); });
+  saveDoc('stock', { items: st, history: hist.slice(-80), updatedAt: new Date().toISOString() }).then(function () { return saveDoc('materials', { items: mats }); }).then(function () { var v = S.afterCount || 'stock'; S.afterCount = null; go(v); });
 }
 
 /* ---------- count vs production: what was really used between two counts ---------- */
@@ -199,7 +202,7 @@ function reconcile(prevItems, newItems) {
   Object.keys(newItems).forEach(function (id) {
     var a = prevItems[id], b = newItems[id]; if (!a || !b || !a.asOf || a.asOf >= b.asOf) return;
     var mat = m.materials.filter(function (x) { return x.id === id; })[0]; if (!mat) return;
-    var rec = 0; orders.forEach(function (o) { if (o.material === id && o.eta > a.asOf && o.eta <= b.asOf) rec += Number(o.qty) || 0; });
+    var rec = 0; E.orderEvents(orders).forEach(function (o) { if (o.material === id && o.received && o.eta > a.asOf && o.eta <= b.asOf) rec += Number(o.qty) || 0; });
     var exp = 0, daysAct = 0, daysOther = 0;
     for (var d = U.addDays(a.asOf, 1); d <= b.asOf; d = U.addDays(d, 1)) {
       var w = new Date(d + 'T00:00:00Z').getUTCDay(), ad = LP.days[d];
@@ -272,11 +275,337 @@ function fileBtn(id, label) { return '<label class="btn" for="' + id + '" style=
 
 /* ---------- start ---------- */
 (async function () {
-  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Open orders' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
+  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
   if (!A) return;
   S.profile = A.profile; S.canWrite = A.canWrite;
   try { var acts = await A.planner.list('actuals'); buildLP(acts.map(function (x) { return x.data; })); } catch (e) { /* no Line Planner access: forecast uses plan / average pace */ }
-  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
+  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
   await loadDocs();
   if (!S.channel) S.channel = A.docs.subscribe(function () { loadDocs(); });
 })();
+
+/* =====================================================================================================
+   INVENTORY: every raw material and packaging item as counted (weekly / monthly Excel, or typed by hand),
+   with critical items that stay critical, receipts from purchase orders added on the day they arrive.
+   Saved in app_docs "inventory": { items:[…], asOf, source, kind, history:[counts], moves:[receipts & edits] }
+   ===================================================================================================== */
+var INV = window.ATICInventory;
+S.inv = { filter: 'all', q: '', dirty: {} };
+function invDoc() { return S.saved.inventory || { items: [], history: [], moves: [] }; }
+function invItems() { return invDoc().items || []; }
+function invById(id) { return invItems().filter(function (i) { return i.id === id; })[0]; }
+/* link a raw inventory line to a tracked forecast material, and how many app units one counted unit holds */
+function invLink(it) {
+  if (it.cat !== 'raw') return { mat: null, toApp: null };
+  var mm = X.parse.matchName(it.name, matList(), 0.62); if (!mm) return { mat: null, toApp: null };
+  var m = mm.item, au = unitWord(m.unit), iu = INV.unitWord(it.unit), pack = it.pack || INV.parsePack(it.packTxt);
+  var f = null;
+  if (!iu || iu === au) f = 1;
+  else if (pack && pack.size && INV.unitWord(pack.of) === au) f = pack.size;
+  else if (au === 'kg' && iu === 'g') f = 0.001;
+  return { mat: m.id, toApp: f };
+}
+function openOnItem(id) {
+  var o = (S.saved.orders && S.saved.orders.items) || [], t = 0;
+  o.forEach(function (x) { if (x.inv === id && x.status !== 'received' && x.status !== 'closed' && x.status !== 'cancelled') t += Math.max(0, (Number(x.qty) || 0) - orderGot(x)) * (x.toInv || 1); });
+  return t;
+}
+function invFiltered() {
+  var q = INV.norm(S.inv.q || ''), f = S.inv.filter;
+  return invItems().filter(function (i) {
+    if (f === 'raw' && i.cat !== 'raw') return false; if (f === 'pack' && i.cat !== 'pack') return false;
+    if (f === 'critical' && !i.critical) return false; if (f === 'low' && !(i.needOrder || (i.min != null && i.qty != null && i.qty <= i.min))) return false;
+    return !q || INV.norm(i.name + ' ' + i.group + ' ' + (i.note || '')).indexOf(q) >= 0;
+  });
+}
+function vInventory(fc) {
+  var d = invDoc(), items = invItems();
+  var h = head('Inventory', 'Raw materials and packaging as counted' + (d.asOf ? ' · last count <b>' + U.nice(d.asOf) + '</b>' + (d.source ? ' (' + esc(d.source) + ')' : '') : ' · no count yet'),
+    fileBtn('xlInv', 'Import inventory (Excel)') + (S.canWrite ? '<button class="btn" id="invAdd">Add item</button>' : ''));
+  h += accessNote(); h += lastSaved('inventory');
+  if (!items.length) return h + '<div class="panel empty"><h3 style="font-size:17px;margin-bottom:6px">No inventory yet</h3><p class="hint" style="margin:0">Press <b>Import inventory (Excel)</b> and pick the weekly or monthly inventory file (sheets "Raw Material", "Packaging Material" and, when there is one, "CRITICAL STOCK"). Every line is read, and you check it before saving.</p></div>';
+  var crit = items.filter(function (i) { return i.critical; }).length, need = items.filter(function (i) { return i.needOrder || (i.min != null && i.qty != null && i.qty <= i.min); }).length;
+  var since = (d.moves || []).filter(function (m) { return m.kind === 'receipt' && (!d.asOf || m.date > d.asOf); });
+  h += '<div class="kpis"><div class="kpi"><span class="l">Items</span><span class="v num">' + items.length + '</span><span class="small muted">' + items.filter(function (i) { return i.cat === 'raw'; }).length + ' raw · ' + items.filter(function (i) { return i.cat === 'pack'; }).length + ' packaging</span></div>' +
+    '<div class="kpi order"><span class="l">Critical</span><span class="v num">' + crit + '</span><span class="small muted">stay critical until you clear them</span></div>' +
+    '<div class="kpi soon"><span class="l">Need to order / low</span><span class="v num">' + need + '</span><span class="small muted">from the file or your minimums</span></div>' +
+    '<div class="kpi ok"><span class="l">Received since count</span><span class="v num">' + since.length + '</span><span class="small muted">deliveries added</span></div></div>';
+  h += '<div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="tabs">' + [['all', 'All'], ['raw', 'Raw materials'], ['pack', 'Packaging'], ['critical', 'Critical (' + crit + ')'], ['low', 'Need to order (' + need + ')']].map(function (t) { return '<button data-invf="' + t[0] + '" aria-pressed="' + (S.inv.filter === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+    '<input id="invQ" type="search" placeholder="Search items" value="' + esc(S.inv.q) + '" style="padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);min-width:220px"></div>';
+  var list = invFiltered(), groups = [];
+  list.forEach(function (i) { var g = (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group; if (groups.indexOf(g) < 0) groups.push(g); });
+  var est = {}; (fc.results || []).forEach(function (r) { est[r.id] = r; });
+  h += '<div class="tablewrap"><table class="inv"><thead><tr><th>Item</th><th>Packing</th><th class="n">Quantity</th><th>Unit</th><th>Critical</th><th>Cover / use</th><th class="n">On order</th><th>Last change</th></tr></thead><tbody>';
+  groups.forEach(function (g) {
+    h += '<tr class="grp"><td colspan="8">' + esc(g) + '</td></tr>';
+    list.filter(function (i) { return (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group === g; }).forEach(function (i) {
+      var dv = S.inv.dirty[i.id] || {}, q = dv.qty !== undefined ? dv.qty : i.qty, cr = dv.critical !== undefined ? dv.critical : i.critical;
+      var r = i.mat && est[i.mat], estTxt = r && i.toApp ? '<br><span class="small muted" title="Forecast estimate for today from the batches prepared">≈ ' + fmtN(Math.max(0, r.stockNow) / i.toApp) + ' now</span>' : '';
+      var oo = openOnItem(i.id);
+      h += '<tr class="' + (cr ? 'crit' : '') + (i.missing ? ' gone' : '') + '"><td><b>' + esc(i.name) + '</b>' + (i.note ? '<br><span class="small muted">' + esc(i.note) + '</span>' : '') + (i.qtyText ? '<br><span class="small muted">In the file: "' + esc(i.qtyText) + '"' + (i.qtyNote ? ' · ' + esc(i.qtyNote) : '') + '</span>' : '') + (i.missing ? '<br><span class="small" style="color:var(--amber)">Not in the count of ' + U.nice(i.missing) + ', kept as it was</span>' : '') + '</td>' +
+        '<td class="small">' + esc(i.packTxt || '') + '</td>' +
+        '<td class="n">' + (S.canWrite ? '<input type="number" step="any" data-invq="' + esc(i.id) + '" value="' + (q == null ? '' : q) + '" style="width:110px">' : fmtN(q)) + estTxt + '</td>' +
+        '<td class="small">' + esc(i.unit || '') + '</td>' +
+        '<td><label class="dd small"><input type="checkbox" data-invc="' + esc(i.id) + '"' + (cr ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>' + (cr ? '<span class="chip order" style="padding:1px 8px">Critical</span>' : '') + '</label>' + (cr && i.critFrom ? '<span class="small muted" style="display:block">' + esc(i.critFrom) + '</span>' : '') + '</td>' +
+        '<td class="small">' + esc([i.enough, i.use].filter(Boolean).join(' · ')) + (i.needOrder ? ' <span class="chip soon" style="padding:1px 8px">Need to order</span>' : '') + '</td>' +
+        '<td class="n">' + (oo ? fmtN(oo) : '') + '</td>' +
+        '<td class="small muted">' + (i.asOf ? U.nice(i.asOf) : '') + (i.source ? '<br>' + esc(i.source) : '') + '</td></tr>';
+    });
+  });
+  if (!list.length) h += '<tr><td colspan="8" class="muted">No item matches.</td></tr>';
+  h += '</tbody></table></div>';
+  var nd = Object.keys(S.inv.dirty).length;
+  if (S.canWrite) h += '<div class="row"><button class="btn primary" id="invSave"' + (nd ? '' : ' disabled') + '>Save changes' + (nd ? ' (' + nd + ')' : '') + '</button>' + (nd ? '<button class="btn ghost" id="invUndo">Undo changes</button>' : '') + '<span class="small muted">Change a quantity or the critical tick, then save. Every change is kept in the history below.</span></div>';
+  // history
+  var hist = (d.history || []).slice(-8).reverse(), moves = (d.moves || []).slice(-15).reverse();
+  h += '<div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px"><div class="panel"><h3 style="font-size:16px;margin-bottom:8px">Counts</h3>' + (hist.length ? '<ul class="why">' + hist.map(function (x) { return '<li><b>' + U.nice(x.date) + '</b> · ' + esc(x.source || '') + ' <span class="muted small">' + esc(x.kind || '') + ' · ' + Object.keys(x.qty || {}).length + ' items</span></li>'; }).join('') + '</ul>' : '<p class="hint" style="margin:0">No counts yet.</p>') + '</div>' +
+    '<div class="panel"><h3 style="font-size:16px;margin-bottom:8px">Received &amp; changed by hand</h3>' + (moves.length ? '<ul class="why">' + moves.map(function (x) { var it = invById(x.id); return '<li><b>' + U.nice(x.date) + '</b> ' + (x.kind === 'receipt' ? 'received <b>+' + fmtN(x.qty) + '</b> ' : 'set to <b>' + fmtN(x.qty) + '</b> ') + esc(it ? it.unit + ' ' + it.name : x.id) + (x.ref ? ' <span class="muted small">' + esc(x.ref) + '</span>' : '') + (x.by ? ' <span class="muted small">by ' + esc(x.by) + '</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="hint" style="margin:0">Deliveries marked received on Open orders appear here and are added to the quantity.</p>') + '</div></div>';
+  return h;
+}
+after.inventory = function () {
+  var f = $('#xlInv'); if (f) f.onchange = function () { if (this.files[0]) invImport(this.files[0]); this.value = ''; };
+  document.querySelectorAll('[data-invf]').forEach(function (b) { b.onclick = function () { S.inv.filter = b.dataset.invf; render(); }; });
+  var q = $('#invQ'); if (q) q.oninput = function () { S.inv.q = q.value; var y = window.scrollY; render(); window.scrollTo(0, y); var n = $('#invQ'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } };
+  document.querySelectorAll('[data-invq]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invq, it = invById(id), v = el.value === '' ? null : +el.value; var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (v === it.qty) delete dv.qty; else dv.qty = v; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
+  document.querySelectorAll('[data-invc]').forEach(function (el) { el.onchange = function () { var id = el.dataset.invc, it = invById(id); var dv = S.inv.dirty[id] = S.inv.dirty[id] || {}; if (el.checked === !!it.critical) delete dv.critical; else dv.critical = el.checked; if (!Object.keys(dv).length) delete S.inv.dirty[id]; var y = window.scrollY; render(); window.scrollTo(0, y); }; });
+  var sv = $('#invSave'); if (sv) sv.onclick = invSaveEdits;
+  var un = $('#invUndo'); if (un) un.onclick = function () { S.inv.dirty = {}; render(); };
+  var ad = $('#invAdd'); if (ad) ad.onclick = invAddDialog;
+};
+function invSaveEdits() {
+  var d = JSON.parse(JSON.stringify(invDoc())), by = (S.profile && (S.profile.full_name || S.profile.username)) || '';
+  d.moves = d.moves || [];
+  d.items.forEach(function (i) {
+    var dv = S.inv.dirty[i.id]; if (!dv) return;
+    if (dv.qty !== undefined) { i.qty = dv.qty; i.asOf = TODAY; i.source = 'Changed by hand'; i.qtyText = ''; i.qtyNote = ''; d.moves.push({ at: new Date().toISOString(), date: TODAY, id: i.id, qty: dv.qty, kind: 'edit', by: by }); }
+    if (dv.critical !== undefined) { i.critical = dv.critical; i.critFrom = dv.critical ? 'marked by hand ' + U.nice(TODAY) : ''; }
+  });
+  d.moves = d.moves.slice(-300); d.updatedAt = new Date().toISOString();
+  S.inv.dirty = {}; saveDoc('inventory', d);
+}
+function invAddDialog() {
+  var back = document.createElement('div'); back.className = 'xd-back'; X.ensureCss(); document.body.appendChild(back);
+  var groups = []; invItems().forEach(function (i) { if (groups.indexOf(i.group) < 0) groups.push(i.group); });
+  back.innerHTML = '<div class="xd" role="dialog" aria-modal="true" aria-label="Add item" style="width:min(560px,100%)"><header><h2>Add an inventory item</h2><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body"><div class="top">' +
+    '<label>Kind<select id="iaCat"><option value="raw">Raw material</option><option value="pack">Packaging</option></select></label>' +
+    '<label>Group<input id="iaGrp" list="iaGrps" placeholder="e.g. Caps"><datalist id="iaGrps">' + groups.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist></label></div>' +
+    '<div class="top"><label style="flex:1">Name<input id="iaName" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label><label>Packing<input id="iaPack" placeholder="25 Kg/bag" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:120px"></label></div>' +
+    '<div class="top"><label>Quantity<input id="iaQty" type="number" step="any" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:120px"></label><label>Unit<input id="iaUnit" placeholder="BAG" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);width:100px"></label><label class="dd" style="flex-direction:row;align-items:center"><input type="checkbox" id="iaCrit"> Critical</label></div>' +
+    '</div><footer><button class="btn" data-x="close">Cancel</button><button class="btn primary" id="iaOk">Add item</button></footer></div>';
+  back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
+  back.querySelector('#iaOk').onclick = function () {
+    var name = back.querySelector('#iaName').value.trim(); if (!name) { toast('Type the item name.'); return; }
+    var cat = back.querySelector('#iaCat').value, pack = back.querySelector('#iaPack').value.trim();
+    var it = { id: INV.slug(cat + ' ' + name + ' ' + pack) + '-' + Date.now().toString(36).slice(-4), cat: cat, group: back.querySelector('#iaGrp').value.trim() || (cat === 'raw' ? 'Raw material' : 'Other'), name: name, packTxt: pack, pack: INV.parsePack(pack),
+      qty: back.querySelector('#iaQty').value === '' ? null : +back.querySelector('#iaQty').value, unit: back.querySelector('#iaUnit').value.trim().toUpperCase(), critical: back.querySelector('#iaCrit').checked, asOf: TODAY, source: 'Added by hand' };
+    if (it.critical) it.critFrom = 'marked by hand ' + U.nice(TODAY);
+    var l = invLink(it); it.mat = l.mat; it.toApp = l.toApp;
+    var d = JSON.parse(JSON.stringify(invDoc())); d.items = (d.items || []).concat([it]); back.remove(); saveDoc('inventory', d);
+  };
+}
+/* ---------- import: weekly or monthly inventory workbook ---------- */
+function invImport(file) {
+  X.readFile(file).then(function (book) {
+    var p = INV.parseBook(book, { ref: TODAY });
+    if (!p.items.length) { toast('No inventory lines were found in ' + book.name + '.'); return; }
+    p.items.forEach(function (it) { var l = invLink(it); it.mat = l.mat; it.toApp = l.toApp; });
+    invImportDialog(book, p);
+  }).catch(function (e) { toast(e.message || String(e)); });
+}
+function invImportDialog(book, p) {
+  X.ensureCss();
+  var date = p.date || TODAY, back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
+  function draw() {
+    var mg = INV.merge(invDoc(), p, { date: date, source: book.name }), ch = mg.changes;
+    var nNew = ch.filter(function (c) { return c.isNew; }).length, nMiss = ch.filter(function (c) { return c.missing; }).length, nCrit = mg.items.filter(function (i) { return i.critical; }).length, nCritNew = ch.filter(function (c) { return c.critNew; }).length;
+    var nChg = ch.filter(function (c) { return !c.isNew && !c.missing && c.before !== c.after; }).length;
+    var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Inventory count"><header><div><h2>Inventory count from Excel</h2><p class="small muted" style="margin:4px 0 0">' + esc(book.name) + ' · read as <b>' + esc(p.kind) + '</b> · sheets: ' + esc(p.sheets.join(', ')) + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
+    h += '<div class="top" style="align-items:center"><label>Count date<input type="date" id="icDate" value="' + esc(date) + '" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label><span class="small muted">Read from the sheet. Change it if needed.</span></div>';
+    h += '<p class="sum" style="margin:0"><b>' + p.items.length + '</b> lines read · <b>' + nChg + '</b> quantities changed' + (nNew ? ' · <b>' + nNew + '</b> new items' : '') + (nMiss ? ' · <b>' + nMiss + '</b> saved items not in this file (kept as they were)' : '') + ' · <b style="color:var(--red)">' + nCrit + '</b> critical' + (nCritNew ? ' (' + nCritNew + ' newly critical)' : '') + '.</p>';
+    if (p.notes.length) h += '<ul class="skips">' + p.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>';
+    h += '<div class="tablewrap" style="max-height:420px"><table><thead><tr><th>Item</th><th>Packing</th><th class="n">Before</th><th class="n">This count</th><th>Unit</th><th>Critical</th><th>Read from</th></tr></thead><tbody>' + mg.items.map(function (it) {
+      var c = ch.filter(function (x) { return x.id === it.id; })[0] || {}, src = p.items.filter(function (x) { return x.id === it.id || (x.cat === it.cat && INV.norm(x.name) === INV.norm(it.name)); })[0];
+      var diff = c.before != null && c.after != null && c.before !== c.after;
+      return '<tr' + (c.missing ? ' style="opacity:.55"' : '') + '><td><b>' + esc(it.name) + '</b> <span class="small muted">' + esc(it.group) + '</span>' + (c.isNew ? ' <span class="chip info" style="padding:1px 8px">new</span>' : '') + '</td><td class="small">' + esc(it.packTxt || '') + '</td>' +
+        '<td class="n muted">' + (c.before == null ? '' : fmtN(c.before)) + '</td><td class="n"><b>' + (it.qty == null ? '–' : fmtN(it.qty)) + '</b>' + (diff ? '<br><span class="small" style="color:' + (c.after < c.before ? 'var(--amber)' : 'var(--green)') + '">' + (c.after > c.before ? '+' : '') + fmtN(c.after - c.before) + '</span>' : '') + '</td><td class="small">' + esc(it.unit) + '</td>' +
+        '<td>' + (it.critical ? '<span class="chip order" style="padding:1px 8px">Critical</span>' + (c.critNew ? '' : ' <span class="small muted">' + esc(it.critFrom || '') + '</span>') : '') + '</td>' +
+        '<td class="small muted">' + (c.missing ? 'not in file' : src ? esc(src.sheet.trim()) + ' row ' + src.row + (src.qtyText ? ': "' + esc(src.qtyText) + '"' : '') : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    var tracked = p.items.filter(function (i) { return i.mat; }).length;
+    h += '<label class="dd small" style="margin:0"><input type="checkbox" id="icFc" checked> Also update the forecast counts of the ' + tracked + ' tracked raw materials (you check the units next)</label>';
+    h += '</div><footer><span class="small muted" style="margin-right:auto">Nothing is saved until you press Save inventory. Critical items stay critical until you clear them.</span><button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="apply"' + (S.canWrite ? '' : ' disabled') + '>Save inventory</button></footer></div>';
+    back.innerHTML = h;
+    back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
+    back.querySelector('#icDate').onchange = function () { date = this.value || date; draw(); };
+    back.querySelector('[data-x="apply"]').onclick = function () {
+      var alsoFc = back.querySelector('#icFc').checked; back.remove();
+      var d = JSON.parse(JSON.stringify(invDoc())); d.items = mg.items; d.asOf = date; d.source = book.name; d.kind = p.kind; d.updatedAt = new Date().toISOString();
+      var snap = {}; mg.items.forEach(function (i) { if (!i.missing || i.missing !== date) snap[i.id] = i.qty; });
+      d.history = (d.history || []).concat([{ at: d.updatedAt, date: date, source: book.name, kind: p.kind, qty: snap }]).slice(-60);
+      S.inv.dirty = {};
+      Promise.resolve(saveDoc('inventory', d)).then(function () { if (alsoFc) { S.afterCount = 'inventory'; stockFromBook(book, date); } });
+    };
+  }
+  draw();
+}
+
+/* =====================================================================================================
+   RECEIVING: open orders for tracked raw materials or any inventory item; mark received in full or in part
+   ===================================================================================================== */
+function orderGot(o) { return (o.receipts || []).reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0); }
+function orderItem(o) {
+  if (o.inv) { var it = invById(o.inv); if (it) return { name: it.name + (it.packTxt ? ' (' + it.packTxt + ')' : ''), unit: o.unit || it.unit }; }
+  var m = (run.cache ? run.cache.model.materials : BASE.materials).filter(function (x) { return x.id === o.material; })[0];
+  return { name: m ? m.name : (o.material || '?'), unit: o.unit || (m ? m.unit : '') };
+}
+function orderStatus(o) {
+  var got = orderGot(o), q = Number(o.qty) || 0;
+  if (o.status === 'cancelled') return { k: 'idle', t: 'Cancelled' };
+  if (o.status === 'received' || o.status === 'closed') return got >= q - 1e-9 || !(o.receipts || []).length ? { k: 'ok', t: (o.receipts || []).length ? 'Received in full' : 'Received' } : { k: 'soon', t: 'Closed short: ' + fmtN(got) + ' of ' + fmtN(q) };
+  if (got > 0) return { k: 'soon', t: 'Part received: ' + fmtN(got) + ' of ' + fmtN(q) };
+  return o.eta && o.eta < TODAY ? { k: 'order', t: 'Late (due ' + U.nice(o.eta) + ')' } : { k: 'info', t: 'On the way' };
+}
+function orderPicker(fc) {
+  var linked = {}; invItems().forEach(function (i) { if (i.mat) linked[i.mat] = 1; });
+  var h = '<optgroup label="Raw materials in the forecast">' + fc.model.materials.map(function (x) { return '<option value="m:' + x.id + '">' + esc(x.name) + ' (' + esc(x.unit) + ')</option>'; }).join('') + '</optgroup>';
+  var g = {}; invItems().forEach(function (i) { var k = (i.cat === 'raw' ? 'Inventory · raw' : 'Inventory · ') + (i.cat === 'raw' ? '' : i.group); (g[k] = g[k] || []).push(i); });
+  Object.keys(g).forEach(function (k) { h += '<optgroup label="' + esc(k) + '">' + g[k].map(function (i) { return '<option value="i:' + esc(i.id) + '">' + esc(i.name) + (i.packTxt ? ' · ' + esc(i.packTxt) : '') + ' (' + esc(i.unit || '') + ')</option>'; }).join('') + '</optgroup>'; });
+  return h;
+}
+function newOrder(sel, qty, eta, ref) {
+  var o = { qty: qty, eta: eta, ref: ref, status: 'open', added: TODAY, receipts: [] };
+  if (sel.indexOf('i:') === 0) {
+    var it = invById(sel.slice(2)); o.inv = it.id; o.unit = it.unit; o.toInv = 1;
+    if (it.mat && it.toApp) { o.material = it.mat; o.toApp = it.toApp; }
+  } else {
+    o.material = sel.slice(2); var m = run.cache.model.materials.filter(function (x) { return x.id === o.material; })[0]; o.unit = m ? m.unit : ''; o.toApp = 1;
+    var li = invItems().filter(function (i) { return i.mat === o.material && i.toApp; })[0]; if (li) { o.inv = li.id; o.toInv = 1 / li.toApp; }
+  }
+  return o;
+}
+vOrders = function (fc) {
+  var items = (S.saved.orders && S.saved.orders.items) || [];
+  var open = [], done = []; items.forEach(function (o, i) { (o.status === 'received' || o.status === 'closed' || o.status === 'cancelled' ? done : open).push({ o: o, i: i }); });
+  var h = head('Open orders & receiving', 'Orders already placed. What is still to come counts on its expected date; what arrives is added to the inventory the day you mark it received.', fileBtn('xlOrd', 'Import orders (Excel)'));
+  h += accessNote(); h += lastSaved('orders');
+  if (S.canWrite) h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:8px">New order</h3><div class="row"><select id="oMat" style="max-width:340px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' + orderPicker(fc) + '</select>' +
+    '<input id="oQty" type="number" step="any" placeholder="Quantity" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)"><span class="small muted" id="oUnit"></span>' +
+    '<input id="oEta" type="date" title="Expected arrival" style="padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' +
+    '<input id="oRef" placeholder="PO / supplier" style="padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' +
+    '<button class="btn primary" id="oAdd">Add order</button></div>' + (invItems().length ? '' : '<p class="hint" style="margin:8px 0 0">Import the inventory first to order packaging items too.</p>') + '</div>';
+  function rows(list, isOpen) {
+    return '<div class="tablewrap"><table><thead><tr><th>Item</th><th class="n">Ordered</th><th class="n">Received</th><th class="n">Still to come</th><th>Expected</th><th>Reference</th><th>Status</th><th></th></tr></thead><tbody>' + list.map(function (x) {
+      var o = x.o, it = orderItem(o), got = orderGot(o), st = orderStatus(o), rest = Math.max(0, (Number(o.qty) || 0) - got);
+      var rc = (o.receipts || []).map(function (r) { return U.nice(r.date) + ': ' + fmtN(r.qty) + (r.note ? ' (' + esc(r.note) + ')' : ''); }).join('<br>');
+      return '<tr><td><b>' + esc(it.name) + '</b>' + (o.inv ? '' : '<br><span class="small muted">forecast only, no inventory line</span>') + '</td><td class="n">' + fmtN(o.qty) + ' <span class="small muted">' + esc(it.unit) + '</span></td><td class="n">' + (got ? fmtN(got) : '') + (rc ? '<br><span class="small muted">' + rc + '</span>' : '') + '</td><td class="n">' + (isOpen && rest ? fmtN(rest) : '') + '</td><td>' + (o.eta ? U.nice(o.eta) : '') + '</td><td class="small">' + esc(o.ref || '') + '</td>' +
+        '<td><span class="chip ' + st.k + '">' + esc(st.t) + '</span></td><td style="white-space:nowrap">' + (S.canWrite ? (isOpen ? '<button class="btn primary" data-recv="' + x.i + '">Mark received</button> ' : '') + '<button class="btn ghost" data-del="' + x.i + '">Remove</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }
+  if (!open.length) h += '<div class="panel empty">No open orders. Add one above when a purchase order is placed.</div>';
+  else h += rows(open, true);
+  if (done.length) h += '<details class="panel"><summary><b>Received and closed orders (' + done.length + ')</b></summary><div style="margin-top:10px">' + rows(done.slice().reverse(), false) + '</div></details>';
+  return h;
+};
+after.orders = function (fc) {
+  var items = ((S.saved.orders && S.saved.orders.items) || []).slice();
+  var f = $('#xlOrd'); if (f) f.onchange = function () { if (this.files[0]) ordersImport(this.files[0]); this.value = ''; };
+  var sel = $('#oMat');
+  function unitHint() { if (!sel) return; var v = sel.value, u = ''; if (v.indexOf('i:') === 0) { var it = invById(v.slice(2)); u = it ? it.unit : ''; } else { var m = fc.model.materials.filter(function (x) { return 'm:' + x.id === v; })[0]; u = m ? m.unit : ''; } $('#oUnit').textContent = u; }
+  if (sel) { sel.onchange = unitHint; unitHint(); }
+  var add = $('#oAdd'); if (add) add.onclick = function () {
+    var q = +$('#oQty').value, eta = $('#oEta').value; if (!q || !eta) { toast('Enter a quantity and an expected arrival date.'); return; }
+    items.push(newOrder(sel.value, q, eta, $('#oRef').value.trim())); saveDoc('orders', { items: items });
+  };
+  document.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = 'Click again to remove'; setTimeout(function () { b.textContent = 'Remove'; delete b.dataset.arm; }, 4000); return; } items.splice(+b.dataset.del, 1); saveDoc('orders', { items: items }); }; });
+  document.querySelectorAll('[data-recv]').forEach(function (b) { b.onclick = function () { receiveDialog(items, +b.dataset.recv); }; });
+};
+function receiveDialog(items, idx) {
+  X.ensureCss();
+  var o = JSON.parse(JSON.stringify(items[idx])), it = orderItem(o), got = orderGot(o), q = Number(o.qty) || 0, rest = Math.max(0, q - got);
+  var inv = o.inv ? invById(o.inv) : null;
+  var back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
+  var st = { full: true, qty: rest, date: TODAY, keep: true, eta: o.eta && o.eta > TODAY ? o.eta : U.addDays(TODAY, 7), note: '' };
+  function draw() {
+    var recv = st.full ? rest : (+st.qty || 0), left = Math.max(0, rest - recv);
+    var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Mark received" style="width:min(620px,100%)"><header><div><h2>Mark received</h2><p class="small muted" style="margin:4px 0 0">' + esc(it.name) + (o.ref ? ' · ' + esc(o.ref) : '') + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
+    h += '<p class="sum" style="margin:0">Ordered <b>' + fmtN(q) + ' ' + esc(it.unit) + '</b>' + (got ? ' · already received <b>' + fmtN(got) + '</b>' : '') + ' · still to come <b>' + fmtN(rest) + '</b></p>';
+    h += '<div style="display:flex;flex-direction:column;gap:8px"><label class="dd"><input type="radio" name="rf" value="full"' + (st.full ? ' checked' : '') + '> <span><b>Full quantity</b> arrived: ' + fmtN(rest) + ' ' + esc(it.unit) + '</span></label>' +
+      '<label class="dd"><input type="radio" name="rf" value="part"' + (st.full ? '' : ' checked') + '> <span><b>Part of it</b>, quantity received:</span> <input type="number" step="any" min="0" id="rQty" value="' + (st.full ? '' : st.qty) + '" ' + (st.full ? 'disabled' : '') + ' style="width:110px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"> ' + esc(it.unit) + '</label></div>';
+    if (!st.full && recv > rest + 1e-9) h += '<div class="callout">More than ordered (' + fmtN(recv - rest) + ' extra). That is fine if the supplier sent extra; the order will close as received.</div>';
+    if (!st.full && left > 0) h += '<div style="display:flex;flex-direction:column;gap:6px;padding-left:22px"><label class="dd small"><input type="radio" name="rk" value="keep"' + (st.keep ? ' checked' : '') + '> The rest (' + fmtN(left) + ') is still coming, expected <input type="date" id="rEta" value="' + esc(st.eta) + '" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></label><label class="dd small"><input type="radio" name="rk" value="close"' + (st.keep ? '' : ' checked') + '> Nothing more is coming: close the order short</label></div>';
+    h += '<div class="top"><label>Date received<input type="date" id="rDate" value="' + esc(st.date) + '" max="' + U.addDays(TODAY, 1) + '" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label><label style="flex:1">Note (GRN / Odoo receipt)<input id="rNote" value="' + esc(st.note) + '" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label></div>';
+    var eff = [];
+    if (inv && o.toInv) eff.push('Inventory: <b>' + esc(inv.name) + '</b> ' + fmtN(inv.qty) + ' → <b>' + fmtN((Number(inv.qty) || 0) + recv * o.toInv) + '</b> ' + esc(inv.unit));
+    else eff.push('<span style="color:var(--amber)">No inventory line is linked to this order, so only the forecast changes.</span>');
+    if (o.material) eff.push('Raw material forecast: +' + fmtN(recv * (Number(o.toApp) || 1)) + ' ' + esc(mat(o.material) ? mat(o.material).unit : '') + ' on ' + U.nice(st.date) + ((S.saved.stock && S.saved.stock.items && S.saved.stock.items[o.material] && S.saved.stock.items[o.material].asOf >= st.date) ? ' <span class="muted">(already inside the count of ' + U.nice(S.saved.stock.items[o.material].asOf) + ', so not added again)</span>' : ''));
+    h += '<ul class="why" style="margin:0">' + eff.map(function (e) { return '<li>' + e + '</li>'; }).join('') + '</ul>';
+    h += '</div><footer><button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="ok"' + (recv > 0 && st.date ? '' : ' disabled') + '>Confirm received</button></footer></div>';
+    back.innerHTML = h;
+    back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
+    back.querySelectorAll('[name="rf"]').forEach(function (r) { r.onchange = function () { st.full = r.value === 'full'; if (!st.full && !st.qty) st.qty = ''; draw(); var e = back.querySelector('#rQty'); if (e && !st.full) e.focus(); }; });
+    var rq = back.querySelector('#rQty'); if (rq) rq.oninput = function () { st.qty = rq.value; clearTimeout(draw.t); draw.t = setTimeout(function () { draw(); var e = back.querySelector('#rQty'); if (e) { e.focus(); e.setSelectionRange && e.type === 'text' && e.setSelectionRange(e.value.length, e.value.length); } }, 450); };
+    back.querySelectorAll('[name="rk"]').forEach(function (r) { r.onchange = function () { st.keep = r.value === 'keep'; draw(); }; });
+    var re = back.querySelector('#rEta'); if (re) re.onchange = function () { st.eta = re.value; };
+    back.querySelector('#rDate').onchange = function () { st.date = this.value; draw(); };
+    back.querySelector('#rNote').oninput = function () { st.note = this.value; };
+    back.querySelector('[data-x="ok"]').onclick = function () {
+      var recv2 = st.full ? rest : (+back.querySelector('#rQty').value || 0); if (!(recv2 > 0)) return;
+      o.receipts = (o.receipts || []).concat([{ date: st.date, qty: recv2, note: st.note, at: new Date().toISOString(), full: !!st.full }]);
+      var left2 = Math.max(0, rest - recv2);
+      if (st.full || left2 <= 1e-9) o.status = 'received';
+      else if (st.keep) { o.status = 'partial'; if (st.eta) o.eta = st.eta; }
+      else o.status = 'closed';
+      var list = items.slice(); list[idx] = o; back.remove();
+      var by = (S.profile && (S.profile.full_name || S.profile.username)) || '';
+      var p = Promise.resolve();
+      if (inv && o.toInv) {
+        var d = JSON.parse(JSON.stringify(invDoc())), x = d.items.filter(function (i) { return i.id === inv.id; })[0];
+        x.qty = Math.round(((Number(x.qty) || 0) + recv2 * o.toInv) * 1000) / 1000; x.source = 'Received ' + U.nice(st.date) + (o.ref ? ' · ' + o.ref : '');
+        d.moves = (d.moves || []).concat([{ at: new Date().toISOString(), date: st.date, id: x.id, qty: recv2 * o.toInv, kind: 'receipt', ref: [o.ref, st.note, st.full ? 'full quantity' : 'part: ' + fmtN(recv2) + ' of ' + fmtN(q)].filter(Boolean).join(' · '), by: by }]).slice(-300);
+        p = Promise.resolve(saveDoc('inventory', d));
+      }
+      p.then(function () { return saveDoc('orders', { items: list }); }).then(function () {
+        toast(st.full || left2 <= 1e-9 ? 'Received in full and added to the inventory.' : 'Received ' + fmtN(recv2) + ' of ' + fmtN(rest) + (o.status === 'partial' ? '; the rest stays open.' : '; order closed short.'));
+      });
+    };
+  }
+  draw();
+}
+
+/* ---------- Import / Export button: what this page can read and write ---------- */
+function invReport(onlyCrit) {
+  var d = invDoc(), its = invItems().filter(function (i) { return !onlyCrit || i.critical; }), secs = [];
+  ['raw', 'pack'].forEach(function (c) {
+    var rows = its.filter(function (i) { return i.cat === c; }).map(function (i) { return [i.group, i.name, i.packTxt || '', i.qty == null ? '' : i.qty, i.unit || '', i.critical ? 'CRITICAL' : '', [i.enough, i.use].filter(Boolean).join(' · '), i.needOrder ? 'Need to order' : '', openOnItem(i.id) || '', [i.qtyText ? 'File: ' + i.qtyText : '', i.note].filter(Boolean).join(' · '), i.asOf || '']; });
+    if (rows.length) secs.push({ title: c === 'raw' ? 'Raw materials' : 'Packaging', columns: ['Group', 'Item', 'Packing', 'Quantity', 'Unit', 'Critical', 'Cover / use', 'Order', 'On order', 'Notes', 'As of'], rows: rows });
+  });
+  return { title: onlyCrit ? 'Critical stock' : 'Inventory', subtitle: 'Count of ' + (d.asOf ? U.nice(d.asOf) : '–') + (d.source ? ' (' + d.source + ')' : '') + ' plus deliveries received since · exported ' + new Date().toLocaleString('en-GB'), sections: secs };
+}
+function ordersReport() {
+  var items = (S.saved.orders && S.saved.orders.items) || [];
+  return { title: 'Orders and receiving', subtitle: 'Exported ' + new Date().toLocaleString('en-GB'), sections: [{ title: 'Orders', columns: ['Item', 'Ordered', 'Unit', 'Received', 'Still to come', 'Expected', 'Reference', 'Status', 'Receipts'],
+    rows: items.map(function (o) { var it = orderItem(o), got = orderGot(o), open = !(o.status === 'received' || o.status === 'closed' || o.status === 'cancelled'); return [it.name, Number(o.qty) || 0, it.unit, got, open ? Math.max(0, (Number(o.qty) || 0) - got) : 0, o.eta || '', o.ref || '', orderStatus(o).t, (o.receipts || []).map(function (r) { return r.date + ': ' + r.qty + (r.note ? ' (' + r.note + ')' : ''); }).join('; ')]; }) }] };
+}
+function outlookReport() {
+  var fc = run.cache || run();
+  return { title: 'Raw material outlook', subtitle: 'Today ' + U.nice(TODAY) + ' · exported ' + new Date().toLocaleString('en-GB'), sections: [{ title: 'Outlook', columns: ['Material', 'Unit', 'Status', 'Stock now', 'Use per week', 'Weeks of cover', 'Runs out', 'Order by', 'Suggested order', 'Why'],
+    rows: fc.results.map(function (r) { return [r.name, r.unit, STATUS[r.status], Math.round(Math.max(0, r.stockNow) * 10) / 10, Math.round(r.weekly * 10) / 10, r.weeksCover == null ? '' : Math.round(r.weeksCover * 10) / 10, r.runOut || '', r.status === 'order' ? 'Now' : (r.orderBy || ''), r.suggestedQty || '', (r.why || []).join(' ')]; }) }] };
+}
+function registerIO() {
+  if (!window.ATIC || !ATIC.io || registerIO.done) return; registerIO.done = true;
+  ATIC.io.register({
+    exports: [
+      { label: 'Inventory (all items)', hint: 'Raw materials and packaging, critical marked', build: function () { return invReport(false); } },
+      { label: 'Critical stock', hint: 'Only the critical items', build: function () { return invReport(true); } },
+      { label: 'Orders & receiving', hint: 'Ordered, received, still to come', build: ordersReport },
+      { label: 'Raw material outlook', hint: 'Status, cover, run-out and order dates', build: outlookReport }
+    ],
+    imports: [
+      { label: 'Inventory count (weekly or monthly)', hint: 'Sheets Raw Material, Packaging Material, CRITICAL STOCK', run: function (f) { go('inventory'); invImport(f); } },
+      { label: 'Factory plan', hint: 'The weekly production plan', run: function (f) { go('forecast'); importPlan(f, function (rs, source) { var dv = deriveDays(rs); S.saved.plan = { runs: rs, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; render(); }); } },
+      { label: 'Open orders', hint: 'One row per order line', run: function (f) { go('orders'); ordersImport(f); } },
+      { label: 'Recipes', hint: 'Per batch, per product and section', run: function (f) { go('recipes'); recipesImport(f); } }
+    ]
+  });
+}
+(function waitIO() { if (window.ATIC && ATIC.profile && BASE) registerIO(); else setTimeout(waitIO, 200); })();
