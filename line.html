@@ -859,7 +859,9 @@ async function saveActual() {
     savedAt: new Date().toISOString(), by: S.userId || null,
   };
   S.saving['act' + key] = true; $('a_save').disabled = true; msg.className = 'msg note'; msg.textContent = 'Saving…';
-  try { await S.db.doc(`actuals/${key}`).set(doc); msg.className = 'msg ok'; msg.textContent = doc.excludeFromLearning ? `Saved as an unusual day: kept on record, but the model does not learn from ${SECN[sec]} on ${date}${doc.closingBalance != null ? `; tomorrow starts with ${fmt1(doc.closingBalance)} batches of balance` : ''}.` : `Saved. The model now learns from ${SECN[sec]} on ${date}${doc.closingBalance != null ? `; tomorrow starts with ${fmt1(doc.closingBalance)} batches of balance` : ''}.`; $('a_save').textContent = 'Update actual'; }
+  try { await S.db.doc(`actuals/${key}`).set(doc);
+    { const pl = S.plans.find(x => x.date === date && x.sec === sec), fb = pl && pl.out ? pl.out.boxesP50 : null; if (ATIC.teamPost) ATIC.teamPost('🏭', `Actual saved: ${SECN[sec]}, ${nice(date)}: ${fmt(doc.boxes)} boxes${fb ? ` vs forecast ${fmt(fb)} (${doc.boxes >= fb ? '+' : ''}${Math.round((doc.boxes - fb) / Math.max(1, fb) * 100)}%)` : ''}, stoppage ${doc.workMin ? Math.round(doc.stopMin / doc.workMin * 100) : 0}%.`, { href: 'line.html#compare', title: 'Compare' }); }
+    msg.className = 'msg ok'; msg.textContent = doc.excludeFromLearning ? `Saved as an unusual day: kept on record, but the model does not learn from ${SECN[sec]} on ${date}${doc.closingBalance != null ? `; tomorrow starts with ${fmt1(doc.closingBalance)} batches of balance` : ''}.` : `Saved. The model now learns from ${SECN[sec]} on ${date}${doc.closingBalance != null ? `; tomorrow starts with ${fmt1(doc.closingBalance)} batches of balance` : ''}.`; $('a_save').textContent = 'Update actual'; }
   catch (e) { msg.className = 'msg err'; msg.textContent = saveErr(e); }
   finally { S.saving['act' + key] = false; $('a_save').disabled = false; }
 }

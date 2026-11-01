@@ -275,11 +275,11 @@ function fileBtn(id, label) { return '<label class="btn" for="' + id + '" style=
 
 /* ---------- start ---------- */
 (async function () {
-  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'usage', label: 'Usage: real vs plan' }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
+  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
   if (!A) return;
   S.profile = A.profile; S.canWrite = A.canWrite;
   try { var acts = await A.planner.list('actuals'); buildLP(acts.map(function (x) { return x.data; })); } catch (e) { /* no Line Planner access: forecast uses plan / average pace */ }
-  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'usage', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
+  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
   await loadDocs();
   if (!S.channel) S.channel = A.docs.subscribe(function () { loadDocs(); });
 })();
@@ -513,6 +513,8 @@ function invImportDialog(book, p) {
       S.inv.dirty = {};
       Promise.resolve(saveDoc('inventory', d)).then(function () { return syncForecastFromInventory(d.items, 'Inventory count ' + book.name); }).then(function (pl) {
         if (pl.missing.length) setTimeout(unitsToSheet, 200); else toast('Saved. The Overview now uses this count.');
+        if (ATIC.teamPost) { var cr = mg.items.filter(function (i) { return i.critical && !i.missing; }), nw = mg.changes.filter(function (c) { return c.critNew; }).map(function (c) { return c.name; });
+          ATIC.teamPost('📦', 'New inventory count ' + U.nice(date) + (INV.monthEnd(date) ? ' (closing of ' + INV.monthEnd(date).close + ')' : '') + ': ' + mg.items.filter(function (i) { return !i.missing; }).length + ' raw materials, ' + cr.length + ' critical' + (nw.length ? '. Newly critical: ' + nw.join(', ') : '') + '.', { href: 'materials.html#inventory', title: 'Inventory' }); }
       });
     };
   }
@@ -635,6 +637,7 @@ function receiveDialog(items, idx) {
         p = Promise.resolve(saveDoc('inventory', d));
       }
       p.then(function () { return saveDoc('orders', { items: list }); }).then(function () {
+        if (ATIC.teamPost) ATIC.teamPost('🚚', 'Received ' + (st.full || left2 <= 1e-9 ? 'in full: ' : 'part: ') + fmtN(recv2) + ' ' + it.unit + ' ' + it.name + (o.ref ? ' (' + o.ref + ')' : '') + (o.status === 'partial' ? '; ' + fmtN(left2) + ' still to come' : o.status === 'closed' ? '; order closed short' : '') + '.', { href: 'materials.html#orders', title: 'Orders & receiving' });
         toast(st.full || left2 <= 1e-9 ? 'Received in full and added to the inventory.' : 'Received ' + fmtN(recv2) + ' of ' + fmtN(rest) + (o.status === 'partial' ? '; the rest stays open.' : '; order closed short.'));
       });
     };
@@ -960,4 +963,5 @@ function vUsage(fc) {
 }
 after.usage = function () { var p = $('#usPer'); if (p) p.onchange = function () { S.us.period = p.value; render(); }; };
 /* the small Count vs production panel on the Stock page now points here */
-reconHTML = function () { return '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Count vs production</h3><p class="hint" style="margin:0">The full comparison (real use between counts, against the batches, and this month\'s plan) is on the <a href="#usage">Usage: real vs plan</a> tab.</p></div>'; };
+var SHOW_USAGE = false; /* the Usage: real vs plan tab is built but hidden for now; set true to bring it back (also add it to the tabs list at start-up) */
+if (SHOW_USAGE) reconHTML = function () { return '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Count vs production</h3><p class="hint" style="margin:0">The full comparison (real use between counts, against the batches, and this month\'s plan) is on the <a href="#usage">Usage: real vs plan</a> tab.</p></div>'; };

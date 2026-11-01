@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+.tm{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;height:calc(100vh - 150px);min-height:460px}
+.tm-side{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.tm-side h4{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:10px 8px 4px}
+.tm-ch{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;border-radius:10px;padding:8px 10px;font-size:14px;color:var(--ink);cursor:pointer}
+.tm-ch:hover{background:var(--surface-2)}.tm-ch[aria-current="true"]{background:var(--green-soft);color:var(--brand);font-weight:600}
+.tm-ch .av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:600 12px var(--f-display);background:var(--brand);color:var(--brand-ink);flex-shrink:0}
+.tm-ch .av.g{background:var(--gold);color:#1b1306}.tm-ch .n{margin-left:auto;font:600 11px var(--f-mono);background:var(--red);color:#fff;border-radius:10px;padding:1px 7px}
+.tm-main{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;min-height:0}
+.tm-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.tm-head h2{font-size:17px}.tm-list{flex:1;overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+.tm-day{align-self:center;font-size:12px;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:2px 12px}
+.tm-m{display:flex;gap:10px;max-width:80%}.tm-m .av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:600 12px var(--f-display);background:var(--surface-2);color:var(--ink);flex-shrink:0}
+.tm-m .bub{background:var(--surface-2);border-radius:4px 14px 14px 14px;padding:8px 12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.tm-m .meta{font-size:12px;color:var(--muted);margin-bottom:3px;display:flex;gap:8px;align-items:center}
+.tm-m.me{align-self:flex-end;flex-direction:row-reverse}.tm-m.me .bub{background:var(--brand);color:var(--brand-ink);border-radius:14px 4px 14px 14px}
+.tm-m.me .meta{justify-content:flex-end}.tm-m .del{border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0}
+.tm-m .bub a{color:inherit;text-decoration:underline}
+.share{display:flex;gap:10px;align-items:center;margin-top:6px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-decoration:none!important;white-space:normal}
+.share .ic{width:30px;height:30px;border-radius:8px;background:var(--green-soft);color:var(--brand);display:grid;place-items:center;flex-shrink:0}
+.share b{display:block;font-size:13.5px}.share small{color:var(--muted);font-size:12px}
+.tm-comp{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.tm-comp textarea{width:100%;resize:none;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background:var(--bg);color:var(--ink);min-height:44px;max-height:160px}
+.tm-comp .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tm-comp select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);max-width:260px}
+.tm-att{display:inline-flex;align-items:center;gap:6px;background:var(--green-soft);color:var(--brand);border-radius:999px;padding:3px 6px 3px 12px;font-size:13px;font-weight:600}
+.tm-att button{border:0;background:none;color:inherit;font-size:16px;cursor:pointer}
+.tm-kind{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}.tm-kind button{border:0;background:none;padding:6px 12px;font-size:13px;cursor:pointer;color:var(--ink)}.tm-kind button[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);font-weight:600}
+.tm-task{border-left:3px solid var(--gold);padding-left:8px;margin-bottom:4px;font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tm-m.me .tm-task{border-color:var(--brand-ink)}.tm-task.done .t{text-decoration:line-through;opacity:.7}.tm-task label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.tm-dec{display:inline-block;font:700 10.5px var(--f-mono);letter-spacing:.06em;background:var(--gold);color:#1b1306;border-radius:6px;padding:1px 6px;margin-bottom:4px}
+.tm-ev{align-self:stretch;display:flex;gap:10px;align-items:flex-start;background:var(--surface-2);border-radius:12px;padding:9px 12px;font-size:13.5px}
+.tm-ev .i{font-size:16px;line-height:1.2}.tm-ev .w{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
+.tasks{display:flex;flex-direction:column;gap:6px;margin:0 4px}.tasks a{font-size:13px;color:var(--ink);text-decoration:none;display:block;border:1px solid var(--line);border-radius:9px;padding:7px 9px;background:var(--bg)}
+.tasks a small{display:block;color:var(--muted);font-size:11.5px}.tasks a.late small{color:var(--red)}
+.tm-empty{margin:auto;text-align:center;color:var(--muted);max-width:340px}
+@media (max-width:860px){.tm{grid-template-columns:1fr;height:auto}.tm-side{flex-direction:row;overflow-x:auto}.tm-side h4{display:none}.tm-ch{width:auto;white-space:nowrap}.tm-main{height:70vh}}
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading Team…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/io.js"></script>
+<script>
+/* Team: one group chat for everyone with an account, direct messages between two people, and pages shared as cards.
+   Stored in planner_docs, collection "team", one row per message (so two people writing at once never overwrite each other).
+   Not private storage: every signed-in account can technically read every message. */
+(function () {
+  var A, me, T = { msgs: [], people: [], ch: 'group', att: null, chan: null, kind: 'msg', due: '', who: '' };
+  function $(s) { return document.querySelector(s); }
+  var esc = function (s) { return ATIC.esc(s); };
+  function initials(n) { return String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase(); }
+  function dmId(a, b) { return 'dm|' + [a, b].sort().join('|'); }
+  function nameOf(id) { if (id === me.id) return me.full_name || me.username; var p = T.people.filter(function (x) { return x.id === id; })[0]; if (p) return p.full_name || p.username; var m = T.msgs.filter(function (x) { return x.by === id; })[0]; return m ? m.byName : 'Someone'; }
+  function seenKey(ch) { return 'aticTeamSeen_' + me.id + '_' + ch; }
+  function getSeen(ch) { try { return localStorage.getItem(seenKey(ch)) || ''; } catch (e) { return ''; } }
+  function setSeen(ch, at) { try { localStorage.setItem(seenKey(ch), at); var all = T.msgs.reduce(function (m, x) { return x.at > m ? x.at : m; }, ''); localStorage.setItem('aticTeamSeen_' + me.id, all); } catch (e) {} }
+  function mine(m) { return m.ch === 'group' || m.ch === 'feed' || (m.ch || '').split('|').indexOf(me.id) > 0; }
+  function chTitle(ch) { return ch === 'group' ? 'Team · everyone' : ch === 'feed' ? 'Site activity' : nameOf(ch.split('|').slice(1).filter(function (x) { return x !== me.id; })[0] || me.id); }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function niceD(d) { return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); }
+  function unread(ch) { var s = getSeen(ch); return T.msgs.filter(function (m) { return m.ch === ch && m.by !== me.id && m.at > s; }).length; }
+  function when(at) { var d = new Date(at); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function dayOf(at) { var d = new Date(at), t = new Date(), y = new Date(Date.now() - 864e5); var k = function (x) { return x.toDateString(); }; return k(d) === k(t) ? 'Today' : k(d) === k(y) ? 'Yesterday' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); }
+  function linkify(t) { return esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+  function pageLabel(href) { var k = String(href || '').split('#')[0].split('?')[0]; var p = ATIC.PAGES.filter(function (x) { return x.href === k; })[0]; return p ? p.label : 'Page'; }
+  var ICON_PAGE = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM7 12v2h10v-2H7zm0 4v2h7v-2H7z"/></svg>';
+
+  function channels() {
+    var dms = {}; T.msgs.forEach(function (m) { if (m.ch !== 'group' && m.ch !== 'feed' && mine(m)) { var other = m.ch.split('|').slice(1).filter(function (x) { return x !== me.id; })[0] || me.id; dms[other] = 1; } });
+    T.people.forEach(function (p) { if (p.id !== me.id) dms[p.id] = 1; });
+    return Object.keys(dms);
+  }
+  function render() {
+    var title = chTitle(T.ch);
+    var openTasks = T.msgs.filter(function (m) { return m.task && !m.task.done && m.ch !== 'feed'; }).sort(function (a, b) { return (a.task.due || '9') < (b.task.due || '9') ? -1 : 1; });
+    var h = '<div class="top"><div><h1>Team</h1><div class="sub">Talk with everyone, message one person, and share pages from the site.</div></div></div>';
+    h += '<div class="tm"><nav class="tm-side" aria-label="Conversations"><h4>Group</h4>' +
+      '<button class="tm-ch" data-ch="group" aria-current="' + (T.ch === 'group') + '"><span class="av g">#</span>Team · everyone' + (unread('group') && T.ch !== 'group' ? '<span class="n">' + unread('group') + '</span>' : '') + '</button><h4>Direct messages</h4>' +
+      channels().map(function (id) { var ch = dmId(me.id, id), u = unread(ch); return '<button class="tm-ch" data-ch="' + esc(ch) + '" aria-current="' + (T.ch === ch) + '"><span class="av">' + esc(initials(nameOf(id))) + '</span>' + esc(nameOf(id)) + (u && T.ch !== ch ? '<span class="n">' + u + '</span>' : '') + '</button>'; }).join('') +
+      (channels().length ? '' : '<p class="small muted" style="margin:4px 10px">People appear here once they have an account (Admin page).</p>') +
+      '<h4>Site</h4><button class="tm-ch" data-ch="feed" aria-current="' + (T.ch === 'feed') + '"><span class="av g">⚡</span>Site activity' + (unread('feed') && T.ch !== 'feed' ? '<span class="n">' + unread('feed') + '</span>' : '') + '</button>' +
+      '<h4>Open tasks (' + openTasks.length + ')</h4><div class="tasks">' + (openTasks.length ? openTasks.slice(0, 12).map(function (m) { var late = m.task.due && m.task.due < today(); return '<a href="#" data-goto="' + esc(m.ch) + '"' + (late ? ' class="late"' : '') + '>' + esc((m.text || '').slice(0, 70)) + '<small>' + esc(m.task.who ? nameOf(m.task.who) : 'Anyone') + (m.task.due ? ' · due ' + niceD(m.task.due) + (late ? ' (late)' : '') : '') + '</small></a>'; }).join('') : '<p class="small muted" style="margin:0 6px">Turn any message into a task with an owner and a due date.</p>') + '</div></nav>';
+    h += '<section class="tm-main"><div class="tm-head"><h2>' + esc(title) + '</h2><span class="small muted">' + (T.ch === 'group' ? 'Ideas, decisions and tasks for everyone' : T.ch === 'feed' ? 'Posted by the site: counts, deliveries, actuals' : 'Just the two of you') + '</span></div><div class="tm-list" id="tmList">';
+    var list = T.msgs.filter(function (m) { return m.ch === T.ch; }).sort(function (a, b) { return a.at < b.at ? -1 : 1; });
+    if (!list.length) h += '<div class="tm-empty"><b>No messages yet.</b><br>Say hello, or share a page with the 📄 button below.</div>';
+    var lastDay = '';
+    list.forEach(function (m) {
+      var d = dayOf(m.at); if (d !== lastDay) { h += '<div class="tm-day">' + esc(d) + '</div>'; lastDay = d; }
+      if (m.kind === 'event') { h += '<div class="tm-ev"><span class="i">' + esc(m.icon || '⚡') + '</span><div>' + linkify(m.text || '') + (m.share ? ' <a href="' + esc(m.share.href) + '">Open</a>' : '') + '<div class="small muted">' + esc(m.byName || '') + '</div></div><span class="w">' + when(m.at) + '</span></div>'; return; }
+      var isMe = m.by === me.id, canDel = isMe || me.role === 'admin';
+      h += '<div class="tm-m' + (isMe ? ' me' : '') + '"><span class="av">' + esc(initials(m.byName)) + '</span><div><div class="meta"><b>' + esc(isMe ? 'You' : m.byName) + '</b><span>' + when(m.at) + '</span>' + (canDel ? '<button class="del" data-del="' + esc(m.id) + '">Delete</button>' : '') + '</div><div class="bub">' + (m.decision ? '<span class="tm-dec">DECISION</span><br>' : '') + (m.task ? '<div class="tm-task' + (m.task.done ? ' done' : '') + '"><label><input type="checkbox" data-done="' + esc(m.id) + '"' + (m.task.done ? ' checked' : '') + (A.canWrite ? '' : ' disabled') + '> <span class="t">Task</span></label><span>' + esc(m.task.who ? nameOf(m.task.who) : 'Anyone') + (m.task.due ? ' · due ' + niceD(m.task.due) : '') + (m.task.done ? ' · done by ' + esc(m.task.doneBy || '') : '') + '</span></div>' : '') + (m.text ? linkify(m.text) : '') +
+        (m.share ? '<a class="share" href="' + esc(m.share.href) + '"><span class="ic">' + ICON_PAGE + '</span><span><b>' + esc(m.share.title || pageLabel(m.share.href)) + '</b><small>' + esc(pageLabel(m.share.href)) + ' · open</small></span></a>' : '') + '</div></div></div>';
+    });
+    h += '</div><div class="tm-comp">';
+    if (T.ch === 'feed') h += '<p class="small muted" style="margin:0">The site posts here by itself: new inventory counts, deliveries received and Line Planner actuals.</p>';
+    else if (!A.canWrite) h += '<p class="small muted" style="margin:0">You have view access, so you can read the Team chat but not post. Ask Hasan for edit access.</p>';
+    else if (T.ch !== 'feed') {
+      var pages = ATIC.ordered(me).filter(function (p) { return p.key !== 'team'; });
+      h += (T.att ? '<div><span class="tm-att">📄 ' + esc(T.att.title) + '<button id="tmAttX" aria-label="Remove page">×</button></span></div>' : '') +
+        '<div class="row"><div class="tm-kind" role="group" aria-label="Type">' + [['msg', 'Idea / message'], ['task', 'Task'], ['decision', 'Decision']].map(function (k) { return '<button type="button" data-kind="' + k[0] + '" aria-pressed="' + (T.kind === k[0]) + '">' + k[1] + '</button>'; }).join('') + '</div>' +
+          (T.kind === 'task' ? '<select id="tmWho" aria-label="Owner"><option value="">Owner: anyone</option>' + T.people.map(function (p) { return '<option value="' + esc(p.id) + '"' + (T.who === p.id ? ' selected' : '') + '>' + esc(p.full_name || p.username) + (p.id === me.id ? ' (me)' : '') + '</option>'; }).join('') + '</select><input type="date" id="tmDue" value="' + esc(T.due) + '" aria-label="Due date" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)">' : '') + '</div>' +
+        '<textarea id="tmText" rows="1" placeholder="' + (T.kind === 'task' ? 'What needs to be done?' : T.kind === 'decision' ? 'What did we decide, and why?' : 'Share an idea… (Enter to send, Shift+Enter for a new line)') + '"></textarea>' +
+        '<div class="row"><select id="tmPage" aria-label="Share a page"><option value="">📄 Share a page…</option>' + pages.map(function (p) { return '<option value="' + p.href + '">' + esc(p.label) + '</option>'; }).join('') + '</select>' +
+        '<span class="small muted" style="margin-right:auto">Messages are visible to the team; keep private matters out.</span><button class="btn primary" id="tmSend">Send</button></div>';
+    }
+    h += '</div></section></div>';
+    $('#main').innerHTML = h;
+    var l = $('#tmList'); if (l) l.scrollTop = l.scrollHeight;
+    document.querySelectorAll('[data-kind]').forEach(function (b) { b.onclick = function () { T.kind = b.dataset.kind; var keep = ($('#tmText') || {}).value; render(); var x = $('#tmText'); if (x) { x.value = keep || ''; x.focus(); } }; });
+    var wh = $('#tmWho'); if (wh) wh.onchange = function () { T.who = wh.value; }; var du = $('#tmDue'); if (du) du.onchange = function () { T.due = du.value; };
+    document.querySelectorAll('[data-goto]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); T.ch = a.dataset.goto; render(); }; });
+    document.querySelectorAll('[data-done]').forEach(function (c) { c.onchange = async function () { var m = T.msgs.filter(function (x) { return x.id === c.dataset.done; })[0]; if (!m) return; var d = Object.assign({}, m); delete d.id; d.task = Object.assign({}, m.task, { done: c.checked, doneBy: c.checked ? (me.full_name || me.username) : '', doneAt: c.checked ? new Date().toISOString() : '' }); try { await ATIC.planner.set('team', m.id, d); m.task = d.task; render(); } catch (e) { ATIC.toast('Could not update: ' + (e.message || e)); c.checked = !c.checked; } }; });
+    var last = list[list.length - 1]; if (last) setSeen(T.ch, last.at);
+    document.querySelectorAll('[data-ch]').forEach(function (b) { b.onclick = function () { T.ch = b.dataset.ch; render(); var t = $('#tmText'); if (t) t.focus(); }; });
+    document.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = 'Click again to delete'; setTimeout(function () { b.textContent = 'Delete'; delete b.dataset.arm; }, 4000); return; } ATIC.planner.del('team', b.dataset.del).then(load).catch(function (e) { ATIC.toast('Could not delete: ' + (e.message || e)); }); }; });
+    var t = $('#tmText');
+    if (t) {
+      var grow = function () { t.style.height = 'auto'; t.style.height = Math.min(160, t.scrollHeight) + 'px'; };
+      t.oninput = grow;
+      t.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+      $('#tmSend').onclick = send;
+      $('#tmPage').onchange = function () { var v = this.value; if (!v) return; T.att = { href: v, title: pageLabel(v) }; render(); var x = $('#tmText'); if (x) x.focus(); };
+      var ax = $('#tmAttX'); if (ax) ax.onclick = function () { T.att = null; render(); };
+    }
+  }
+  async function send() {
+    var t = $('#tmText'), text = (t.value || '').trim(); if (!text && !T.att) return;
+    var at = new Date().toISOString(), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    var doc = { kind: 'msg', ch: T.ch, text: text.slice(0, 4000), by: me.id, byName: me.full_name || me.username, at: at };
+    if (T.ch === 'feed') { ATIC.toast('Site activity is written by the site. Post in Team · everyone.'); return; }
+    if (T.att) doc.share = T.att;
+    if (T.kind === 'task') doc.task = { who: T.who || '', due: T.due || '', done: false };
+    if (T.kind === 'decision') doc.decision = true;
+    $('#tmSend').disabled = true;
+    try { await ATIC.planner.set('team', id, doc); T.att = null; T.kind = 'msg'; T.due = ''; T.who = ''; T.msgs.push(Object.assign({ id: id }, doc)); render(); var x = $('#tmText'); if (x) x.focus(); }
+    catch (e) { ATIC.toast(/row-level|permission|42501/i.test(e.message || '') ? 'Not sent: this account cannot post. Ask Hasan for edit access.' : 'Not sent: ' + (e.message || e)); $('#tmSend').disabled = false; }
+  }
+  async function load() {
+    try { var rows = await ATIC.planner.list('team'); T.msgs = rows.map(function (r) { return Object.assign({ id: r.id }, r.data); }).filter(function (m) { return m && m.at && mine(m); }); }
+    catch (e) { ATIC.toast('Could not load messages: ' + (e.message || e)); }
+    var typing = document.activeElement && document.activeElement.id === 'tmText' ? document.activeElement.value : null;
+    render();
+    if (typing != null) { var x = $('#tmText'); if (x) { x.value = typing; x.focus(); } }
+  }
+  (async function () {
+    A = await ATIC.boot({ page: 'team' }); if (!A) return;
+    me = A.profile;
+    try { var r = await ATIC.sb.from('profiles').select('id,full_name,username,role'); if (!r.error && r.data) T.people = r.data; } catch (e) {}
+    // shared from another page: team.html?share=<page>&title=<title>
+    var q = new URLSearchParams(location.search);
+    if (q.get('share')) { T.att = { href: q.get('share'), title: q.get('title') || pageLabel(q.get('share')) }; history.replaceState(null, '', 'team.html'); }
+    await load();
+    ATIC.planner.subscribe(function (p) { var c = p && ((p.new && p.new.coll) || (p.old && p.old.coll)); if (!c || c === 'team') load(); });
+  })();
+})();
+</script>
+</body></html>

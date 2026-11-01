@@ -177,3 +177,6 @@ html,body{min-height:100%}
   .fgrid{grid-template-columns:1fr 1fr}
   .big{font-size:28px}
 }
+
+.rail nav a.p .chev{margin-left:auto;opacity:.7;font-size:12px}.rail nav a.p{display:flex;align-items:center;gap:4px}.rail nav .subs[hidden]{display:none}
+.rail nav a.p.ic{justify-content:flex-start}.rail nav a.p.ic .badge{margin-left:auto}

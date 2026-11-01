@@ -6,9 +6,11 @@
     { key: 'model', href: 'model.html', label: 'ATIC BETA 2.0', tag: '3D' },
     { key: 'materials', href: 'materials.html', label: 'Raw Materials' },
     { key: 'supply', href: 'supply.html', label: 'Supply Planner' },
+    { key: 'team', href: 'team.html', label: 'Team', icon: 'msg' },
     { key: 'admin', href: 'admin.html', label: 'Admin' }
   ];
   var ROLE = { admin: 'Admin', editor: 'Can edit', viewer: 'View only' };
+  var ICON_MSG = '<svg class="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:7px"><path fill="currentColor" d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 6v2h2V9H7zm4 0v2h2V9h-2zm4 0v2h2V9h-2z"/></svg>';
   var CFG = window.ATIC_CONFIG || {};
   var sb = (window.supabase && CFG.url) ? window.supabase.createClient(CFG.url, CFG.key) : null;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -46,8 +48,8 @@
     var h = '<div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>Planning &amp; forecasting</small></div></div><nav id="shellNav" aria-label="Sections">';
     ordered(p).forEach(function (x) {
       var on = x.key === A.page;
-      h += '<div class="part"><a class="p" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + '</a>';
-      if (on && A.subs.length) h += '<div class="subs">' + A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === cur ? ' aria-current="page"' : '') + '>' + esc(s.label) + (s.badge ? ' <span class="badge" id="sb_' + s.id + '"' + (s.badgeHidden ? ' hidden' : '') + '>' + esc(s.badge) + '</span>' : '') + '</a>'; }).join('') + '</div>';
+      h += '<div class="part"><a class="p' + (x.icon ? ' ic' : '') + '" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + (x.icon === 'msg' ? ICON_MSG : '') + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + (x.key === 'team' ? ' <span class="badge" id="teamBadge" hidden></span>' : '') + (on && A.subs.length ? '<span class="chev" aria-hidden="true">' + (subsClosed() ? '▸' : '▾') + '</span>' : '') + '</a>';
+      if (on && A.subs.length) h += '<div class="subs"' + (subsClosed() ? ' hidden' : '') + '>' + A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === cur ? ' aria-current="page"' : '') + '>' + esc(s.label) + (s.badge ? ' <span class="badge" id="sb_' + s.id + '"' + (s.badgeHidden ? ' hidden' : '') + '>' + esc(s.badge) + '</span>' : '') + '</a>'; }).join('') + '</div>';
       h += '</div>';
     });
     h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + ROLE[p.role] + '</span><button id="signOut" type="button">Sign out</button></div>';
@@ -61,12 +63,36 @@
     document.querySelectorAll('[data-sub]').forEach(function (a) { a.setAttribute('aria-current', a.dataset.sub === id ? 'page' : 'false'); });
   };
   A.badge = function (id, text) { var b = document.getElementById('sb_' + id); if (b) { b.textContent = text || ''; b.hidden = !text; } };
+  /* clicking the page you are on folds / unfolds its sub-tabs (remembered per page) */
+  function subsClosed() { try { return localStorage.getItem('aticRailClosed_' + A.page) === '1'; } catch (e) { return false; } }
+  function setSubsClosed(v) { try { localStorage.setItem('aticRailClosed_' + A.page, v ? '1' : '0'); } catch (e) {} }
   function drawRail() {
     var rail = $('#rail'); if (!rail) return;
     rail.innerHTML = railHTML();
     $('#signOut').onclick = A.signOut;
+    var cur = rail.querySelector('a.p[aria-current="page"]'), subs = cur && cur.parentNode.querySelector('.subs');
+    if (cur && subs) { cur.setAttribute('aria-expanded', !subs.hidden); cur.onclick = function (e) { e.preventDefault(); subs.hidden = !subs.hidden; setSubsClosed(subs.hidden); cur.setAttribute('aria-expanded', !subs.hidden); var c = cur.querySelector('.chev'); if (c) c.textContent = subs.hidden ? '▸' : '▾'; }; }
     var bar = $('#subbar'); if (bar) { bar.innerHTML = subbarHTML(); bar.hidden = !A.subs.length; }
+    teamBadge();
   }
+  async function teamBadge() {
+    var b = document.getElementById('teamBadge'); if (!b || A.page === 'team' || !A.profile) return;
+    try {
+      var seen = ''; try { seen = localStorage.getItem('aticTeamSeen_' + A.profile.id) || ''; } catch (e) {}
+      var r = await sb.from('planner_docs').select('id,data').eq('coll', 'team'); if (r.error) return;
+      var me = A.profile.id, n = r.data.filter(function (x) { var d = x.data || {}; return d.at > seen && d.by !== me && (d.ch === 'group' || (d.ch || '').split('|').indexOf(me) >= 0 || (d.ch || '').indexOf(me) >= 0); }).length;
+      b.textContent = n > 99 ? '99+' : String(n); b.hidden = !n;
+    } catch (e) {}
+  }
+  A.teamBadge = teamBadge;
+  /* the site posts its own events to Team → Site activity (never blocks the page if it fails) */
+  A.teamPost = function (icon, text, share) {
+    try {
+      if (!A.profile || !A.canWrite) return;
+      var id = 'ev' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      A.planner.set('team', id, { kind: 'event', ch: 'feed', icon: icon, text: text, share: share || null, by: A.profile.id, byName: A.profile.full_name || A.profile.username, at: new Date().toISOString() }).catch(function () {});
+    } catch (e) {}
+  };
   window.addEventListener('hashchange', function () { A.setSub(curSub()); });
 
   A.signOut = async function () { try { await sb.auth.signOut(); } catch (e) {} location.replace('index.html'); };
