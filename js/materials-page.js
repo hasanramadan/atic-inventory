@@ -1358,3 +1358,23 @@ function seedManualPace() {
   S.saved.settings = v; saveDoc('settings', v);
 }
 (function waitPace() { if (window.ATIC && ATIC.profile && BASE && S.saved && run.cache) ATIC.whenShown(function () { setTimeout(seedManualPace, 500); }); else setTimeout(waitPace, 300); })();
+/* "Used on <day>": always list what is behind the number: product · section · batches → amount (and any correction by hand) */
+function usedLines(model, d, matId) {
+  var x = dcDay(d), out = [];
+  Object.keys(x.batches || {}).forEach(function (k) {
+    var q = k.split('|'), b = Number(x.batches[k]) || 0, per = Number((((model.recipes[q[0]] || {})[q[1]]) || {})[matId]) || 0;
+    if (b && per) out.push({ p: q[0], s: q[1] === 'SEC-1' ? 'S1' : 'S2', b: b, q: b * per });
+  });
+  var a = Number((x.adj || {})[matId]) || 0; if (a) out.push({ hand: true, q: a });
+  return out.sort(function (u, v) { return v.q - u.q; });
+}
+(function () {
+  var _card5 = card;
+  card = function (r) {
+    var h = _card5(r), fc = run.cache, d = lastActualDay(); if (!fc || !d) return h;
+    var ls = usedLines(fc.model, d, r.id); if (!ls.length) return h;
+    var sp = '<span class="bysplit">' + ls.map(function (l) { return '<span>' + (l.hand ? 'by hand ' + (l.q > 0 ? '+' : '') + fmtN(l.q) : esc(l.p) + ' ' + l.s + ' · ' + fmtN(l.b) + ' batches → ' + fmtN(l.q)) + '</span>'; }).join('') + '</span>';
+    // replace whatever split was there with the full lines
+    return h.replace(/(<dt[^>]*>Used on [^<]*<\/dt><dd>[^<]*)(?:<span class="bysplit">[\s\S]*?<\/span><\/span>)?(<\/dd>)/, '$1' + sp + '$2');
+  };
+})();
