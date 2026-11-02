@@ -1215,3 +1215,52 @@ function paceNote(fc) {
   };
   after.stock = function (fc) { _aS(fc); document.querySelectorAll('[data-pace]').forEach(function (b) { b.onclick = function () { var v = Object.assign({}, S.saved.settings || {}, { pace: b.dataset.pace }); S.saved.settings = v; saveDoc('settings', v); }; }); };
 })();
+
+/* ---------- per day + approximate batches, everywhere the forecast shows use ---------- */
+function btTxt(o, digits) { return Object.keys(o || {}).filter(function (p) { return o[p] > 0.05; }).sort(function (a, b) { return o[b] - o[a]; }).map(function (p) { return p + ' ≈ ' + fmtN(o[p]); }).join(' · '); }
+function periodBatches(fc, from, to) { var o = {}; Object.keys(fc.dayBatches || {}).forEach(function (d) { if (d >= from && d <= to) Object.keys(fc.dayBatches[d]).forEach(function (p) { o[p] = (o[p] || 0) + fc.dayBatches[d][p]; }); }); return o; }
+function perBatchOf(fc, matId, p) { // average amount of this material per batch of product p over the period's batches (both sections)
+  var r = fc.model.recipes[p] || {}, a = Number((r['SEC-1'] || {})[matId]) || 0, b = Number((r['SEC-2'] || {})[matId]) || 0; return a && b ? (a + b) / 2 : (a || b);
+}
+(function () {
+  // Forecast: header line with the batches behind the period, and "≈ N batches" next to each product's share
+  var _vF3 = vForecast;
+  vForecast = function (fc) {
+    var h = _vF3(fc), until = horizonDate(), pb = periodBatches(fc, TODAY, until), nd = 0;
+    for (var d = TODAY; d <= until; d = U.addDays(d, 1)) if (new Date(d + 'T00:00:00Z').getUTCDay() !== 5) nd++;
+    var line = '<p class="small" style="margin:0 0 10px"><b>Batches behind this forecast, ' + U.nice(TODAY) + ' – ' + U.nice(until) + '</b> (' + nd + ' working days): ' + (btTxt(pb) || 'none') + ' · per working day ≈ ' + (btTxt(fc.paceBatchesDay) || '–') + '.</p>';
+    h = h.replace(/(Click a material to see it day by day\.<\/p>)/, '$1' + line);
+    // "GM 572" → "GM 572 (≈ 44 bt)"
+    fc.results.forEach(function (r) {
+      Object.keys(pb).forEach(function (p) {
+        var per = perBatchOf(fc, r.id, p); if (!per) return;
+        var re = new RegExp('(data-fm="' + r.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[\\s\\S]*?<span class="bysplit">[\\s\\S]*?<span>' + p + ' [^<]*)(</span>)');
+        h = h.replace(re, '$1 <i>(≈ ' + fmtN(pb[p]) + ' bt)</i>$2');
+      });
+    });
+    return h;
+  };
+  // Overview card: "Use per day" with the batches per day behind it
+  var _card3 = card;
+  card = function (r) {
+    var h = _card3(r), fc = run.cache; if (!fc) return h;
+    var bt = {}; Object.keys(r.perDayBy || {}).forEach(function (p) { if (r.perDayBy[p] > 0) bt[p] = (fc.paceBatchesDay || {})[p] || 0; });
+    var sub = Object.keys(bt).length ? '<span class="bysplit">' + Object.keys(bt).sort(function (a, b) { return r.perDayBy[b] - r.perDayBy[a]; }).map(function (p) { return '<span>' + p + ' ' + fmtN(r.perDayBy[p]) + ' · ≈ ' + fmtN(bt[p]) + ' batches/day</span>'; }).join('') + '</span>' : '';
+    return h.replace(/<dt>Use per week<\/dt><dd>[\s\S]*?<\/dd>/, '<dt title="A normal working day (Sun–Thu). Per week: ' + fmtN(r.weekly) + '">Use per day</dt><dd>' + fmtN(r.perDay || 0) + sub + '</dd>');
+  };
+  // material page: per day next to per week
+  var _vM2 = vMaterial;
+  vMaterial = function (fc) {
+    var h = _vM2(fc), r = fc.results.filter(function (x) { return x.id === S.mat; })[0]; if (!r) return h;
+    var bt = Object.keys(r.perDayBy || {}).filter(function (p) { return r.perDayBy[p] > 0; }).map(function (p) { return p + ' ≈ ' + fmtN((fc.paceBatchesDay || {})[p] || 0) + ' batches'; }).join(' · ');
+    return h.replace(/(<div class="kpi"><span class="l">Use per week<\/span>)/, '<div class="kpi"><span class="l">Use per day</span><span class="v num">' + fmtN(r.perDay || 0) + '</span><span class="small muted">' + esc(bt || 'normal working day') + '</span></div>$1');
+  };
+})();
+/* material page: "Stock now" = estimated left now, with the exact count under it (same numbers as the Overview card) */
+(function () {
+  var _vM3 = vMaterial;
+  vMaterial = function (fc) {
+    var h = _vM3(fc), r = fc.results.filter(function (x) { return x.id === S.mat; })[0], n = r && stockNumbers(r); if (!n) return h;
+    return h.replace(/<span class="l">Stock now<\/span><span class="v num">[^<]*<\/span><span class="small muted">[^<]*<\/span>/, '<span class="l">Est. left now</span><span class="v num">' + fmtN(Math.max(0, n.left)) + '</span><span class="small muted">counted ' + fmtN(n.counted) + ' on ' + U.nice(n.asOf) + ' · used ' + fmtN(n.used) + (n.received ? ' · received ' + fmtN(n.received) : '') + '</span>');
+  };
+})();

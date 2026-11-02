@@ -196,6 +196,7 @@
         var uu = useOn(m, mat.id, avgItems); weekly += uu.total;
         Object.keys(uu.by).forEach(function (p) { byProd[p] = (byProd[p] || 0) + uu.by[p]; });
       }
+      var pd = useOn(m, mat.id, paceItems(m, 1, avg, sc)), ps = useOn(m, mat.id, paceItems(m, 6, avg, sc));
       var safety = weekly * mat.safetyWeeks;
       var daily = [], weeks = [], cur = opening, runOut = null, belowSafety = null, firstWeekPlan = null;
       for (var w = 0; w < HORIZON / 7; w++) {
@@ -233,7 +234,7 @@
       var res = {
         id: mat.id, name: mat.name, unit: mat.unit, note: mat.note, active: active, status: status,
         stockCounted: Number(st.qty) || 0, countedOn: st.asOf, actualSince: actualSince, countSource: st.source, usedSinceCount: gap, rollFrom: rollFrom,
-        stockNow: stockNow, weekly: weekly, byProduct: byProd, safety: safety, weeksCover: weeksCover,
+        stockNow: stockNow, weekly: weekly, byProduct: byProd, perDay: pd.total, perDayBy: pd.by, perSat: ps.total, safety: safety, weeksCover: weeksCover,
         runOut: runOut, belowSafety: belowSafety, orderBy: orderBy, daysToOrder: daysToOrder,
         lead: lead, arrivalIfOrderedToday: { earliest: addDays(today, lead.min), latest: arrival },
         suggestedQty: suggested, openOrders: openOrders, weeks: weeks, daily: daily, firstWeekPlan: firstWeekPlan, topProducts: top
@@ -241,9 +242,12 @@
       res.why = explain(res, m, today);
       return res;
     });
+    var dayBatches = {};
+    for (var q = 0; q < HORIZON; q++) { var dq = addDays(start, q), bt = {}; items(dq).forEach(function (it) { bt[it.product] = (bt[it.product] || 0) + it.batches; }); dayBatches[dq] = bt; }
+    var paceBt = function (d) { var o = {}; paceItems(m, d, avg, sc).forEach(function (it) { o[it.product] = (o[it.product] || 0) + it.batches; }); return o; };
     var rank = { order: 0, soon: 1, ok: 2, idle: 3 };
     results.sort(function (a, b) { return (rank[a.status] - rank[b.status]) || ((a.daysToOrder == null ? 1e9 : a.daysToOrder) - (b.daysToOrder == null ? 1e9 : b.daysToOrder)); });
-    return { today: today, weekStart: start, avg: avg, model: m, scenario: sc, results: results, pace: useRecent(m) ? 'recent' : 'history', recentPace: m.recentPace };
+    return { today: today, weekStart: start, avg: avg, model: m, scenario: sc, results: results, pace: useRecent(m) ? 'recent' : 'history', recentPace: m.recentPace, dayBatches: dayBatches, paceBatchesDay: paceBt(1), paceBatchesSat: paceBt(6) };
   }
 
   var PNAME = { GM: 'Grenadine Molasses', BW: 'Blossom Water', RW: 'Rose Water', LS: 'Lemon Substitute', WV: 'White Vinegar' };
@@ -263,7 +267,7 @@
     if (age > 14) out.push('This count is ' + age + ' days old. Update it on the Stock page for a sharper forecast.');
     if (r.stockNow < 0) out.push('The estimate is below zero, which usually means stock arrived that is not recorded yet, or the material is no longer used. Please recount.');
     var parts = r.topProducts.slice(0, 2).map(function (p) { return PNAME[p] + ' ' + Math.round(100 * r.byProduct[p] / r.weekly) + '%'; });
-    out.push('Normal use is about ' + fmt(r.weekly, r.unit) + ' a week (' + parts.join(', ') + '), based on the last ' + (m.settings.basisWeeks === 'all' ? 'Jan–Sep' : m.settings.basisWeeks + ' full weeks') + ' of production.');
+    out.push('Normal use is about ' + fmt(r.perDay || 0, r.unit) + ' a working day, ' + fmt(r.weekly, r.unit) + ' a week (' + parts.join(', ') + '), based on the last ' + (m.settings.basisWeeks === 'all' ? 'Jan–Sep' : m.settings.basisWeeks + ' full weeks') + ' of production.');
     if (r.firstWeekPlan) out.push('The factory plan for the week of ' + nice(r.firstWeekPlan.week) + ' needs ' + fmt(r.firstWeekPlan.use, r.unit) + '.');
     if (r.runOut) out.push('At this pace it runs out around ' + nice(r.runOut) + (r.weeksCover != null ? ' (about ' + round(r.weeksCover, 1) + ' weeks of cover).' : '.'));
     else out.push('Stock lasts beyond the 26-week horizon.');
