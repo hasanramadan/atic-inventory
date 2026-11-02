@@ -1333,15 +1333,18 @@ function lastActualDay() {
   var _card4 = card;
   card = function (r) {
     var h = _card4(r), fc = run.cache; if (!fc) return h;
-    var d = lastActualDay(), used = d ? (dcUse(fc.model, dcDay(d))[r.id] || 0) : null;
-    var row = '<dt title="Real use that day: batches made (Line Planner) × recipe, with any corrections from Daily consumption">' + (d ? 'Used on ' + U.nice(d) : 'Used on last day') + '</dt><dd>' + (d ? fmtN(used) : '–') + '</dd>';
+    var d = lastActualDay(), by = {}, used = d ? (dcUse(fc.model, dcDay(d), by)[r.id] || 0) : null;
+    var parts = d ? Object.keys(by[r.id] || {}).filter(function (p) { return Math.abs(by[r.id][p]) > 1e-9; }) : [];
+    var split = parts.length > 1 ? '<span class="bysplit">' + parts.sort(function (a, b) { return by[r.id][b] - by[r.id][a]; }).map(function (p) { return '<span>' + (p === 'hand' ? 'by hand' : esc(PN[p] || p)) + ' ' + fmtN(by[r.id][p]) + '</span>'; }).join('') + '</span>' : '';
+    var row = '<dt title="Real use that day: batches made (Line Planner) × recipe, with any corrections from Daily consumption">' + (d ? 'Used on ' + U.nice(d) : 'Used on last day') + '</dt><dd>' + (d ? fmtN(used) : '–') + split + '</dd>';
     return h.replace(/<dt[^>]*>Use per day<\/dt><dd>[\s\S]*?<\/dd>/, row).replace(/<dt[^>]*>Use per week<\/dt><dd>[\s\S]*?<\/dd>/, row);
   };
   var _vM4 = vMaterial;
   vMaterial = function (fc) {
     var h = _vM4(fc), d = lastActualDay(); if (!d) return h;
-    var used = dcUse(fc.model, dcDay(d))[S.mat] || 0;
-    return h.replace(/<div class="kpi"><span class="l">Use per day<\/span>[\s\S]*?<\/div>/, '<div class="kpi"><span class="l">Used on ' + U.nice(d) + '</span><span class="v num">' + fmtN(used) + '</span><span class="small muted">batches made × recipe</span></div>');
+    var by = {}, used = dcUse(fc.model, dcDay(d), by)[S.mat] || 0, b = by[S.mat] || {};
+    var sp = Object.keys(b).filter(function (p) { return Math.abs(b[p]) > 1e-9; }).map(function (p) { return (p === 'hand' ? 'by hand' : (PN[p] || p)) + ' ' + fmtN(b[p]); }).join(' · ');
+    return h.replace(/<div class="kpi"><span class="l">Use per day<\/span>[\s\S]*?<\/div>/, '<div class="kpi"><span class="l">Used on ' + U.nice(d) + '</span><span class="v num">' + fmtN(used) + '</span><span class="small muted">' + esc(sp || 'batches made × recipe') + '</span></div>');
   };
 })();
 /* the pace you asked for: GM 13 batches a day on Section 2 only (set once; Section 1 keeps its other products from the recent Line Planner pace). Change it on Forecast & plan → "Set by me". */
