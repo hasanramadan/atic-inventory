@@ -75,8 +75,9 @@ function daysToRuns(days) {
     var p = k.split('|'), ds = by[k].filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(), start = ds[0], prev = ds[0], sat = 'none';
     function close(end) {
       var cs = days.filter(function (x) { return x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end && x.cartons > 0; }).map(function (x) { return x.cartons; });
-      var ct = !cs.length ? null : cs.every(function (v) { return v === cs[0]; }) ? cs[0] : cs.reduce(function (a, b) { return a + b; }, 0);
-      runs.push({ product: p[0], size: p[3] || '', from: start, to: end, lines: p[1], sat: sat, batches: p[2] ? +p[2] : null, cartons: ct }); }
+      var same = cs.length && cs.every(function (v) { return v === cs[0]; }), dcm = null;
+      if (cs.length && !same) { dcm = {}; days.forEach(function (x) { if (x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end && x.cartons > 0) dcm[x.date] = x.cartons; }); }
+      runs.push({ product: p[0], size: p[3] || '', from: start, to: end, lines: p[1], sat: sat, batches: p[2] ? +p[2] : null, cartons: same ? cs[0] : null, dayCartons: dcm }); }
     ds.forEach(function (d, i) {
       if (i && U.diffDays(prev, d) > 2) { close(prev); start = d; sat = 'none'; }
       if (new Date(d + 'T00:00:00Z').getUTCDay() === 6) sat = p[1];
