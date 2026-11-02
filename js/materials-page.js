@@ -1113,3 +1113,65 @@ function invEstimate(fc, it) {
   if (lines.length > 1) { if (lines[0].id !== it.id) return { shared: true }; return { v: v / it.toApp, shared: false, multi: lines.length, unit: r.unit, app: v }; }
   return { v: v / it.toApp };
 }
+
+/* ---------- any raw inventory line can become a recipe ingredient (a new forecast material) ---------- */
+function addInvMaterial(itemId) {
+  var it = invById(itemId); if (!it) return Promise.resolve(null);
+  if (!S.canWrite) { toast('You have view access. Ask your admin for edit access.'); return Promise.resolve(null); }
+  var id = 'inv-' + INV.slug(it.name).slice(0, 40), unit = INV.unitWord(it.unit) || 'kg', pack = it.pack || INV.parsePack(it.packTxt);
+  var all = (run.cache ? run.cache.model.materials : BASE.materials); if (all.some(function (m) { return m.id === id; })) id += '-' + Date.now().toString(36).slice(-3);
+  // recipe in kg (or L) when the pack says so (e.g. 25 kg/bag): the stock stays in the counted unit
+  var x = { id: id, name: it.name.replace(/\s+/g, ' ').trim(), unit: unit, recipeUnit: unit, recipeFactor: 1, fromInventory: it.id, added: TODAY };
+  if (pack && pack.size && (pack.of === 'kg' || pack.of === 'l') && unit !== pack.of) { x.recipeUnit = pack.of; x.recipeFactor = pack.size; }
+  var mats = JSON.parse(JSON.stringify(S.saved.materials || { items: {} })); mats.items = mats.items || {}; mats.extra = (mats.extra || []).concat([x]);
+  var d = JSON.parse(JSON.stringify(invDoc())); d.items.forEach(function (i) { if (i.id === it.id || (i.cat === 'raw' && !i.mat && INV.norm(i.name) === INV.norm(it.name))) { i.mat = id; i.toApp = INV.unitWord(i.unit) === unit ? 1 : null; } });
+  return Promise.resolve(saveDoc('materials', mats)).then(function () { return saveDoc('inventory', d); }).then(function () { return syncForecastFromInventory(d.items, 'Added from the inventory: ' + x.name); }).then(function () { return id; });
+}
+/* every save of the materials list keeps the materials added from the inventory */
+(function () {
+  var _sd = saveDoc;
+  saveDoc = function (name, data) {
+    if (name === 'materials' && data && data.extra === undefined && S.saved.materials && S.saved.materials.extra) data = Object.assign({}, data, { extra: S.saved.materials.extra });
+    return _sd(name, data);
+  };
+})();
+
+
+/* ---------- which product each material is used for: Forecast table, Overview cards, material page ---------- */
+function bySplit(by, total, opts) { // "GM 400 · LS 68" (or percentages)
+  var k = Object.keys(by || {}).filter(function (p) { return Math.abs(by[p]) > 1e-9; }).sort(function (a, b) { return by[b] - by[a]; });
+  if (!k.length) return '';
+  return '<span class="bysplit">' + k.map(function (p) { return '<span>' + esc(p) + ' ' + (opts && opts.pct && total > 0 ? Math.round(by[p] / total * 100) + '%' : fmtN(by[p])) + '</span>'; }).join('') + '</span>';
+}
+(function () {
+  // Forecast page: "Will use" split by product for the chosen period
+  var _vF = vForecast;
+  vForecast = function (fc) {
+    var h = _vF(fc), until = horizonDate();
+    fc.results.forEach(function (r) {
+      var by = {}; (r.daily || []).forEach(function (x) { if (x.date >= TODAY && x.date <= until) Object.keys(x.by || {}).forEach(function (p) { by[p] = (by[p] || 0) + x.by[p]; }); });
+      var sp = bySplit(by); if (!sp) return;
+      var re = new RegExp('(<tr class="pick[^"]*" data-fm="' + r.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '">(?:<td[^>]*>.*?</td>){2}<td class="n">[^<]*)(</td>)');
+      h = h.replace(re, '$1' + sp + '$2');
+    });
+    return h;
+  };
+  // Overview card: "Use per week" with each product's share
+  var _card2 = card;
+  card = function (r) {
+    var h = _card2(r), sp = bySplit(r.byProduct, r.weekly, { pct: Object.keys(r.byProduct || {}).length > 1 });
+    if (sp && Object.keys(r.byProduct || {}).filter(function (p) { return r.byProduct[p] > 1e-9; }).length > 1) h = h.replace(/(<dt>Use per week<\/dt><dd>[^<]*)(<\/dd>)/, '$1' + sp + '$2');
+    return h;
+  };
+  // material page: weekly table use split
+  var _vM = vMaterial;
+  vMaterial = function (fc) {
+    var h = _vM(fc), r = fc.results.filter(function (x) { return x.id === S.mat; })[0]; if (!r) return h;
+    var sp = bySplit(r.byProduct, r.weekly); if (sp) h = h.replace(/(<span class="l">Use per week<\/span><span class="v num">[^<]*<\/span>)/, '$1' + sp);
+    (r.weeks || []).slice(0, 16).forEach(function (w) {
+      var s2 = Object.keys(w.by || {}).filter(function (p) { return w.by[p] > 1e-9; }).length > 1 ? bySplit(w.by) : ''; if (!s2) return;
+      h = h.replace('<td>' + U.nice(w.start) + ' – ' + U.nice(U.addDays(w.start, 6)) + '</td><td class="n">' + fmtN(w.opening) + '</td><td class="n">' + fmtN(w.use), '<td>' + U.nice(w.start) + ' – ' + U.nice(U.addDays(w.start, 6)) + '</td><td class="n">' + fmtN(w.opening) + '</td><td class="n">' + fmtN(w.use) + s2);
+    });
+    return h;
+  };
+})();

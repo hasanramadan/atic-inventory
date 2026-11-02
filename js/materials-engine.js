@@ -50,6 +50,11 @@
     saved = saved || {};
     var m = clone(base);
     var mat = (saved.materials && saved.materials.items) || {};
+    /* raw materials added from the Inventory (not in the Jan–Sep baseline): same defaults as the others */
+    ((saved.materials && saved.materials.extra) || []).forEach(function (x) {
+      if (!x || !x.id || m.materials.some(function (y) { return y.id === x.id; })) return;
+      m.materials.push(Object.assign({ unit: 'kg', recipeUnit: x.unit || 'kg', recipeFactor: 1, leadMinDays: 60, leadMaxDays: 90, safetyWeeks: 2, orderCoverWeeks: 8, note: 'Added from the inventory' }, x));
+    });
     m.materials.forEach(function (x) { if (mat[x.id]) Object.assign(x, mat[x.id]); });
     if (saved.recipes && saved.recipes.recipes) {
       var r = saved.recipes.recipes;
@@ -182,21 +187,21 @@
       var safety = weekly * mat.safetyWeeks;
       var daily = [], weeks = [], cur = opening, runOut = null, belowSafety = null, firstWeekPlan = null;
       for (var w = 0; w < HORIZON / 7; w++) {
-        var ws = addDays(start, w * 7), open = cur, use = 0, rec = 0, fromPlan = (m.plan.weeks || []).indexOf(ws) >= 0, planUse = 0;
+        var ws = addDays(start, w * 7), open = cur, use = 0, rec = 0, wby = {}, fromPlan = (m.plan.weeks || []).indexOf(ws) >= 0, planUse = 0;
         for (var j = 0; j < 7; j++) {
           var day = addDays(ws, j);
           if (day <= st.asOf) { daily.push({ date: day, use: 0, received: 0, closing: cur, planned: false, beforeCount: true }); continue; } // already inside the count
           var r = useOn(m, mat.id, items(day)); r = { total: r.total + adjOn(m, mat.id, day), by: r.by };
           m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === day) { cur += Number(o.qty) || 0; rec += Number(o.qty) || 0; } });
-          cur -= r.total; use += r.total;
+          cur -= r.total; use += r.total; Object.keys(r.by || {}).forEach(function (p) { wby[p] = (wby[p] || 0) + r.by[p]; });
           var recD = 0; m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === day) recD += Number(o.qty) || 0; });
-          daily.push({ date: day, use: r.total, received: recD, closing: cur, planned: (m.plan.from && day >= m.plan.from && day <= m.plan.to) || fromPlan });
+          daily.push({ date: day, use: r.total, by: r.by, received: recD, closing: cur, planned: (m.plan.from && day >= m.plan.from && day <= m.plan.to) || fromPlan });
           if (fromPlan) planUse += r.total;
           if (day >= today && runOut === null && cur <= 0 && weekly > 0) runOut = day;
           if (day >= today && belowSafety === null && cur < safety && weekly > 0) belowSafety = day;
         }
         if (fromPlan && firstWeekPlan === null) firstWeekPlan = { week: ws, use: planUse };
-        weeks.push({ start: ws, opening: open, use: use, received: rec, closing: cur, fromPlan: fromPlan });
+        weeks.push({ start: ws, opening: open, use: use, by: wby, received: rec, closing: cur, fromPlan: fromPlan });
       }
       var active = weekly > 0 || weeks.some(function (x) { return x.use > 0; });
       var orderBy = belowSafety ? addDays(belowSafety, -lead.max) : null;

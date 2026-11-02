@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="css/app.css">
-<style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
+<style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
 .ofc{background:var(--brand);color:var(--brand-ink);border-radius:999px;font-size:11px;padding:1px 7px}
@@ -369,7 +369,8 @@ function vRecipes(fc) {
   h += accessNote(); h += lastSaved('recipes');
   m.products.forEach(function (p) {
     var r = m.recipes[p.id] || {}, given = Object.assign({}, (BASE.recipes || {})[p.id] || {}, raw[p.id] || {});
-    var used = m.materials.filter(function (x) { return ['SEC-1', 'SEC-2'].some(function (s) { return (r[s] || {})[x.id]; }); });
+    var pend = ((S.recAdd || {})[p.id]) || [];
+    var used = m.materials.filter(function (x) { return pend.indexOf(x.id) >= 0 || ['SEC-1', 'SEC-2'].some(function (s) { return (r[s] || {})[x.id]; }); });
     h += '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:17px">' + PN[p.id] + '</h3><span class="small muted">Per batch</span></div><div class="tablewrap"><table><thead><tr><th>Material</th><th>Unit</th><th class="n">Section 1</th><th class="n">Section 2</th></tr></thead><tbody>';
     used.forEach(function (x) {
       var f = x.recipeFactor || 1;
@@ -379,7 +380,10 @@ function vRecipes(fc) {
           return '<td class="n"><input type="number" step="any" min="0" id="r_' + p.id + '_' + s + '_' + x.id + '" data-p="' + p.id + '" data-s="' + s + '" data-m="' + x.id + '" value="' + +(v * f).toFixed(3) + '"' + (own ? '' : ' style="border-style:dashed" title="Not set for this section: uses the other section\'s amount"') + '>' + (own ? '' : '<br><span class="small muted">same as the other section</span>') + '</td>';
         }).join('') + '</tr>';
     });
-    h += '<tr><td colspan="4"><select id="add_' + p.id + '" data-p="' + p.id + '"><option value="">+ Add a material to this recipe</option>' + m.materials.filter(function (x) { return used.indexOf(x) < 0; }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join('') + '</select></td></tr>';
+    var tracked = m.materials.filter(function (x) { return used.indexOf(x) < 0; });
+    var invOnly = (typeof invItems === 'function' ? invItems() : []).filter(function (i) { return i.cat === 'raw' && !i.missing && !i.mat; });
+    h += '<tr><td colspan="4"><select id="add_' + p.id + '" data-p="' + p.id + '"><option value="">+ Add a material to this recipe</option><optgroup label="Raw materials in the forecast">' + tracked.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join('') + '</optgroup>' +
+      (invOnly.length ? '<optgroup label="More from the inventory">' + invOnly.map(function (i) { return '<option value="inv:' + esc(i.id) + '">' + esc(i.name) + (i.packTxt ? ' · ' + esc(i.packTxt) : '') + '</option>'; }).join('') + '</optgroup>' : '') + '</select></td></tr>';
     h += '</tbody></table></div></div>';
   });
   h += '<div class="row"><button class="btn primary" id="saveRec">Save recipes</button><span class="hint">Every product made that day takes its own share: Grenadine Molasses and Lemon Substitute on the same day both use salt.</span></div>';
@@ -388,13 +392,18 @@ function vRecipes(fc) {
 after.recipes = function (fc) {
   document.querySelectorAll('select[data-p]').forEach(function (sel) {
     sel.onchange = function () {
-      if (!sel.value) return; var rec = collectRec(fc); rec[sel.dataset.p] = rec[sel.dataset.p] || {};
-      ['SEC-1', 'SEC-2'].forEach(function (s) { rec[sel.dataset.p][s] = rec[sel.dataset.p][s] || {}; rec[sel.dataset.p][s][sel.value] = 0.0001; });
-      S.saved.recipes = { recipes: rec }; render();
+      if (!sel.value) return;
+      var pid = sel.dataset.p, typed = recTyped();
+      function addRow(id) { S.recAdd = S.recAdd || {}; (S.recAdd[pid] = S.recAdd[pid] || []).push(id); render(); recRestore(typed); var i = document.getElementById('r_' + pid + '_SEC-1_' + id); if (i) i.focus(); }
+      if (sel.value.indexOf('inv:') === 0) { addInvMaterial(sel.value.slice(4)).then(function (id) { if (id) { addRow(id); toast('Added. Type the amount per batch for each section, then Save recipes.'); } }); return; }
+      addRow(sel.value);
     };
   });
-  $('#saveRec').onclick = function () { saveDoc('recipes', { recipes: collectRec(fc), updatedAt: new Date().toISOString() }); };
+  $('#saveRec').onclick = function () { var rec = collectRec(fc); S.recAdd = {}; saveDoc('recipes', { recipes: rec, updatedAt: new Date().toISOString() }); };
 };
+/* keep what was typed when the page redraws (adding a row) */
+function recTyped() { var o = {}; document.querySelectorAll('input[data-m][data-p]').forEach(function (i) { o[i.id] = i.value; }); return o; }
+function recRestore(o) { Object.keys(o || {}).forEach(function (k) { var i = document.getElementById(k); if (i) i.value = o[k]; }); }
 function collectRec(fc) {
   var rec = JSON.parse(JSON.stringify(fc.model.recipes));
   document.querySelectorAll('input[data-m][data-p]').forEach(function (i) {
