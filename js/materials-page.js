@@ -1176,11 +1176,11 @@ function bySplit(by, total, opts) { // "GM 400 · LS 68" (or percentages)
   };
 })();
 
-/* ---------- the recent pace: batches per working day from the Line Planner actuals (last 14 days, Fridays off) ---------- */
+/* ---------- the pace from the Line Planner: batches per working day over ALL saved actuals (Fridays off) ---------- */
 function recentPace() {
   var eff = Object.assign({}, LP.days), secs = Object.assign({}, LP.secs), dd = dcDoc();
   Object.keys(dd).forEach(function (d) { if (dd[d].batches) { eff[d] = dd[d].batches; secs[d] = secs[d] || {}; } });
-  var wk = {}, sat = {}, nW = 0, nS = 0, from = U.addDays(TODAY, -14), list = [];
+  var all = Object.keys(eff).concat(Object.keys(secs)).sort(), wk = {}, sat = {}, nW = 0, nS = 0, from = all[0] || TODAY, list = [];
   for (var d = from; d < TODAY; d = U.addDays(d, 1)) {
     var w = new Date(d + 'T00:00:00Z').getUTCDay(); if (w === 5 || !(secs[d] || eff[d])) continue;
     var tgt = w === 6 ? sat : wk; if (w === 6) nS++; else nW++; list.push(d);
@@ -1197,13 +1197,10 @@ function recentPace() {
 })();
 function planCover() { var pl = S.saved.plan || {}; return pl.from && pl.to && pl.to >= TODAY ? { from: pl.from < TODAY ? TODAY : pl.from, to: pl.to } : null; }
 function paceNote(fc) {
-  var rp = fc.recentPace, use = fc.pace === 'recent';
-  var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0.05; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ≈ ' + Math.round(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
-  var pc = planCover();
-  var h = '<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px">' + (pc ? '<span><b>Your factory plan covers ' + U.nice(pc.from) + ' – ' + U.nice(pc.to) + '</b>: those days use the plan, not the pace below.</span>' : '') + '<span><b>Days with no factory plan</b> use ' + (use ? 'the <b>recent pace from the Line Planner</b>: ' + rp.days + ' working day' + (rp.days === 1 ? '' : 's') + ' of actuals (' + U.nice(rp.from) + ' – ' + U.nice(rp.to) + ').' : 'the <b>Jan–Sep history average</b>' + (rp && rp.days < 3 ? ' (fewer than 3 recent Line Planner days to use instead).' : ' (chosen on Stock & lead times).')) + '</span>';
-  if (use) h += '<span class="small">Sun–Thu: ' + (fmtK(rp.perDay) || 'none') + (rp.satDays ? ' · Saturday: ' + (fmtK(rp.sat) || 'none') : ' · Saturday: half a day (no Saturday logged yet)') + ' · Friday: off.</span>';
-  h += '<span class="small muted">Days with a factory plan use the plan; past days use the actual batches. Enter the factory plan in step 1 for the most exact forecast.</span></div>';
-  return h;
+  var rp = fc.recentPace, use = fc.pace === 'recent', pc = planCover();
+  var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return Math.round(o[k]) > 0; }).sort().map(function (k) { var q = k.split('|'); return q[0] + ' ' + Math.round(o[k]) + ' ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
+  var t = use ? 'Line Planner actuals (' + rp.days + ' days): ' + (fmtK(rp.perDay) || '–') + (rp.satDays ? ' · Sat: ' + (fmtK(rp.sat) || '–') : '') : 'Jan–Sep history average';
+  return '<p class="small pace1" style="margin:0 0 12px">' + (pc ? '<b>Plan ' + U.nice(pc.from) + '–' + U.nice(pc.to) + '</b> · ' : '') + '<b>Batches/day without a plan:</b> ' + t + ' · Fri off</p>';
 }
 (function () {
   var _vF2 = vForecast;
@@ -1212,7 +1209,7 @@ function paceNote(fc) {
   var _vS = vStock, _aS = after.stock;
   vStock = function (fc) {
     var h = _vS(fc), on = fc.pace === 'recent', rp = fc.recentPace || { days: 0 };
-    var blk = '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Pace for days with no factory plan</h3><div class="tabs"><button data-pace="recent" aria-pressed="' + on + '"' + (rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>Recent Line Planner actuals (' + rp.days + ' days)</button><button data-pace="history" aria-pressed="' + !on + '">Jan–Sep history average</button></div><p class="small muted" style="margin:8px 0 0">Recent = batches really prepared per working day over the last 14 days. History = the weeks chosen below.</p></div>';
+    var blk = '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Pace for days with no factory plan</h3><div class="tabs"><button data-pace="recent" aria-pressed="' + on + '"' + (rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>Line Planner actuals (' + rp.days + ' days)</button><button data-pace="history" aria-pressed="' + !on + '">Jan–Sep history average</button></div><p class="small muted" style="margin:8px 0 0">Line Planner = batches really prepared per working day, all saved actuals. History = the weeks chosen below.</p></div>';
     var i = h.indexOf('<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Normal production pace'); return i < 0 ? h + blk : h.slice(0, i) + blk + h.slice(i);
   };
   after.stock = function (fc) { _aS(fc); document.querySelectorAll('[data-pace]').forEach(function (b) { b.onclick = function () { var v = Object.assign({}, S.saved.settings || {}, { pace: b.dataset.pace }); S.saved.settings = v; saveDoc('settings', v); }; }); };
@@ -1283,7 +1280,7 @@ function perBatchOf(fc, matId, p) { // average amount of this material per batch
 function paceBox(fc) {
   var st = S.saved.settings || {}, mode = st.pace === 'manual' ? 'manual' : st.pace === 'history' ? 'history' : 'recent', rp = recentPace();
   var h = '<div class="panel pacebox"><div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 style="font-size:16px">Batches per day for days with no factory plan</h3><div class="tabs">' +
-    [['recent', 'Recent actuals (' + rp.days + ' days)'], ['manual', 'Set by me'], ['history', 'Jan–Sep history']].map(function (o) { return '<button data-pm="' + o[0] + '" aria-pressed="' + (mode === o[0]) + '"' + (o[0] === 'recent' && rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>';
+    [['recent', 'Line Planner actuals (' + rp.days + ' days)'], ['manual', 'Set by me'], ['history', 'Jan–Sep history']].map(function (o) { return '<button data-pm="' + o[0] + '" aria-pressed="' + (mode === o[0]) + '"' + (o[0] === 'recent' && rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>';
   if (mode === 'manual' || S.paceEdit) {
     var mp = st.manualPace || { perDay: {}, sat: {} }, prods = fc.model.products.map(function (p) { return p.id; });
     var val = function (o, k) { var v = (o || {})[k]; return v != null ? Math.round(v) : ''; };
@@ -1311,15 +1308,14 @@ function paceBoxWire() {
 (function () {
   // Forecast page: the choice sits right above "Forecast until"; the explanation box says what is used
   var _vF4 = vForecast, _aF = after.forecast;
-  vForecast = function (fc) { var h = _vF4(fc), i = h.indexOf('<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px"><span><b>Days with no factory plan</b>'); return i < 0 ? h : h.slice(0, i) + paceBox(fc) + h.slice(i); };
+  vForecast = function (fc) { var h = _vF4(fc), i = h.indexOf('<p class="small pace1"'); return i < 0 ? h : h.slice(0, i) + paceBox(fc) + h.slice(i); };
   after.forecast = function (fc) { if (_aF) _aF(fc); paceBoxWire(); };
   var _pn = paceNote;
   paceNote = function (fc) {
     var st = S.saved.settings || {};
     if (st.pace === 'manual' && fc.pace === 'recent') {
-      var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ≈ ' + Math.round(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
-      var pc2 = planCover();
-      return '<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px">' + (pc2 ? '<span><b>Your factory plan covers ' + U.nice(pc2.from) + ' – ' + U.nice(pc2.to) + '</b>: those days use the plan, not the numbers below.</span>' : '') + '<span><b>Days with no factory plan</b> use the <b>batches per day you set</b>' + (st.manualPaceAt ? ' (' + U.nice(st.manualPaceAt.slice(0, 10)) + ')' : '') + '.</span><span class="small">Sun–Thu: ' + (fmtK(st.manualPace.perDay) || 'none') + ' · Saturday: ' + (fmtK(st.manualPace.sat) || 'none') + ' · Friday: off.</span><span class="small muted">Days with a factory plan use the plan; past days use the actual batches.</span></div>';
+      var pc2 = planCover(), fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return Math.round(o[k]) > 0; }).sort().map(function (k) { var q = k.split('|'); return q[0] + ' ' + Math.round(o[k]) + ' ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
+      return '<p class="small pace1" style="margin:0 0 12px">' + (pc2 ? '<b>Plan ' + U.nice(pc2.from) + '–' + U.nice(pc2.to) + '</b> · ' : '') + '<b>Batches/day without a plan (set by you):</b> ' + (fmtK(st.manualPace.perDay) || '–') + ' · Sat: ' + (fmtK(st.manualPace.sat) || '–') + ' · Fri off</p>';
     }
     return _pn(fc);
   };
