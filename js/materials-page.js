@@ -69,11 +69,11 @@ function planAsTable(book, stage) {
 }
 /* consecutive days of the same product, line and batches become one run (Friday gaps allowed) */
 function daysToRuns(days) {
-  var by = {}; days.forEach(function (d) { var k = d.product + '|' + (d.sec === 'S1' ? 'SEC-1' : 'SEC-2') + '|' + (d.batches || ''); (by[k] = by[k] || []).push(d.date); });
+  var by = {}; days.forEach(function (d) { var k = d.product + '|' + (d.sec === 'S1' ? 'SEC-1' : 'SEC-2') + '|' + (d.batches || '') + '|' + (d.size || ''); (by[k] = by[k] || []).push(d.date); });
   var runs = [];
   Object.keys(by).forEach(function (k) {
     var p = k.split('|'), ds = by[k].filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(), start = ds[0], prev = ds[0], sat = 'none';
-    function close(end) { runs.push({ product: p[0], from: start, to: end, lines: p[1], sat: sat, batches: p[2] ? +p[2] : null }); }
+    function close(end) { runs.push({ product: p[0], size: p[3] || '', from: start, to: end, lines: p[1], sat: sat, batches: p[2] ? +p[2] : null }); }
     ds.forEach(function (d, i) {
       if (i && U.diffDays(prev, d) > 2) { close(prev); start = d; sat = 'none'; }
       if (new Date(d + 'T00:00:00Z').getUTCDay() === 6) sat = p[1];
@@ -83,7 +83,7 @@ function daysToRuns(days) {
   });
   var merged = [];
   runs.forEach(function (r) {
-    var twin = merged.filter(function (m) { return m.product === r.product && m.from === r.from && m.to === r.to && m.batches === r.batches && m.lines !== r.lines && m.lines !== 'both'; })[0];
+    var twin = merged.filter(function (m) { return m.product === r.product && m.size === r.size && m.from === r.from && m.to === r.to && m.batches === r.batches && m.lines !== r.lines && m.lines !== 'both'; })[0];
     if (twin) { twin.lines = 'both'; twin.sat = twin.sat !== 'none' && r.sat !== 'none' ? 'both' : (twin.sat !== 'none' ? twin.sat : r.sat); } else merged.push(r);
   });
   return merged.sort(function (a, b) { return a.from < b.from ? -1 : 1; });

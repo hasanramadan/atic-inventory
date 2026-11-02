@@ -3,7 +3,7 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021315">
+<link rel="stylesheet" href="css/app.css?v=202611021342">
 <style>
 .pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 /* ---------- hero ---------- */
@@ -45,7 +45,7 @@
 .sec h2{font:600 18px var(--f-display);margin:0;display:flex;align-items:center;gap:10px}
 .sec h2 .n{font:600 12px var(--f-mono);background:var(--surface-2);border-radius:99px;padding:3px 10px;color:var(--muted)}
 .sec .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.prow{display:grid;grid-template-columns:18px 1fr auto 34px;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.prow{display:grid;grid-template-columns:18px 1fr auto auto 34px;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .prow .dot{width:16px;height:16px;border-radius:50%;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2),0 2px 6px rgba(0,0,0,.2)}
 .prow select{width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:500 15px var(--f-body)}
 .step{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2)}
@@ -105,9 +105,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js?v=202611021315"></script>
-<script src="js/shell.js?v=202611021315"></script>
-<script src="js/materials-engine.js?v=202611021315"></script>
+<script src="config.js?v=202611021342"></script>
+<script src="js/shell.js?v=202611021342"></script>
+<script src="js/materials-engine.js?v=202611021342"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
@@ -115,6 +115,7 @@
   var PN = { GM: 'Grenadine Molasses', BW: 'Blossom Water', RW: 'Rose Water', LS: 'Lemon Substitute', WV: 'White Vinegar' };
   var COL = { GM: ['#c2385a', '#5e0f24'], LS: ['#f2e27a', '#c9a92a'], WV: ['#e3f3f1', '#9cc9c3'], RW: ['#f4b9c9', '#c76a86'], BW: ['#f8eccd', '#d6bd7f'] };
   var SEC = { 'SEC-1': 'Section 1', 'SEC-2': 'Section 2' };
+  var SIZES = { GM: ['300ml', '500ml', '750ml'], LS: ['1L'], WV: ['1L'], RW: ['300ml', '750ml'], BW: ['300ml', '750ml'] };
   var $ = function (s, r) { return (r || document).querySelector(s); }, esc = A.esc;
   function toast(t) { var el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { el.hidden = true; }, 2600); }
   function fq(x) { if (!x) return '0'; var a = Math.abs(x); return a >= 100 ? Math.round(x).toLocaleString('en-US') : a >= 10 ? (Math.round(x * 10) / 10).toLocaleString('en-US') : (Math.round(x * 100) / 100).toLocaleString('en-US'); }
@@ -138,6 +139,24 @@
     model = fc.model; fc.results.forEach(function (x) { stockNow[x.id] = x.stockNow; });
   } catch (e) { model = E.buildModel ? E.buildModel(BASE, { materials: docs.materials, recipes: docs.recipes }) : BASE; }
   var MATS = {}; model.materials.forEach(function (x) { MATS[x.id] = x; });
+  /* packs as they sit in the store, from the Inventory ("25 Kg/bag", "265 kg/drum") */
+  var UW = { bags: 'bag', cans: 'can', buckets: 'bucket', drums: 'drum', boxes: 'box', tanks: 'tank', kgs: 'kg', kilo: 'kg', ltr: 'l', litre: 'l', liter: 'l', litres: 'l', liters: 'l' };
+  function uw(t) { t = String(t || '').toLowerCase().replace(/[^a-z]/g, ''); return UW[t] || t.replace(/s$/, ''); }
+  var PACKS = {};
+  ((docs.inventory && docs.inventory.items) || []).forEach(function (i) {
+    if (!i || !i.mat) return; var m = String(i.packTxt || '').toLowerCase().replace(/,/g, '.').match(/([\d.]+)\s*(kg|kgs|g|l|ltr|litre|liter)\s*\/?\s*([a-z]+)?/);
+    if (!m) return; var pk = { size: +m[1] * (m[2] === 'g' ? 0.001 : 1), of: uw(m[2]) === 'g' ? 'kg' : uw(m[2]), per: m[3] ? uw(m[3]) : 'pack' };
+    var L = PACKS[i.mat] = PACKS[i.mat] || []; if (!L.some(function (x) { return x.size === pk.size && x.per === pk.per; })) L.push(pk);
+  });
+  /* the amount in kg when it can be known, and in the store's packs */
+  function inKg(x, app) {
+    var q = app * (x.recipeFactor || 1), ru = uw(x.recipeUnit || x.unit), P = PACKS[x.id] || [];
+    if (ru === 'kg') return q;
+    var p = P.filter(function (k) { return k.of === 'kg' && k.per === ru; })[0]; if (p) return q * p.size;
+    if (uw(x.unit) === 'kg') return app;
+    return null;
+  }
+  function packsTxt(x, kg) { if (kg == null) return ''; return (PACKS[x.id] || []).filter(function (k) { return k.of === 'kg' && k.size > 0; }).map(function (k) { var n = kg / k.size; return fq(n) + ' ' + pl(k.per, n) + ' of ' + fq(k.size) + ' kg'; }).join(' or '); }
   var PRODS = model.products.map(function (p) { return p.id; }).filter(function (p) { return PN[p]; });
 
   /* ---------- state: one list of {p, b} per section, kept per day on this device ---------- */
@@ -146,15 +165,18 @@
   function store() { try { localStorage.setItem(key(), JSON.stringify(S.rows)); } catch (e) {} }
   function fromLP(date) {
     var out = { 'SEC-1': [], 'SEC-2': [] }, src = '';
-    var put = function (sec, runs) { runs.forEach(function (q) { var b = Math.round(Number(q.batches) || 0); if (q.product && b > 0 && PN[q.product]) { var e = out[sec].filter(function (x) { return x.p === q.product; })[0]; if (e) e.b += b; else out[sec].push({ p: q.product, b: b }); } }); };
+    var put = function (sec, runs) { runs.forEach(function (q) { var b = Math.round(Number(q.batches) || 0); if (q.product && b > 0 && PN[q.product]) { var e = out[sec].filter(function (x) { return x.p === q.product && (x.z || '') === (q.size || ''); })[0]; if (e) e.b += b; else out[sec].push({ p: q.product, z: q.size || '', b: b }); } }); };
     ['S1', 'S2'].forEach(function (s) {
       var sec = s === 'S1' ? 'SEC-1' : 'SEC-2';
       var a = acts.filter(function (x) { return x.date === date && x.sec === s; })[0], pl = plans.filter(function (x) { return x.date === date && x.sec === s; })[0];
-      if (a) { put(sec, (a.runs && a.runs.length) ? a.runs : [{ product: a.product, batches: a.batches }]); src = src || 'actual'; }
-      else if (pl && pl.inputs) { put(sec, pl.inputs.runs || [{ product: pl.inputs.product, batches: pl.inputs.batches }]); src = src || 'plan'; }
+      if (a) { put(sec, (a.runs && a.runs.length) ? a.runs : [{ product: a.product, size: a.size, batches: a.batches }]); src = src || 'actual'; }
+      else if (pl && pl.inputs) { put(sec, pl.inputs.runs || [{ product: pl.inputs.product, size: pl.inputs.size, batches: pl.inputs.batches }]); src = src || 'plan'; }
     });
     if (!out['SEC-1'].length && !out['SEC-2'].length) {
-      var fp = docs.plan && docs.plan.days && docs.plan.days[date];
+      var ld = docs.plan && docs.plan.lineDays && docs.plan.lineDays[date];
+      if (ld) ['SEC-1', 'SEC-2'].forEach(function (sc) { (ld[sc] || []).forEach(function (x) { if (PN[x.product] && Math.round(x.batches) > 0) out[sc].push({ p: x.product, z: x.size || '', b: Math.round(x.batches) }); }); });
+      if (out['SEC-1'].length || out['SEC-2'].length) src = 'factory';
+      var fp = !src && docs.plan && docs.plan.days && docs.plan.days[date];
       if (fp) { Object.keys(fp).forEach(function (k) { var q = k.split('|'); if (q[1] && out[q[1]] && Math.round(fp[k]) > 0 && PN[q[0]]) out[q[1]].push({ p: q[0], b: Math.round(fp[k]) }); }); if (out['SEC-1'].length || out['SEC-2'].length) src = 'factory'; }
     }
     return { rows: out, src: src };
@@ -175,7 +197,7 @@
         Object.keys(rec).forEach(function (mid) {
           var per = Number(rec[mid]) || 0; if (!per || !MATS[mid]) return;
           var o = out[mid] = out[mid] || { id: mid, app: 0, by: [] };
-          o.app += per * row.b; o.by.push({ p: row.p, sec: sec, b: row.b, app: per * row.b });
+          o.app += per * row.b; o.by.push({ p: row.p, z: row.z || '', sec: sec, b: row.b, app: per * row.b });
         });
       });
     });
@@ -216,6 +238,7 @@
     var c = COL[r.p] || ['#cfd8d4', '#9aa'];
     return '<div class="prow"><span class="dot" style="background:radial-gradient(circle at 35% 30%,' + c[0] + ',' + c[1] + ')"></span>' +
       '<select data-s="' + sec + '" data-i="' + i + '" aria-label="Product"><option value="">Choose a product…</option>' + PRODS.map(function (p) { return '<option value="' + p + '"' + (p === r.p ? ' selected' : '') + '>' + PN[p] + '</option>'; }).join('') + '</select>' +
+      '<select class="zs" data-s="' + sec + '" data-i="' + i + '" aria-label="Size" style="width:auto">' + ((SIZES[r.p] || []).length ? SIZES[r.p].map(function (z) { return '<option' + (z === r.z ? ' selected' : '') + '>' + z + '</option>'; }).join('') : '<option value="">–</option>') + '</select>' +
       '<div class="step"><button type="button" data-d="-1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch less">−</button><input type="number" min="0" step="1" inputmode="numeric" value="' + (r.b || 0) + '" data-s="' + sec + '" data-i="' + i + '" aria-label="Batches"><button type="button" data-d="1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch more">+</button></div>' +
       '<button type="button" class="x" data-rm="' + i + '" data-s="' + sec + '" aria-label="Remove">×</button></div>';
   }
@@ -228,15 +251,15 @@
   function matsHtml(list) {
     if (!list.length) return '<div class="empty3"><div class="ic">🧪</div><p>Choose a product and the number of batches above.<br>The raw materials to prepare show up here.</p></div>';
     return '<div class="mats">' + list.map(function (o, k) {
-      var x = MATS[o.id], u = unitTxt(x, o.app), have = stockNow[o.id], cls = '', st = '';
+      var x = MATS[o.id], u = unitTxt(x, o.app), have = stockNow[o.id], cls = '', st = '', kg = inKg(x, o.app), pk = packsTxt(x, kg);
       if (have != null && !isNaN(have)) {
         var pct = have > 0 ? Math.min(100, o.app / have * 100) : 100;
         cls = o.app > have ? 'short' : pct > 70 ? 'tight' : '';
         st = '<div class="bar"><b style="width:' + Math.max(3, pct).toFixed(0) + '%"></b></div><div class="st">' + (o.app > have ? 'Not enough: about ' + fq(Math.max(0, have)) + ' ' + pl(x.unit, have) + ' left in stock' : 'Uses ' + Math.round(pct) + '% of the ≈ ' + fq(have) + ' ' + pl(x.unit, have) + ' in stock') + '</div>';
       }
-      return '<div class="mc ' + cls + '" style="animation-delay:' + (k * 40) + 'ms"><div class="nm">' + esc(x.name) + '</div><div class="q">' + fq(u.main) + '<small>' + esc(u.mu) + '</small></div>' +
-        (u.alt != null ? '<div class="alt">≈ ' + fq(u.alt) + ' ' + esc(u.au) + (u.alt === 1 ? '' : 's') + '</div>' : '') +
-        '<div class="by">' + o.by.map(function (b) { var c = COL[b.p] || ['#aaa']; return '<span><i style="background:' + c[0] + '"></i>' + b.p + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' · ' + b.b + ' bt → ' + fq(b.app * (x.recipeFactor || 1)) + '</span>'; }).join('') + '</div>' + st + '</div>';
+      return '<div class="mc ' + cls + '" style="animation-delay:' + (k * 40) + 'ms"><div class="nm">' + esc(x.name) + '</div><div class="q">' + (kg != null ? fq(kg) + '<small>kg</small>' : fq(u.main) + '<small>' + esc(pl(u.mu, u.main)) + '</small>') + '</div>' +
+        (pk ? '<div class="alt">= ' + esc(pk) + '</div>' : u.alt != null ? '<div class="alt">≈ ' + fq(u.alt) + ' ' + esc(pl(u.au, u.alt)) + '</div>' : '') +
+        '<div class="by">' + o.by.map(function (b) { var c = COL[b.p] || ['#aaa']; return '<span><i style="background:' + c[0] + '"></i>' + b.p + (b.z ? ' ' + b.z : '') + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' · ' + b.b + ' bt → ' + (kg != null ? fq(inKg(x, b.app)) + ' kg' : fq(b.app * (x.recipeFactor || 1))) + '</span>'; }).join('') + '</div>' + st + '</div>';
     }).join('') + '</div>';
   }
   var SRC = { actual: 'Filled from the batches saved in the Line Planner (actuals).', plan: 'Filled from the Line Planner forecast for this day.', factory: 'Filled from the factory plan.', mine: 'Your numbers for this day (saved on this device).', '': 'Nothing planned in the Line Planner for this day yet. Add the products and batches.' };
@@ -253,18 +276,19 @@
       '<div class="mhead"><div><h2>Raw materials to prepare</h2><p>Batches × the saved recipe of each section · Lot ' + lot + '</p></div><div class="exp">' +
       '<button class="btn primary" id="xPrint" type="button">🖨 Sheet for the workers</button><button class="btn" id="xXls" type="button">⬇ Excel</button><button class="btn" id="xCopy" type="button">⧉ Copy</button></div></div>' +
       matsHtml(list) +
-      '<p class="note2">Amounts come from <a href="materials.html#recipes">Recipes per batch</a>. "In stock" is the counted stock minus what the Line Planner batches used since the count.</p></div>';
+      '<p class="note2">Amounts come from <a href="materials.html#recipes">Recipes per batch</a>; packs from the Inventory. "In stock" is the counted stock minus what the Line Planner batches used since the count.</p></div>';
     wire(); tilt();
   }
   function wire() {
     $('#d').onchange = function () { if (this.value) { S.date = this.value; load(); render(); } };
     $('#today').onclick = function () { S.date = TODAY; load(); render(); };
     $('#lp').onclick = function () { try { localStorage.removeItem(key()); } catch (e) {} var f = fromLP(S.date); S.rows = f.rows; S.src = f.src; render(); toast(f.src ? 'Taken from the Line Planner' : 'Nothing in the Line Planner for this day'); };
-    document.querySelectorAll('.prow select').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].p = el.value; S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('.prow select:not(.zs)').forEach(function (el) { el.onchange = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.p = el.value; r.z = (SIZES[r.p] || [''])[SIZES[r.p] && SIZES[r.p].length > 1 ? SIZES[r.p].length - 1 : 0]; S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('.prow select.zs').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].z = el.value; S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.step input').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].b = Math.max(0, Math.round(Number(el.value) || 0)); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.step button').forEach(function (el) { el.onclick = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.b = Math.max(0, (r.b || 0) + Number(el.dataset.d)); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('[data-rm]').forEach(function (el) { el.onclick = function () { S.rows[el.dataset.s].splice(+el.dataset.rm, 1); S.src = 'mine'; store(); render(); }; });
-    document.querySelectorAll('[data-add]').forEach(function (el) { el.onclick = function () { var used = S.rows[el.dataset.add].map(function (r) { return r.p; }); S.rows[el.dataset.add].push({ p: PRODS.filter(function (p) { return used.indexOf(p) < 0; })[0] || '', b: 1 }); S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('[data-add]').forEach(function (el) { el.onclick = function () { var used = S.rows[el.dataset.add].map(function (r) { return r.p; }); var np = PRODS.filter(function (p) { return used.indexOf(p) < 0; })[0] || ''; S.rows[el.dataset.add].push({ p: np, z: (SIZES[np] || [''])[(SIZES[np] || ['']).length - 1], b: 1 }); S.src = 'mine'; store(); render(); }; });
     $('#xPrint').onclick = printSheet; $('#xXls').onclick = excel; $('#xCopy').onclick = copyTxt;
   }
   function tilt() {
@@ -278,28 +302,28 @@
   }
 
   /* ---------- exports ---------- */
-  function prodRows() { var o = []; ['SEC-1', 'SEC-2'].forEach(function (s) { S.rows[s].forEach(function (r) { if (r.p && r.b > 0) o.push({ sec: SEC[s], p: PN[r.p], b: r.b }); }); }); return o; }
-  function matRows() { return need().map(function (o) { var x = MATS[o.id], u = unitTxt(x, o.app); return { name: x.name, q: u.main, u: u.mu, alt: u.alt, au: x.unit, by: o.by.map(function (b) { return b.p + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' ' + fq(b.app * (x.recipeFactor || 1)); }).join(' · ') }; }); }
+  function prodRows() { var o = []; ['SEC-1', 'SEC-2'].forEach(function (s) { S.rows[s].forEach(function (r) { if (r.p && r.b > 0) o.push({ sec: SEC[s], p: PN[r.p], z: r.z || '', b: r.b }); }); }); return o; }
+  function matRows() { return need().map(function (o) { var x = MATS[o.id], u = unitTxt(x, o.app), kg = inKg(x, o.app); return { name: x.name, q: kg != null ? kg : u.main, u: kg != null ? 'kg' : u.mu, packs: packsTxt(x, kg) || (u.alt != null ? fq(u.alt) + ' ' + pl(u.au, u.alt) : ''), by: o.by.map(function (b) { return b.p + (b.z ? ' ' + b.z : '') + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' ' + fq(kg != null ? inKg(x, b.app) : b.app * (x.recipeFactor || 1)); }).join(' · ') }; }); }
   function printSheet() {
     var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
     if (!pr.length) { toast('Add at least one product first'); return; }
     $('#sheet').innerHTML = '<div class="meta"><div><div style="font:600 10pt var(--f-mono);letter-spacing:.1em">ATIC OMAN · PREPARATION SHEET</div><h1>' + nice(S.date) + '</h1></div><div class="lotp">LOT ' + lot + '</div></div>' +
-      '<h2>Products and batches</h2><table><thead><tr><th>Section</th><th>Product</th><th class="n">Batches</th><th>Done ✓</th></tr></thead><tbody>' + pr.map(function (r) { return '<tr><td>' + r.sec + '</td><td>' + esc(r.p) + '</td><td class="n"><b>' + r.b + '</b></td><td></td></tr>'; }).join('') + '</tbody></table>' +
-      '<h2>Raw materials to weigh</h2><table><thead><tr><th>Material</th><th class="n">Quantity</th><th>For</th><th>Weighed ✓</th></tr></thead><tbody>' + mr.map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td class="n"><b>' + fq(r.q) + ' ' + esc(pl(r.u, r.q)) + '</b>' + (r.alt != null ? '<br><small>≈ ' + fq(r.alt) + ' ' + esc(pl(r.au, r.alt)) + '</small>' : '') + '</td><td><small>' + esc(r.by) + '</small></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+      '<h2>Products and batches</h2><table><thead><tr><th>Section</th><th>Product</th><th>Size</th><th class="n">Batches</th><th>Done ✓</th></tr></thead><tbody>' + pr.map(function (r) { return '<tr><td>' + r.sec + '</td><td>' + esc(r.p) + '</td><td>' + esc(r.z) + '</td><td class="n"><b>' + r.b + '</b></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+      '<h2>Raw materials to weigh</h2><table><thead><tr><th>Material</th><th class="n">Quantity</th><th>In store packs</th><th>For</th><th>Weighed ✓</th></tr></thead><tbody>' + mr.map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td class="n"><b>' + fq(r.q) + ' ' + esc(pl(r.u, r.q)) + '</b></td><td>' + esc(r.packs) + '</td><td><small>' + esc(r.by) + '</small></td><td></td></tr>'; }).join('') + '</tbody></table>' +
       '<div class="sign"><div>Prepared by</div><div>Checked by</div><div>Time</div></div>';
     window.print();
   }
   function excel() {
     var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
     if (!pr.length) { toast('Add at least one product first'); return; }
-    var aoa = [['ATIC Oman · Preparation sheet'], ['Date', S.date], ['Lot', lot], [], ['Section', 'Product', 'Batches']].concat(pr.map(function (r) { return [r.sec, r.p, r.b]; }))
-      .concat([[], ['Raw material', 'Quantity', 'Unit', 'In stock units', 'For']]).concat(mr.map(function (r) { return [r.name, Math.round(r.q * 100) / 100, r.u, r.alt != null ? Math.round(r.alt * 100) / 100 + ' ' + pl(r.au, r.alt) : '', r.by]; }));
+    var aoa = [['ATIC Oman · Preparation sheet'], ['Date', S.date], ['Lot', lot], [], ['Section', 'Product', 'Size', 'Batches']].concat(pr.map(function (r) { return [r.sec, r.p, r.z, r.b]; }))
+      .concat([[], ['Raw material', 'Quantity', 'Unit', 'In store packs', 'For']]).concat(mr.map(function (r) { return [r.name, Math.round(r.q * 100) / 100, r.u, r.packs, r.by]; }));
     if (window.XLSX) { var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 40 }]; var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Preparation'); XLSX.writeFile(wb, 'Preparation ' + S.date + ' lot ' + lot + '.xlsx'); }
     else A.download('Preparation ' + S.date + ' lot ' + lot + '.csv', aoa.map(function (r) { return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'));
   }
   function copyTxt() {
     var pr = prodRows(), mr = matRows(); if (!pr.length) { toast('Add at least one product first'); return; }
-    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date) + '\n\n' + pr.map(function (r) { return r.sec + ': ' + r.p + ' × ' + r.b + ' batches'; }).join('\n') + '\n\nRaw materials:\n' + mr.map(function (r) { return '• ' + r.name + ': ' + fq(r.q) + ' ' + pl(r.u, r.q) + (r.alt != null ? ' (≈ ' + fq(r.alt) + ' ' + pl(r.au, r.alt) + ')' : ''); }).join('\n');
+    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date) + '\n\n' + pr.map(function (r) { return r.sec + ': ' + r.p + (r.z ? ' ' + r.z : '') + ' × ' + r.b + ' batches'; }).join('\n') + '\n\nRaw materials:\n' + mr.map(function (r) { return '• ' + r.name + ': ' + fq(r.q) + ' ' + pl(r.u, r.q) + (r.packs ? ' (= ' + r.packs + ')' : ''); }).join('\n');
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('Copied: paste it in WhatsApp or anywhere'); }, function () { toast('Could not copy'); });
   }
 

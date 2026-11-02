@@ -3,7 +3,7 @@
 <title>ATIC Line Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021315">
+<link rel="stylesheet" href="css/app.css?v=202611021342">
 <style>
 
 .lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
@@ -348,12 +348,12 @@
 </main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611021315"></script>
-<script src="js/shell.js?v=202611021315"></script>
-<script src="js/io.js?v=202611021315"></script>
-<script src="js/excel.js?v=202611021315"></script>
-<script src="js/word.js?v=202611021315"></script>
-<script src="js/line-engine.js?v=202611021315"></script>
+<script src="config.js?v=202611021342"></script>
+<script src="js/shell.js?v=202611021342"></script>
+<script src="js/io.js?v=202611021342"></script>
+<script src="js/excel.js?v=202611021342"></script>
+<script src="js/word.js?v=202611021342"></script>
+<script src="js/line-engine.js?v=202611021342"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 // The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
@@ -439,11 +439,26 @@ function refreshAutoPrev() {
     const k = lastKnown(sec, S.date); i.prevProduct = k.product; i.prevSize = k.size; i.prevSrc = k.src;
   }
 }
+/* the factory plan (Raw Materials → Forecast & plan): products, sizes and batches per line and day, changeovers included */
+let FPLAN = null;
+function factoryRuns(date, sec) {
+  const L = FPLAN && FPLAN.lineDays && FPLAN.lineDays[date] && FPLAN.lineDays[date][sec === 'S1' ? 'SEC-1' : 'SEC-2'];
+  if (!L || !L.length) return null;
+  return L.filter(x => x.product && P0.sizes[x.product]).map(x => ({ product: x.product, size: P0.sizes[x.product].includes(x.size) ? x.size : P0.sizes[x.product][P0.sizes[x.product].length - 1], batches: Math.round(x.batches) || 0 }));
+}
 function applySavedPlan() {
   for (const sec of SECS) {
     const p = S.plans.find(x => x.date === S.date && x.sec === sec);
     const i = S.inp[sec];
-    if (!p || !p.inputs || i.fromPlan === p.savedAt) continue;
+    if (!p || !p.inputs) {
+      const fr = factoryRuns(S.date, sec);
+      if (fr && fr.length && i.fromPlan !== 'factory:' + S.date) {
+        i.runs = fr.map((r, k) => ({ ...newRun(r.product, r.size, r.batches), startMode: 'after' }));
+        i.fromPlan = 'factory:' + S.date;
+      }
+      continue;
+    }
+    if (i.fromPlan === p.savedAt) continue;
     const pin = p.inputs;
     const runs = pin.runs && pin.runs.length ? pin.runs : [{ product: pin.product, size: pin.size, batches: pin.batches, opening: 0, start: null, target: pin.targetBoxes }];
     i.runs = runs.map(r => ({ product: r.product, size: r.size, batches: r.batches ?? '', opening: r.opening ?? '', openingAuto: r.opening == null,
@@ -1515,6 +1530,7 @@ async function init3D() {
 $('date').value = S.date;
 $('date').onchange = e => { if (!e.target.value) return; S.date = e.target.value; for (const sec of SECS) { S.inp[sec].prevAuto = true; S.inp[sec].fromPlan = null; S.inp[sec].runs.forEach(r => { r.openingAuto = true; r.opening = ''; }); } refreshAutoPrev(); applySavedPlan(); update(); };
 initInputs(); buildCards(); update();
+try { ATIC.sb.from('app_docs').select('data').eq('name', 'plan').maybeSingle().then(r => { if (r && r.data && r.data.data) { FPLAN = r.data.data; applySavedPlan(); update(); } }); } catch (e) {}
 initActualForm();
 $('c_end').onchange = renderCompare;
 $('c_last').onclick = () => { $('c_end').value = lastDataDate() || todayIso(); renderCompare(); };

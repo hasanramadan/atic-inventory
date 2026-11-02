@@ -3,7 +3,7 @@
 <title>ATIC · Choose where to go</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021315">
+<link rel="stylesheet" href="css/app.css?v=202611021342">
 <style>
 html,body{height:100%}
 body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d2e22 55%,#081d16 100%);color:#eef5f1;overflow:hidden;font-family:var(--f-body,'IBM Plex Sans',sans-serif)}
@@ -53,8 +53,8 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611021315"></script>
-<script src="js/shell.js?v=202611021315"></script>
+<script src="config.js?v=202611021342"></script>
+<script src="js/shell.js?v=202611021342"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'start', area: 'start' }); if (!A) return;
@@ -68,7 +68,7 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
   var INFO = {
     production: { c: '#2f9e6c', h: 'Production', p: 'Line Planner, raw materials, inventory, supply planning and the team.', tag: 'Open', href: ATIC.firstPage(p) || 'materials.html' },
     lab: { c: '#4fb3e8', h: 'Lab', p: 'Quality tests per lot: results, approvals and trends.', tag: 'Coming soon', href: 'lab.html' },
-    preparation: { c: '#d4a017', h: 'Preparation', p: 'Tell it the product and batches per section; it tells you the raw materials to prepare.', tag: 'Coming soon', href: 'prep.html' }
+    preparation: { c: '#d4a017', h: 'Preparation', p: 'Products, sizes and batches per section → the raw materials to prepare, with the lot number.', tag: 'Open', href: 'prep.html' }
   };
   document.getElementById('hello').textContent = 'Welcome, ' + String(p.full_name || p.username).split(' ')[0];
   document.getElementById('who').textContent = (p.full_name || p.username) + (p.is_owner ? ' · Owner' : '');

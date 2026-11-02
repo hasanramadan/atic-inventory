@@ -214,6 +214,8 @@
       var uniq = []; blocks.forEach(function (b) { if (!uniq.length || uniq[uniq.length - 1].sec !== b.sec) uniq.push(b); }); blocks = uniq;
       if (!blocks.length) { var w = 0; rows.forEach(function (r) { w = Math.max(w, r.length); }); blocks = w > 9 ? [{ c: 0, sec: 'S1' }, { c: 9, sec: 'S2' }] : [{ c: 0, sec: opts.defaultSec || 'S1' }]; notes.push(sh.name + ': no "Section 1 / Section 2" headings found, so columns were split ' + (w > 9 ? 'at column J' : 'as one section')); }
       blocks.forEach(function (b, i) { b.end = i + 1 < blocks.length ? blocks[i + 1].c : 1e9; b.start = i === 0 ? 0 : b.c; });
+      /* a "batches" header column inside a block: batches are read only from there (never from dates or carton quantities) */
+      for (var r2 = 0; r2 < Math.min(rows.length, 15); r2++) (rows[r2] || []).forEach(function (v, c) { if (/batch/i.test(toText(v))) blocks.forEach(function (b) { if (c >= b.start && c < b.end && b.bcol == null) b.bcol = c; }); });
       var cur = {};
       rows.forEach(function (row) {
         // a date anywhere in the row (left of the first block) applies to every block
@@ -226,7 +228,7 @@
             if (!d) { var dd = cellDate(v, year, ref); if (dd) { d = dd; continue; } }
             if (!p) { var pp = productOf(v); if (pp) { p = pp; size = sizeOf(v); continue; } }
             if (p && !size) { var ss = sizeOf(v); if (ss) { size = ss; continue; } }
-            if (p && batches == null) { var n = toNumber(v); if (n != null && n > 0 && n <= 40 && typeof v !== 'object') batches = n; }
+            if (p && batches == null && (b.bcol == null || c === b.bcol) && !(v instanceof Date) && !/\d\s*[\/.-]\s*\d/.test(toText(v))) { var n = toNumber(v); if (n != null && n > 0 && n <= 40 && typeof v !== 'object') batches = n; }
           }
           if (d || rowDate) { cur[b.sec] = d || rowDate; datesSeen++; }
           if (!p) return; prodSeen++;
