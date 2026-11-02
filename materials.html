@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="css/app.css">
-<style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
+<style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
 .ofc{background:var(--brand);color:var(--brand-ink);border-radius:999px;font-size:11px;padding:1px 7px}
@@ -364,21 +364,22 @@ function importPlan(file, stage) {
 
 /* ---------- recipes ---------- */
 function vRecipes(fc) {
-  var m = fc.model;
-  var h = head('Recipes per batch', 'What one batch of each product uses. The same recipe counts on Section 1 and Section 2. Changes apply to the whole forecast after you save.');
+  var m = fc.model, raw = (S.saved.recipes && S.saved.recipes.recipes) || {};
+  var h = head('Recipes per batch', 'What one batch uses on each section. If a section is left empty, it uses the other section\'s amount, so no batch is ever counted as using nothing. Changes apply to the whole forecast after you save.');
   h += accessNote(); h += lastSaved('recipes');
   m.products.forEach(function (p) {
-    var r = m.recipes[p.id] || {};
+    var r = m.recipes[p.id] || {}, given = Object.assign({}, (BASE.recipes || {})[p.id] || {}, raw[p.id] || {});
     var used = m.materials.filter(function (x) { return ['SEC-1', 'SEC-2'].some(function (s) { return (r[s] || {})[x.id]; }); });
-    h += '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:17px">' + PN[p.id] + '</h3><span class="small muted">One batch, either section</span></div><div class="tablewrap"><table><thead><tr><th>Material</th><th>Unit</th><th class="n">Per batch</th></tr></thead><tbody>';
+    h += '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:17px">' + PN[p.id] + '</h3><span class="small muted">Per batch</span></div><div class="tablewrap"><table><thead><tr><th>Material</th><th>Unit</th><th class="n">Section 1</th><th class="n">Section 2</th></tr></thead><tbody>';
     used.forEach(function (x) {
-      var a = (r['SEC-1'] || {})[x.id] || 0, b = (r['SEC-2'] || {})[x.id] || 0, f = x.recipeFactor || 1;
-      var inp = function (s, v, lab) { return (lab ? '<span class="small muted">' + lab + ' </span>' : '') + '<input type="number" step="any" min="0" id="r_' + p.id + '_' + s + '_' + x.id + '" data-p="' + p.id + '" data-s="' + s + '" data-m="' + x.id + '" value="' + +(v * f).toFixed(3) + '">'; };
-      var same = Math.abs(a - b) < 1e-9 || !a || !b;
-      h += '<tr><td>' + esc(x.name) + '</td><td class="muted">' + esc(x.recipeUnit) + (f !== 1 ? ' <small>(stock in ' + x.unit + 's of ' + f + ')</small>' : '') + '</td><td class="n">' +
-        (same ? inp('both', a || b) : inp('SEC-1', a, 'Section 1') + '<br>' + inp('SEC-2', b, 'Section 2') + '<br><span class="small" style="color:var(--amber)">different per section</span>') + '</td></tr>';
+      var f = x.recipeFactor || 1;
+      h += '<tr><td>' + esc(x.name) + '</td><td class="muted">' + esc(x.recipeUnit) + (f !== 1 ? ' <small>(stock in ' + x.unit + 's of ' + f + ')</small>' : '') + '</td>' +
+        ['SEC-1', 'SEC-2'].map(function (s) {
+          var v = (r[s] || {})[x.id] || 0, own = Number(((given[s] || {})[x.id])) > 0;
+          return '<td class="n"><input type="number" step="any" min="0" id="r_' + p.id + '_' + s + '_' + x.id + '" data-p="' + p.id + '" data-s="' + s + '" data-m="' + x.id + '" value="' + +(v * f).toFixed(3) + '"' + (own ? '' : ' style="border-style:dashed" title="Not set for this section: uses the other section\'s amount"') + '>' + (own ? '' : '<br><span class="small muted">same as the other section</span>') + '</td>';
+        }).join('') + '</tr>';
     });
-    h += '<tr><td colspan="3"><select id="add_' + p.id + '" data-p="' + p.id + '"><option value="">+ Add a material to this recipe</option>' + m.materials.filter(function (x) { return used.indexOf(x) < 0; }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join('') + '</select></td></tr>';
+    h += '<tr><td colspan="4"><select id="add_' + p.id + '" data-p="' + p.id + '"><option value="">+ Add a material to this recipe</option>' + m.materials.filter(function (x) { return used.indexOf(x) < 0; }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join('') + '</select></td></tr>';
     h += '</tbody></table></div></div>';
   });
   h += '<div class="row"><button class="btn primary" id="saveRec">Save recipes</button><span class="hint">Every product made that day takes its own share: Grenadine Molasses and Lemon Substitute on the same day both use salt.</span></div>';

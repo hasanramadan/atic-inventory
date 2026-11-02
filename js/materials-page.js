@@ -738,11 +738,26 @@ function fixNames() {
 }
 (function waitNames() { if (window.ATIC && ATIC.profile && BASE && S.saved) ATIC.whenShown(function () { setTimeout(fixNames, 200); }); else setTimeout(waitNames, 300); })();
 
+/* the two numbers: exactly what was counted, and the estimate since (used by the batches made, received, left now).
+   "Now" = every finished day up to yesterday, plus today when today's actual is already in the Line Planner. */
+function stockNumbers(r) {
+  var st = (run.cache && run.cache.model.stock[r.id]) || null; if (!st || st.qty == null || !st.asOf) return null;
+  var cut = (LP.days[TODAY] || (S.saved.daily && S.saved.daily.days && S.saved.daily.days[TODAY])) ? TODAY : U.addDays(TODAY, -1);
+  var used = r.usedSinceCount || 0, ws = r.weeks && r.weeks[0] ? r.weeks[0].start : null;
+  (r.daily || []).forEach(function (x) { if (x.date > st.asOf && x.date <= cut && (!ws || x.date >= ws)) used += x.use; });
+  var rec = 0; E.orderEvents((S.saved.orders && S.saved.orders.items) || []).forEach(function (o) { if (o.material === r.id && o.received && o.eta > st.asOf && o.eta <= cut) rec += Number(o.qty) || 0; });
+  return { counted: Number(st.qty) || 0, asOf: st.asOf, used: used, received: rec, left: (Number(st.qty) || 0) + rec - used, until: cut };
+}
+
 /* ---------- Overview cards: what the inventory says ---------- */
 (function () {
   var _card = card;
   card = function (r) {
     var h = _card(r), lines = invItems().filter(function (i) { return i.mat === r.id && !i.missing; });
+    var n = stockNumbers(r);
+    if (n) h = h.replace(/<dt>Stock now<\/dt><dd>[^<]*<\/dd>/, '<dt title="Exactly what was submitted in the count">Counted ' + U.nice(n.asOf) + '</dt><dd><b>' + fmtN(n.counted) + '</b></dd>' +
+      (n.received ? '<dt>Received since</dt><dd>+' + fmtN(n.received) + '</dd>' : '') +
+      '<dt title="Batches made since the count × recipe (Daily consumption)">Est. used since</dt><dd>' + fmtN(n.used) + '</dd><dt title="Counted + received − used">Est. left now</dt><dd><b>' + fmtN(Math.max(0, n.left)) + '</b></dd>');
     if (!lines.length) return h;
     var crit = lines.some(function (i) { return i.critical; }), need = lines.filter(function (i) { return !(i.toApp > 0) && Number(i.qty); }).length;
     var txt = lines.map(function (i) { return fmtN(i.qty) + ' ' + esc(String(i.unit).toLowerCase()); }).join(' + ');
@@ -995,11 +1010,15 @@ function dcDay(date) { // effective batches + adjustments for one day
   var o = dcDoc()[date], lp = LP.days[date] || {};
   return { batches: o && o.batches ? o.batches : lp, adj: (o && o.adj) || {}, edited: !!o, note: o ? o.note : '', by: o ? o.by : '', at: o ? o.at : '', fromLP: !!LP.days[date] || !!LP.secs[date] };
 }
-function dcUse(model, d) { // { matId: qty in app units }
+function dcUse(model, d, by) { // { matId: qty in app units }; by (optional) gets { matId: { GM: qty, LS: qty, hand: qty } }
   var out = {};
-  Object.keys(d.batches || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}, b = Number(d.batches[k]) || 0; Object.keys(r).forEach(function (m) { var q = (Number(r[m]) || 0) * b; if (q) out[m] = (out[m] || 0) + q; }); });
-  Object.keys(d.adj || {}).forEach(function (m) { out[m] = (out[m] || 0) + (Number(d.adj[m]) || 0); });
+  Object.keys(d.batches || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}, b = Number(d.batches[k]) || 0; Object.keys(r).forEach(function (m) { var q = (Number(r[m]) || 0) * b; if (q) { out[m] = (out[m] || 0) + q; if (by) { by[m] = by[m] || {}; by[m][p[0]] = (by[m][p[0]] || 0) + q; } } }); });
+  Object.keys(d.adj || {}).forEach(function (m) { var a = Number(d.adj[m]) || 0; out[m] = (out[m] || 0) + a; if (by && a) { by[m] = by[m] || {}; by[m].hand = (by[m].hand || 0) + a; } });
   return out;
+}
+function dcSplit(b) { // "GM 520 · LS 20" when more than one product used it
+  var k = Object.keys(b || {}).filter(function (x) { return x !== 'hand' && Math.abs(b[x]) > 1e-9; });
+  return k.length > 1 ? k.map(function (x) { return '<span class="sp">' + esc(x) + ' ' + fmtN(b[x]) + '</span>'; }).join('') : '';
 }
 /* the engine gets the corrected days */
 (function () {
@@ -1017,9 +1036,9 @@ function vDaily(fc) {
   var mStart = mk + '-01', mEnd = U.addDays(U.addDays(mStart, 32).slice(0, 7) + '-01', -1), last = mEnd < TODAY ? mEnd : TODAY;
   var rows = [], totals = {}, used = {};
   for (var d = mStart; d <= last; d = U.addDays(d, 1)) {
-    var fri = new Date(d + 'T00:00:00Z').getUTCDay() === 5, x = dcDay(d), u = dcUse(model, x);
+    var fri = new Date(d + 'T00:00:00Z').getUTCDay() === 5, x = dcDay(d), by = {}, u = dcUse(model, x, by);
     Object.keys(u).forEach(function (m) { if (Math.abs(u[m]) > 1e-9) { used[m] = 1; totals[m] = (totals[m] || 0) + u[m]; } });
-    rows.push({ d: d, fri: fri, x: x, u: u });
+    rows.push({ d: d, fri: fri, x: x, u: u, by: by });
   }
   var mats = model.materials.filter(function (m) { return used[m.id]; });
   var nameOfMonth = function (k) { return new Date(k + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); };
@@ -1039,7 +1058,7 @@ function vDaily(fc) {
     if (r.fri) { h += '<tr class="off"><td>' + dn + '</td><td></td><td colspan="' + (mats.length + 2) + '" class="muted">Day off</td></tr>'; return; }
     var st = r.x.edited ? '<span class="chip info" style="padding:1px 8px" title="' + esc((r.x.by ? 'by ' + r.x.by : '') + (r.x.note ? ' · ' + r.x.note : '')) + '">Corrected</span>' : r.x.fromLP ? '' : (r.d < TODAY ? '<span class="chip soon" style="padding:1px 8px">No actual</span>' : '');
     h += '<tr data-dc="' + r.d + '"><td><b>' + dn + '</b></td><td class="mono">' + esc(dcLot(r.d)) + '</td><td>' + (b || '<span class="muted">–</span>') + ' ' + st + '</td>' +
-      mats.map(function (m) { var v = r.u[m.id], a = (r.x.adj || {})[m.id]; return '<td class="n">' + (v ? fmtN(v) : '') + (a ? '<br><span class="small" style="color:var(--amber)">' + (a > 0 ? '+' : '') + fmtN(a) + ' by hand</span>' : '') + '</td>'; }).join('') +
+      mats.map(function (m) { var v = r.u[m.id], a = (r.x.adj || {})[m.id]; return '<td class="n">' + (v ? fmtN(v) : '') + dcSplit(r.by[m.id]) + (a ? '<br><span class="small" style="color:var(--amber)">' + (a > 0 ? '+' : '') + fmtN(a) + ' by hand</span>' : '') + '</td>'; }).join('') +
       '<td>' + (S.canWrite ? '<button class="btn ghost" data-dce="' + r.d + '">Open</button>' : '') + '</td></tr>';
   });
   h += '</tbody><tfoot><tr><td colspan="3"><b>Total ' + esc(nameOfMonth(mk)) + '</b></td>' + mats.map(function (m) { return '<td class="n"><b>' + fmtN(totals[m.id]) + '</b></td>'; }).join('') + '<td></td></tr></tfoot></table></div>';
@@ -1056,15 +1075,15 @@ function dcEdit(fc, date) {
   var back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
   var prods = model.products.map(function (p) { return p.id; });
   function draw() {
-    var u = dcUse(model, { batches: st.batches, adj: {} }), all = dcUse(model, st);
+    var by = {}, u = dcUse(model, { batches: st.batches, adj: {} }, by), all = dcUse(model, st);
     var mats = model.materials.filter(function (m) { return u[m.id] || st.adj[m.id]; });
     var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Daily consumption" style="width:min(760px,100%)"><header><div><h2>' + DAYS[new Date(date + 'T00:00:00Z').getUTCDay()] + ' ' + U.nice(date) + ' · lot ' + esc(dcLot(date)) + '</h2><p class="small muted" style="margin:4px 0 0">' + (x.edited ? 'Corrected' + (x.by ? ' by ' + esc(x.by) : '') : x.fromLP ? 'From the Line Planner actuals' : 'No actual in the Line Planner for this day') + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
     h += '<div><h3 style="font-size:14px;margin:0 0 6px">Batches made</h3><div class="tablewrap"><table><thead><tr><th>Product</th><th class="n">Section 1</th><th class="n">Section 2</th></tr></thead><tbody>' + prods.map(function (p) {
       return '<tr><td>' + esc(PN[p] || p) + '</td>' + ['SEC-1', 'SEC-2'].map(function (s) { var k = p + '|' + s; return '<td class="n"><input type="number" step="any" min="0" data-db="' + k + '" value="' + (st.batches[k] != null && Number(st.batches[k]) ? st.batches[k] : '') + '" placeholder="0" style="width:80px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></td>'; }).join('') + '</tr>';
     }).join('') + '</tbody></table></div></div>';
-    h += '<div><h3 style="font-size:14px;margin:0 0 6px">Raw materials used</h3><div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Batches × recipe</th><th class="n">Extra (+) or less (−)</th><th class="n">Total used</th></tr></thead><tbody>' + mats.map(function (m) {
-      return '<tr><td>' + esc(m.name) + ' <span class="small muted">' + esc(m.unit) + '</span></td><td class="n">' + fmtN(u[m.id] || 0) + '</td><td class="n"><input type="number" step="any" data-da="' + m.id + '" value="' + (st.adj[m.id] || '') + '" placeholder="0" style="width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></td><td class="n"><b>' + fmtN(all[m.id] || 0) + '</b></td></tr>';
-    }).join('') + (mats.length ? '' : '<tr><td colspan="4" class="muted">No batches on this day.</td></tr>') + '</tbody></table></div>' +
+    h += '<div><h3 style="font-size:14px;margin:0 0 6px">Raw materials used</h3><div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Batches × recipe</th><th>By product</th><th class="n">Extra (+) or less (−)</th><th class="n">Total used</th></tr></thead><tbody>' + mats.map(function (m) {
+      return '<tr><td>' + esc(m.name) + ' <span class="small muted">' + esc(m.unit) + '</span></td><td class="n">' + fmtN(u[m.id] || 0) + '</td><td class="small">' + Object.keys(by[m.id] || {}).map(function (p) { return esc(PN[p] || p) + ' ' + fmtN(by[m.id][p]); }).join(' · ') + '</td><td class="n"><input type="number" step="any" data-da="' + m.id + '" value="' + (st.adj[m.id] || '') + '" placeholder="0" style="width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></td><td class="n"><b>' + fmtN(all[m.id] || 0) + '</b></td></tr>';
+    }).join('') + (mats.length ? '' : '<tr><td colspan="5" class="muted">No batches on this day.</td></tr>') + '</tbody></table></div>' +
       '<div class="top" style="margin-top:8px"><label>Add another material<select id="daAdd"><option value="">Choose…</option>' + model.materials.filter(function (m) { return mats.indexOf(m) < 0; }).map(function (m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join('') + '</select></label></div></div>';
     h += '<label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600">Note (why it was corrected)<input id="daNote" value="' + esc(st.note) + '" placeholder="e.g. one GM batch took 5 kg more salt" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-weight:400"></label>';
     h += '</div><footer>' + (x.edited ? '<button class="btn ghost" data-x="reset" style="margin-right:auto">Back to the Line Planner numbers</button>' : '<span class="small muted" style="margin-right:auto">Saved days count as real use in the forecast.</span>') + '<button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="save">Save day</button></footer></div>';
