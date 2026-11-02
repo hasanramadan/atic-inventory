@@ -70,7 +70,8 @@
     m.orders = orderEvents(saved.orders || []);
     m.settings = Object.assign({ basisWeeks: 8 }, saved.settings || {});
     m.actualDays = saved.actualDays || {};
-    m.dailyAdj = saved.dailyAdj || {}; /* hand corrections from Daily consumption: { date: { materialId: extra (+/-) } } */
+    m.dailyAdj = saved.dailyAdj || {};
+    m.recentPace = saved.recentPace || null; /* hand corrections from Daily consumption: { date: { materialId: extra (+/-) } } */
     m.actualSections = saved.actualSections || {}; /* sections with an actual entered that day (even 0 batches) */ /* batches really prepared, from the Line Planner actuals: { date: { 'GM|SEC-2': 13 } } */
     return m;
   }
@@ -102,6 +103,31 @@
   }
 
   /* Batches expected on one day: the factory plan when that week is planned, otherwise the average pace. */
+  /* Days with no factory plan and no actual: the RECENT pace from the Line Planner actuals (batches per working day,
+     per product and section, Saturdays apart) when there are at least 3 recent days; otherwise the Jan–Sep history average. */
+  function useRecent(m) { return m.recentPace && m.recentPace.days >= 3 && m.settings.pace !== 'history'; }
+  function paceItems(m, d, avg, sc) {
+    var res = [];
+    if (d === 5) return res;
+    if (useRecent(m)) {
+      var rp = m.recentPace, src = d === 6 ? (rp.satDays ? rp.sat : null) : rp.perDay;
+      Object.keys(src || rp.perDay).forEach(function (k) {
+        var b = (src ? src[k] : rp.perDay[k] * 0.5) * (sc.demandPct / 100), q = k.split('|');
+        if (q[0] === 'GM' && sc.extraGM) b += sc.extraGM / 5.5 * (m.gmSectionShare[q[1]] || 0.5);
+        if (b > 0) res.push({ product: q[0], section: q[1], batches: b, source: 'recent' });
+      });
+      return res;
+    }
+    var share = m.weekdayShare[d] || 0;
+    Object.keys(avg).forEach(function (p) {
+      Object.keys(avg[p].sections).forEach(function (s) {
+        var b = avg[p].sections[s] * share * (sc.demandPct / 100);
+        if (p === 'GM' && sc.extraGM) b += sc.extraGM * share * m.gmSectionShare[s];
+        if (b > 0) res.push({ product: p, section: s, batches: b, source: 'average' });
+      });
+    });
+    return res;
+  }
   function batchesOn(m, day, avg, sc) {
     var wk = weekStart(day);
     if (dow(day) === 5 && !(m.actualDays && m.actualDays[day])) return []; // Friday is always a day off at ATIC
@@ -121,16 +147,7 @@
         var b = Number(d[k]) || 0; if (!b) return;
         var parts = k.split('|'); res.push({ product: parts[0], section: parts[1], batches: b, source: 'plan' });
       });
-    } else {
-      var share = m.weekdayShare[dow(day)] || 0;
-      Object.keys(avg).forEach(function (p) {
-        Object.keys(avg[p].sections).forEach(function (s) {
-          var b = avg[p].sections[s] * share * (sc.demandPct / 100);
-          if (p === 'GM' && sc.extraGM) b += sc.extraGM * share * m.gmSectionShare[s];
-          if (b > 0) res.push({ product: p, section: s, batches: b, source: 'average' });
-        });
-      });
-    }
+    } else res = paceItems(m, dow(day), avg, sc);
     return res;
   }
 
@@ -175,12 +192,7 @@
       var weekly = 0, byProd = {};
       for (var k = 0; k < 7; k++) {
         var dd = addDays(addDays(start, 7 * 6), k); // a week outside any plan, for the normal pace
-        var avgItems = [];
-        Object.keys(avg).forEach(function (p) { Object.keys(avg[p].sections).forEach(function (s) {
-          var b = avg[p].sections[s] * (m.weekdayShare[k] || 0) * (sc.demandPct / 100);
-          if (p === 'GM' && sc.extraGM) b += sc.extraGM * (m.weekdayShare[k] || 0) * m.gmSectionShare[s];
-          if (b > 0) avgItems.push({ product: p, section: s, batches: b });
-        }); });
+        var avgItems = paceItems(m, k, avg, sc);
         var uu = useOn(m, mat.id, avgItems); weekly += uu.total;
         Object.keys(uu.by).forEach(function (p) { byProd[p] = (byProd[p] || 0) + uu.by[p]; });
       }
@@ -231,7 +243,7 @@
     });
     var rank = { order: 0, soon: 1, ok: 2, idle: 3 };
     results.sort(function (a, b) { return (rank[a.status] - rank[b.status]) || ((a.daysToOrder == null ? 1e9 : a.daysToOrder) - (b.daysToOrder == null ? 1e9 : b.daysToOrder)); });
-    return { today: today, weekStart: start, avg: avg, model: m, scenario: sc, results: results };
+    return { today: today, weekStart: start, avg: avg, model: m, scenario: sc, results: results, pace: useRecent(m) ? 'recent' : 'history', recentPace: m.recentPace };
   }
 
   var PNAME = { GM: 'Grenadine Molasses', BW: 'Blossom Water', RW: 'Rose Water', LS: 'Lemon Substitute', WV: 'White Vinegar' };

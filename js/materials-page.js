@@ -1175,3 +1175,43 @@ function bySplit(by, total, opts) { // "GM 400 · LS 68" (or percentages)
     return h;
   };
 })();
+
+/* ---------- the recent pace: batches per working day from the Line Planner actuals (last 14 days, Fridays off) ---------- */
+function recentPace() {
+  var eff = Object.assign({}, LP.days), secs = Object.assign({}, LP.secs), dd = dcDoc();
+  Object.keys(dd).forEach(function (d) { if (dd[d].batches) { eff[d] = dd[d].batches; secs[d] = secs[d] || {}; } });
+  var wk = {}, sat = {}, nW = 0, nS = 0, from = U.addDays(TODAY, -14), list = [];
+  for (var d = from; d < TODAY; d = U.addDays(d, 1)) {
+    var w = new Date(d + 'T00:00:00Z').getUTCDay(); if (w === 5 || !(secs[d] || eff[d])) continue;
+    var tgt = w === 6 ? sat : wk; if (w === 6) nS++; else nW++; list.push(d);
+    Object.keys(eff[d] || {}).forEach(function (k) { tgt[k] = (tgt[k] || 0) + (Number(eff[d][k]) || 0); });
+  }
+  var perDay = {}, satPer = {};
+  Object.keys(wk).forEach(function (k) { perDay[k] = wk[k] / Math.max(1, nW); });
+  Object.keys(sat).forEach(function (k) { satPer[k] = sat[k] / Math.max(1, nS); });
+  return { days: nW + nS, weekdays: nW, satDays: nS, perDay: perDay, sat: satPer, from: list[0] || null, to: list[list.length - 1] || null };
+}
+(function () {
+  var _sfe2 = savedForEngine;
+  savedForEngine = function () { var s = _sfe2(); s.recentPace = recentPace(); return s; };
+})();
+function paceNote(fc) {
+  var rp = fc.recentPace, use = fc.pace === 'recent';
+  var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0.05; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ' + fmtN(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
+  var h = '<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px"><span><b>Days with no factory plan</b> use ' + (use ? 'the <b>recent pace from the Line Planner</b>: ' + rp.days + ' working day' + (rp.days === 1 ? '' : 's') + ' of actuals (' + U.nice(rp.from) + ' – ' + U.nice(rp.to) + ').' : 'the <b>Jan–Sep history average</b>' + (rp && rp.days < 3 ? ' (fewer than 3 recent Line Planner days to use instead).' : ' (chosen on Stock & lead times).')) + '</span>';
+  if (use) h += '<span class="small">Sun–Thu: ' + (fmtK(rp.perDay) || 'none') + (rp.satDays ? ' · Saturday: ' + (fmtK(rp.sat) || 'none') : ' · Saturday: half a day (no Saturday logged yet)') + ' · Friday: off.</span>';
+  h += '<span class="small muted">Days with a factory plan use the plan; past days use the actual batches. Enter the factory plan in step 1 for the most exact forecast.</span></div>';
+  return h;
+}
+(function () {
+  var _vF2 = vForecast;
+  vForecast = function (fc) { var h = _vF2(fc), i = h.indexOf('<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="font-size:17px">2 · Forecast until'); return i < 0 ? h : h.slice(0, i) + paceNote(fc) + h.slice(i); };
+  // Stock page: choose the pace
+  var _vS = vStock, _aS = after.stock;
+  vStock = function (fc) {
+    var h = _vS(fc), on = fc.pace === 'recent', rp = fc.recentPace || { days: 0 };
+    var blk = '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Pace for days with no factory plan</h3><div class="tabs"><button data-pace="recent" aria-pressed="' + on + '"' + (rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>Recent Line Planner actuals (' + rp.days + ' days)</button><button data-pace="history" aria-pressed="' + !on + '">Jan–Sep history average</button></div><p class="small muted" style="margin:8px 0 0">Recent = batches really prepared per working day over the last 14 days. History = the weeks chosen below.</p></div>';
+    var i = h.indexOf('<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Normal production pace'); return i < 0 ? h + blk : h.slice(0, i) + blk + h.slice(i);
+  };
+  after.stock = function (fc) { _aS(fc); document.querySelectorAll('[data-pace]').forEach(function (b) { b.onclick = function () { var v = Object.assign({}, S.saved.settings || {}, { pace: b.dataset.pace }); S.saved.settings = v; saveDoc('settings', v); }; }); };
+})();
