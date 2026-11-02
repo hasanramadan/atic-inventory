@@ -237,6 +237,16 @@
         });
       });
     });
+    /* The month named in the sheet or file ("November 26", "Nov-2026") decides day/month order: Excel with US settings
+       stores 1/11 as 11 January. Dates that fall outside the named month but fit it with day and month swapped are swapped. */
+    var MN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    function namedMonth(t) { t = String(t || '').toLowerCase(); for (var i = 0; i < 12; i++) { var m = new RegExp(MN[i] + '[a-z]*[\\s_\\-.]*(20)?(\\d{2})?', 'i').exec(t); if (m) return { m: i + 1, y: m[2] ? 2000 + +m[2] : null }; } return null; }
+    var nm = null; book.sheets.forEach(function (sh) { if (!nm && !sh.hidden) nm = namedMonth(sh.name); }); nm = nm || namedMonth(book.name);
+    if (nm) Object.keys(hits).forEach(function (k) {
+      var h = hits[k], y = +h.date.slice(0, 4), mo = +h.date.slice(5, 7), dd = +h.date.slice(8, 10);
+      if (mo !== nm.m && dd === nm.m && mo <= 31) { h.date = (nm.y || y) + '-' + String(nm.m).padStart(2, '0') + '-' + String(mo).padStart(2, '0'); h.swapped = true; }
+      else if (mo === nm.m && nm.y && y !== nm.y) h.date = nm.y + h.date.slice(4);
+    });
     var list = Object.keys(hits).map(function (k) { return hits[k]; }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.sec < b.sec ? -1 : a.sec > b.sec ? 1 : String(a.size) < String(b.size) ? -1 : 1; });
     return { days: list, notes: notes, datesSeen: datesSeen, productsSeen: prodSeen };
   }
