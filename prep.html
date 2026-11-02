@@ -3,21 +3,306 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021254">
-<style>.soon{max-width:720px;margin:6vh auto 0;text-align:center}.soon .ic{font-size:56px}.soon h1{font-size:30px;margin:10px 0 8px}.soon .tag{display:inline-block;font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:4px 12px;border-radius:999px;background:var(--gold);color:#1b1306}.soon ol{text-align:left;max-width:520px;margin:18px auto;line-height:1.7}</style>
+<link rel="stylesheet" href="css/app.css?v=202611021311">
+<style>
+.pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
+/* ---------- hero ---------- */
+.hero{position:relative;border-radius:24px;overflow:hidden;color:#eef5f1;background:radial-gradient(900px 500px at 80% -20%,#2a7a5b 0%,#0f4c3a 45%,#082a20 100%);box-shadow:0 30px 60px -20px rgba(8,42,32,.55);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);min-height:330px}
+.hero::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 46px),repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 46px);mask-image:linear-gradient(180deg,transparent,#000 60%);pointer-events:none}
+.hl{padding:30px 32px;position:relative;z-index:1;display:flex;flex-direction:column;gap:16px}
+.hl .kick{font:600 11px var(--f-mono);letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+.hl h1{font:600 clamp(26px,3vw,38px)/1.1 var(--f-display);margin:0;color:#fff}
+.datebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.datebar input{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:10px;padding:8px 12px;font:500 15px var(--f-body);color-scheme:dark}
+.datebar button{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:500}
+.datebar button:hover{background:rgba(255,255,255,.18)}
+.ticket{perspective:700px;align-self:flex-start}
+.ticket .t{display:flex;align-items:stretch;transform:rotateX(14deg) rotateY(-16deg);transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.7,.2,1);border-radius:14px;background:linear-gradient(135deg,#f6dc9c,#d9a541 55%,#b7832f);color:#2a1a04;box-shadow:0 18px 30px -8px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.6)}
+.ticket:hover .t{transform:rotateX(0) rotateY(0) scale(1.03)}
+.ticket .a{padding:12px 16px;border-right:2px dashed rgba(42,26,4,.35);font:600 11px var(--f-mono);letter-spacing:.14em;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center}
+.ticket .b{padding:10px 20px}
+.ticket .b small{display:block;font:600 11px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;opacity:.7}
+.ticket .b b{font:700 40px/1 var(--f-mono);letter-spacing:.04em;text-shadow:0 1px 0 rgba(255,255,255,.4)}
+.stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:auto}
+.stats div{font-size:13px;opacity:.8}.stats b{display:block;font:600 26px var(--f-display);color:#fff;opacity:1}
+/* 3D tanks */
+.scene{position:relative;z-index:1;perspective:1100px;display:grid;place-items:center;padding:20px}
+.floor{position:relative;width:100%;max-width:520px;height:290px;transform-style:preserve-3d;transform:rotateX(var(--rx,10deg)) rotateY(var(--ry,-14deg));transition:transform .25s ease-out}
+.floor .pad{position:absolute;left:4%;right:4%;bottom:0;height:120px;transform:translateY(40px) rotateX(78deg);transform-origin:bottom;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.45),transparent);filter:blur(4px)}
+.tanks{position:absolute;inset:0;display:flex;justify-content:space-around;align-items:flex-end;transform-style:preserve-3d}
+.tk{position:relative;width:150px;height:240px;transform-style:preserve-3d;display:flex;flex-direction:column;align-items:center}
+.tk svg{width:150px;height:220px;overflow:visible;filter:drop-shadow(0 18px 18px rgba(0,0,0,.35))}
+.tk .lbl{transform:translateZ(40px);margin-top:4px;font:600 12px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;opacity:.85;text-align:center}
+.tk .lbl b{display:block;font:600 15px var(--f-display);letter-spacing:0;text-transform:none;color:#fff}
+.liq{transition:y .7s cubic-bezier(.2,.7,.2,1),height .7s cubic-bezier(.2,.7,.2,1)}
+.wv{animation:wv 3.2s ease-in-out infinite}@keyframes wv{50%{transform:translateX(-14px)}}
+.mixr{transform-origin:75px 70px;animation:spn 2.6s linear infinite}@keyframes spn{to{transform:rotate(360deg)}}
+.bb{animation:bb 2.4s ease-in infinite;opacity:0}@keyframes bb{0%{transform:translateY(0);opacity:0}20%{opacity:.8}100%{transform:translateY(-60px);opacity:0}}
+/* ---------- sections ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px 18px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.sec::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,var(--brand),var(--gold))}
+.sec h2{font:600 18px var(--f-display);margin:0;display:flex;align-items:center;gap:10px}
+.sec h2 .n{font:600 12px var(--f-mono);background:var(--surface-2);border-radius:99px;padding:3px 10px;color:var(--muted)}
+.sec .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.prow{display:grid;grid-template-columns:18px 1fr auto 34px;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.prow .dot{width:16px;height:16px;border-radius:50%;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2),0 2px 6px rgba(0,0,0,.2)}
+.prow select{width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:500 15px var(--f-body)}
+.step{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2)}
+.step button{width:38px;height:40px;border:0;background:transparent;font:600 20px var(--f-body);color:var(--ink);cursor:pointer}
+.step button:hover{background:var(--line)}
+.step input{width:58px;height:40px;border:0;text-align:center;font:600 18px var(--f-mono);background:var(--surface);color:var(--ink);-moz-appearance:textfield}
+.step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none}
+.x{border:0;background:transparent;color:var(--faint);font-size:20px;cursor:pointer;border-radius:8px;height:34px}.x:hover{color:var(--red);background:var(--red-soft)}
+.add{margin-top:8px;width:100%;border:1.5px dashed var(--line);background:transparent;border-radius:12px;padding:10px;color:var(--muted);font-weight:500;cursor:pointer}.add:hover{border-color:var(--brand);color:var(--brand)}
+.src{font-size:12.5px;color:var(--muted)}
+/* ---------- materials ---------- */
+.mhead{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:30px 0 14px}
+.mhead h2{font:600 22px var(--f-display);margin:0}.mhead p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.exp{display:flex;gap:8px;flex-wrap:wrap}
+.exp .btn{display:inline-flex;gap:7px;align-items:center;border-radius:11px;padding:9px 15px;cursor:pointer}
+.mats{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;perspective:1200px}
+.mc{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 16px 14px;box-shadow:var(--shadow);transform-style:preserve-3d;transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s;animation:rise .5s both}
+.mc:hover{box-shadow:0 22px 40px -16px rgba(16,38,31,.35)}
+@keyframes rise{from{opacity:0;transform:translateY(14px) rotateX(-12deg)}}
+.mc .nm{font:600 15px var(--f-display);margin:0 0 2px}
+.mc .q{font:600 30px/1.1 var(--f-mono);margin:6px 0 2px;transform:translateZ(30px)}
+.mc .q small{font:500 14px var(--f-body);color:var(--muted);margin-left:4px}
+.mc .alt{font-size:13px;color:var(--muted)}
+.mc .by{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.mc .by span{font-size:12px;padding:3px 9px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line)}
+.mc .by i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.bar{height:8px;border-radius:99px;background:var(--surface-2);margin-top:12px;overflow:hidden}.bar b{display:block;height:100%;border-radius:99px;background:var(--green)}
+.mc.short .bar b{background:var(--red)}.mc.tight .bar b{background:var(--amber)}
+.mc .st{font-size:12.5px;margin-top:6px;color:var(--muted)}.mc.short .st{color:var(--red);font-weight:600}
+.empty3{text-align:center;padding:46px 20px;border:1.5px dashed var(--line);border-radius:20px;color:var(--muted)}
+.empty3 .ic{font-size:40px}
+.note2{font-size:13px;color:var(--muted);margin-top:14px}
+/* ---------- print sheet ---------- */
+#sheet{display:none}
+@media print{
+  @page{size:A4;margin:14mm}
+  body{background:#fff!important;color:#000}
+  .rail,.pp,.toast{display:none!important}
+  .app{display:block}
+  #sheet{display:block;font:12pt/1.4 var(--f-body);color:#000}
+  #sheet h1{font:700 20pt var(--f-display);margin:0}
+  #sheet .meta{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px}
+  #sheet .lotp{font:700 22pt var(--f-mono);border:2px solid #000;padding:4px 12px;border-radius:6px}
+  #sheet table{width:100%;border-collapse:collapse;margin:6px 0 16px}
+  #sheet th,#sheet td{border:1px solid #000;padding:6px 8px;text-align:left}
+  #sheet td.n,#sheet th.n{text-align:right}
+  #sheet h2{font:600 13pt var(--f-display);margin:12px 0 4px}
+  #sheet .sign{display:flex;gap:30px;margin-top:26px}#sheet .sign div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10pt}
+}
+@media (max-width:900px){.hero{grid-template-columns:1fr}.scene{min-height:300px}.grid2{grid-template-columns:1fr}.pp{padding:16px 14px 50px}}
+@media (prefers-reduced-motion:reduce){.wv,.mixr,.bb,.mc{animation:none}.floor,.ticket .t,.mc{transition:none}}
+</style>
 </head><body>
 <div class="app"><aside class="rail" id="rail"></aside>
 <main id="main"><div class="boot"><div><i></i>Loading…</div></div></main></div>
+<div id="sheet"></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611021254"></script>
-<script src="js/shell.js?v=202611021254"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js?v=202611021311"></script>
+<script src="js/shell.js?v=202611021311"></script>
+<script src="js/materials-engine.js?v=202611021311"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
-  document.getElementById('main').innerHTML = '<div class="soon panel"><div class="ic">🛢️</div><span class="tag">Coming in the next update</span><h1>Preparation</h1><p class="muted">Plan what to prepare in the tanks before the line starts.</p>' +
-    '<ol><li>Choose the <b>product</b> and the <b>number of batches</b> for each section.</li><li>The page tells you every <b>raw material</b> to prepare, from the saved recipes.</li><li>It checks the amounts against the stock you have now.</li></ol>' +
-    (ATIC.areasOf(A.profile).length > 1 ? '<a class="btn" href="start.html" style="text-decoration:none">⇄ Switch area</a>' : '') + '</div>';
+  var E = window.ATICEngine, U = E.util, TODAY = U.iso(Date.now());
+  var PN = { GM: 'Grenadine Molasses', BW: 'Blossom Water', RW: 'Rose Water', LS: 'Lemon Substitute', WV: 'White Vinegar' };
+  var COL = { GM: ['#c2385a', '#5e0f24'], LS: ['#f2e27a', '#c9a92a'], WV: ['#e3f3f1', '#9cc9c3'], RW: ['#f4b9c9', '#c76a86'], BW: ['#f8eccd', '#d6bd7f'] };
+  var SEC = { 'SEC-1': 'Section 1', 'SEC-2': 'Section 2' };
+  var $ = function (s, r) { return (r || document).querySelector(s); }, esc = A.esc;
+  function toast(t) { var el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { el.hidden = true; }, 2600); }
+  function fq(x) { if (!x) return '0'; var a = Math.abs(x); return a >= 100 ? Math.round(x).toLocaleString('en-US') : a >= 10 ? (Math.round(x * 10) / 10).toLocaleString('en-US') : (Math.round(x * 100) / 100).toLocaleString('en-US'); }
+  function nice(d) { return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
+
+  /* ---------- data: recipes, materials, stock; Line Planner plans & actuals ---------- */
+  var docs, acts = [], plans = [], BASE, model, stockNow = {};
+  try {
+    var r = await Promise.all([A.docs.loadAll(), A.planner.list('actuals'), A.planner.list('plans')]);
+    docs = r[0].data; acts = r[1].map(function (x) { return x.data; }); plans = r[2].map(function (x) { return x.data; });
+  } catch (e) { $('#main').innerHTML = '<div class="empty">Could not load data: ' + esc(e.message) + '</div>'; return; }
+  BASE = docs.baseline; if (!BASE) { $('#main').innerHTML = '<div class="empty">No recipes in the database yet.</div>'; return; }
+  var days = {}, secs = {};
+  acts.forEach(function (a) {
+    if (!a || !a.date || !a.sec) return; var sc = a.sec === 'S1' ? 'SEC-1' : 'SEC-2'; (secs[a.date] = secs[a.date] || {})[sc] = 1;
+    ((a.runs && a.runs.length) ? a.runs : [{ product: a.product, batches: a.batches }]).forEach(function (q) { var b = Number(q.batches) || 0; if (b > 0 && q.product) { var k = q.product + '|' + sc; (days[a.date] = days[a.date] || {})[k] = (days[a.date][k] || 0) + b; } });
+  });
+  try {
+    var fc = E.forecast(BASE, { materials: docs.materials, recipes: docs.recipes, stock: docs.stock, plan: docs.plan, orders: (docs.orders && docs.orders.items) || [], settings: docs.settings, actualDays: days, actualSections: secs }, TODAY);
+    model = fc.model; fc.results.forEach(function (x) { stockNow[x.id] = x.stockNow; });
+  } catch (e) { model = E.buildModel ? E.buildModel(BASE, { materials: docs.materials, recipes: docs.recipes }) : BASE; }
+  var MATS = {}; model.materials.forEach(function (x) { MATS[x.id] = x; });
+  var PRODS = model.products.map(function (p) { return p.id; }).filter(function (p) { return PN[p]; });
+
+  /* ---------- state: one list of {p, b} per section, kept per day on this device ---------- */
+  var S = { date: TODAY, rows: { 'SEC-1': [], 'SEC-2': [] }, src: '' };
+  function key() { return 'aticPrep:' + S.date; }
+  function store() { try { localStorage.setItem(key(), JSON.stringify(S.rows)); } catch (e) {} }
+  function fromLP(date) {
+    var out = { 'SEC-1': [], 'SEC-2': [] }, src = '';
+    var put = function (sec, runs) { runs.forEach(function (q) { var b = Math.round(Number(q.batches) || 0); if (q.product && b > 0 && PN[q.product]) { var e = out[sec].filter(function (x) { return x.p === q.product; })[0]; if (e) e.b += b; else out[sec].push({ p: q.product, b: b }); } }); };
+    ['S1', 'S2'].forEach(function (s) {
+      var sec = s === 'S1' ? 'SEC-1' : 'SEC-2';
+      var a = acts.filter(function (x) { return x.date === date && x.sec === s; })[0], pl = plans.filter(function (x) { return x.date === date && x.sec === s; })[0];
+      if (a) { put(sec, (a.runs && a.runs.length) ? a.runs : [{ product: a.product, batches: a.batches }]); src = src || 'actual'; }
+      else if (pl && pl.inputs) { put(sec, pl.inputs.runs || [{ product: pl.inputs.product, batches: pl.inputs.batches }]); src = src || 'plan'; }
+    });
+    if (!out['SEC-1'].length && !out['SEC-2'].length) {
+      var fp = docs.plan && docs.plan.days && docs.plan.days[date];
+      if (fp) { Object.keys(fp).forEach(function (k) { var q = k.split('|'); if (q[1] && out[q[1]] && Math.round(fp[k]) > 0 && PN[q[0]]) out[q[1]].push({ p: q[0], b: Math.round(fp[k]) }); }); if (out['SEC-1'].length || out['SEC-2'].length) src = 'factory'; }
+    }
+    return { rows: out, src: src };
+  }
+  function load() {
+    var saved = null; try { saved = JSON.parse(localStorage.getItem(key()) || 'null'); } catch (e) {}
+    if (saved) { S.rows = saved; S.src = 'mine'; return; }
+    var f = fromLP(S.date); S.rows = f.rows; S.src = f.src;
+  }
+
+  /* ---------- the maths: batches × recipe ---------- */
+  function need() {
+    var out = {};
+    Object.keys(S.rows).forEach(function (sec) {
+      S.rows[sec].forEach(function (row) {
+        if (!row.p || !(row.b > 0)) return;
+        var rec = ((model.recipes[row.p] || {})[sec]) || {};
+        Object.keys(rec).forEach(function (mid) {
+          var per = Number(rec[mid]) || 0; if (!per || !MATS[mid]) return;
+          var o = out[mid] = out[mid] || { id: mid, app: 0, by: [] };
+          o.app += per * row.b; o.by.push({ p: row.p, sec: sec, b: row.b, app: per * row.b });
+        });
+      });
+    });
+    return Object.keys(out).map(function (k) { return out[k]; }).sort(function (a, b) { return b.app * (MATS[b.id].recipeFactor || 1) - a.app * (MATS[a.id].recipeFactor || 1); });
+  }
+  function unitTxt(x, app) { var f = x.recipeFactor || 1; return { main: app * f, mu: x.recipeUnit || x.unit, alt: f !== 1 ? app : null, au: x.unit }; }
+  function totals() { var b = 0, p = {}; Object.keys(S.rows).forEach(function (s) { S.rows[s].forEach(function (r) { if (r.p && r.b > 0) { b += r.b; p[r.p] = 1; } }); }); return { b: b, p: Object.keys(p).length }; }
+
+  /* ---------- views ---------- */
+  function tankSvg(sec) {
+    var rows = S.rows[sec].filter(function (r) { return r.p && r.b > 0; }), tot = rows.reduce(function (s, r) { return s + r.b; }, 0);
+    var cap = Math.max(20, tot), H = 150, top = 40, y = top + H, layers = '', id = sec.replace('-', '');
+    rows.forEach(function (r, i) {
+      var h = H * r.b / cap, c = COL[r.p] || ['#8fd3b6', '#2c7a5b']; y -= h;
+      layers += '<defs><linearGradient id="g' + id + i + '" x1="0" x2="1"><stop offset="0" stop-color="' + c[1] + '"/><stop offset=".45" stop-color="' + c[0] + '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient></defs>' +
+        '<rect class="liq" x="21" y="' + y.toFixed(1) + '" width="108" height="' + h.toFixed(1) + '" fill="url(#g' + id + i + ')"/>';
+    });
+    var surf = tot ? '<g clip-path="url(#cl' + id + ')"><path class="wv" d="M0 ' + y.toFixed(1) + ' q 12 -5 24 0 t 24 0 t 24 0 t 24 0 t 24 0 t 24 0 t 24 0 v 6 h -168 z" fill="rgba(255,255,255,.35)"/>' +
+      '<circle class="bb" cx="55" cy="' + (top + H - 10) + '" r="3" fill="rgba(255,255,255,.7)"/><circle class="bb" style="animation-delay:.8s" cx="92" cy="' + (top + H - 20) + '" r="2.5" fill="rgba(255,255,255,.6)"/><circle class="bb" style="animation-delay:1.5s" cx="74" cy="' + (top + H - 5) + '" r="2" fill="rgba(255,255,255,.6)"/></g>' : '';
+    return '<svg viewBox="0 0 150 220" aria-hidden="true"><defs><clipPath id="cl' + id + '"><rect x="21" y="' + top + '" width="108" height="' + H + '" rx="4"/></clipPath>' +
+      '<linearGradient id="steel' + id + '" x1="0" x2="1"><stop offset="0" stop-color="#7d8c87"/><stop offset=".25" stop-color="#e9f0ed"/><stop offset=".55" stop-color="#b6c4bf"/><stop offset="1" stop-color="#5d6b66"/></linearGradient></defs>' +
+      '<rect x="40" y="196" width="10" height="20" fill="#4a5752"/><rect x="100" y="196" width="10" height="20" fill="#4a5752"/>' +
+      '<path d="M18 36 Q18 22 75 20 Q132 22 132 36 V194 Q132 204 75 206 Q18 204 18 194 Z" fill="url(#steel' + id + ')"/>' +
+      '<rect x="21" y="' + top + '" width="108" height="' + H + '" rx="4" fill="rgba(8,30,24,.55)"/>' + '<g clip-path="url(#cl' + id + ')">' + layers + '</g>' + surf +
+      '<rect x="21" y="' + top + '" width="108" height="' + H + '" rx="4" fill="none" stroke="rgba(255,255,255,.25)"/>' +
+      '<rect x="26" y="' + top + '" width="10" height="' + H + '" fill="rgba(255,255,255,.18)"/>' +
+      '<ellipse cx="75" cy="22" rx="57" ry="9" fill="#cfdad6"/><rect x="72" y="0" width="6" height="26" fill="#9aa8a3"/>' +
+      '<g class="mixr"' + (tot ? '' : ' style="animation:none"') + '><rect x="73" y="26" width="4" height="70" fill="rgba(220,230,226,.6)"/></g>' +
+      [0.25, 0.5, 0.75].map(function (f) { return '<line x1="122" x2="129" y1="' + (top + H * (1 - f)) + '" y2="' + (top + H * (1 - f)) + '" stroke="rgba(255,255,255,.5)"/>'; }).join('') + '</svg>';
+  }
+  function heroScene() {
+    return ['SEC-1', 'SEC-2'].map(function (sec) {
+      var t = S.rows[sec].reduce(function (s, r) { return s + (r.p && r.b > 0 ? r.b : 0); }, 0);
+      return '<div class="tk">' + tankSvg(sec) + '<div class="lbl">' + SEC[sec] + '<b>' + t + ' batch' + (t === 1 ? '' : 'es') + '</b></div></div>';
+    }).join('');
+  }
+  function rowHtml(sec, r, i) {
+    var c = COL[r.p] || ['#cfd8d4', '#9aa'];
+    return '<div class="prow"><span class="dot" style="background:radial-gradient(circle at 35% 30%,' + c[0] + ',' + c[1] + ')"></span>' +
+      '<select data-s="' + sec + '" data-i="' + i + '" aria-label="Product"><option value="">Choose a product…</option>' + PRODS.map(function (p) { return '<option value="' + p + '"' + (p === r.p ? ' selected' : '') + '>' + PN[p] + '</option>'; }).join('') + '</select>' +
+      '<div class="step"><button type="button" data-d="-1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch less">−</button><input type="number" min="0" step="1" inputmode="numeric" value="' + (r.b || 0) + '" data-s="' + sec + '" data-i="' + i + '" aria-label="Batches"><button type="button" data-d="1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch more">+</button></div>' +
+      '<button type="button" class="x" data-rm="' + i + '" data-s="' + sec + '" aria-label="Remove">×</button></div>';
+  }
+  function secHtml(sec) {
+    var t = S.rows[sec].reduce(function (s, r) { return s + (r.p && r.b > 0 ? r.b : 0); }, 0);
+    return '<div class="sec"><div class="top"><h2>' + SEC[sec] + '<span class="n">' + t + ' bt</span></h2></div>' +
+      S.rows[sec].map(function (r, i) { return rowHtml(sec, r, i); }).join('') +
+      '<button type="button" class="add" data-add="' + sec + '">+ Add a product</button></div>';
+  }
+  function matsHtml(list) {
+    if (!list.length) return '<div class="empty3"><div class="ic">🧪</div><p>Choose a product and the number of batches above.<br>The raw materials to prepare show up here.</p></div>';
+    return '<div class="mats">' + list.map(function (o, k) {
+      var x = MATS[o.id], u = unitTxt(x, o.app), have = stockNow[o.id], cls = '', st = '';
+      if (have != null && !isNaN(have)) {
+        var pct = have > 0 ? Math.min(100, o.app / have * 100) : 100;
+        cls = o.app > have ? 'short' : pct > 70 ? 'tight' : '';
+        st = '<div class="bar"><b style="width:' + Math.max(3, pct).toFixed(0) + '%"></b></div><div class="st">' + (o.app > have ? 'Not enough: about ' + fq(Math.max(0, have)) + ' ' + x.unit + ' left in stock' : 'Uses ' + Math.round(pct) + '% of the ≈ ' + fq(have) + ' ' + x.unit + ' in stock') + '</div>';
+      }
+      return '<div class="mc ' + cls + '" style="animation-delay:' + (k * 40) + 'ms"><div class="nm">' + esc(x.name) + '</div><div class="q">' + fq(u.main) + '<small>' + esc(u.mu) + '</small></div>' +
+        (u.alt != null ? '<div class="alt">≈ ' + fq(u.alt) + ' ' + esc(u.au) + (u.alt === 1 ? '' : 's') + '</div>' : '') +
+        '<div class="by">' + o.by.map(function (b) { var c = COL[b.p] || ['#aaa']; return '<span><i style="background:' + c[0] + '"></i>' + b.p + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' · ' + b.b + ' bt → ' + fq(b.app * (x.recipeFactor || 1)) + '</span>'; }).join('') + '</div>' + st + '</div>';
+    }).join('') + '</div>';
+  }
+  var SRC = { actual: 'Filled from the batches saved in the Line Planner (actuals).', plan: 'Filled from the Line Planner forecast for this day.', factory: 'Filled from the factory plan.', mine: 'Your numbers for this day (saved on this device).', '': 'Nothing planned in the Line Planner for this day yet. Add the products and batches.' };
+  function render() {
+    var list = need(), t = totals(), lot = A.lot(S.date);
+    $('#main').innerHTML = '<div class="pp">' +
+      '<section class="hero"><div class="hl"><span class="kick">Preparation · tanks</span><h1>What to prepare<br>' + (S.date === TODAY ? 'today' : 'on ' + new Date(S.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })) + '</h1>' +
+      '<div class="datebar"><input type="date" id="d" value="' + S.date + '" aria-label="Day"><button type="button" id="today">Today</button><button type="button" id="lp" title="Take the batches from the Line Planner again">↻ From Line Planner</button></div>' +
+      '<div class="ticket" title="Lot number: year + day of the year"><div class="t"><div class="a">LOT</div><div class="b"><small>Lot number</small><b>' + lot + '</b></div></div></div>' +
+      '<div class="stats"><div><b>' + t.b + '</b>batches</div><div><b>' + t.p + '</b>product' + (t.p === 1 ? '' : 's') + '</div><div><b>' + list.length + '</b>raw materials</div></div></div>' +
+      '<div class="scene" id="scene"><div class="floor" id="floor"><div class="pad"></div><div class="tanks">' + heroScene() + '</div></div></div></section>' +
+      '<p class="src" style="margin:12px 4px 0">' + SRC[S.src || ''] + '</p>' +
+      '<div class="grid2">' + secHtml('SEC-1') + secHtml('SEC-2') + '</div>' +
+      '<div class="mhead"><div><h2>Raw materials to prepare</h2><p>Batches × the saved recipe of each section · Lot ' + lot + '</p></div><div class="exp">' +
+      '<button class="btn primary" id="xPrint" type="button">🖨 Sheet for the workers</button><button class="btn" id="xXls" type="button">⬇ Excel</button><button class="btn" id="xCopy" type="button">⧉ Copy</button></div></div>' +
+      matsHtml(list) +
+      '<p class="note2">Amounts come from <a href="materials.html#recipes">Recipes per batch</a>. "In stock" is the counted stock minus what the Line Planner batches used since the count.</p></div>';
+    wire(); tilt();
+  }
+  function wire() {
+    $('#d').onchange = function () { if (this.value) { S.date = this.value; load(); render(); } };
+    $('#today').onclick = function () { S.date = TODAY; load(); render(); };
+    $('#lp').onclick = function () { try { localStorage.removeItem(key()); } catch (e) {} var f = fromLP(S.date); S.rows = f.rows; S.src = f.src; render(); toast(f.src ? 'Taken from the Line Planner' : 'Nothing in the Line Planner for this day'); };
+    document.querySelectorAll('.prow select').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].p = el.value; S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('.step input').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].b = Math.max(0, Math.round(Number(el.value) || 0)); S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('.step button').forEach(function (el) { el.onclick = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.b = Math.max(0, (r.b || 0) + Number(el.dataset.d)); S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('[data-rm]').forEach(function (el) { el.onclick = function () { S.rows[el.dataset.s].splice(+el.dataset.rm, 1); S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('[data-add]').forEach(function (el) { el.onclick = function () { var used = S.rows[el.dataset.add].map(function (r) { return r.p; }); S.rows[el.dataset.add].push({ p: PRODS.filter(function (p) { return used.indexOf(p) < 0; })[0] || '', b: 1 }); S.src = 'mine'; store(); render(); }; });
+    $('#xPrint').onclick = printSheet; $('#xXls').onclick = excel; $('#xCopy').onclick = copyTxt;
+  }
+  function tilt() {
+    var sc = $('#scene'), fl = $('#floor'); if (!sc || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    sc.onmousemove = function (e) { var b = sc.getBoundingClientRect(), x = (e.clientX - b.left) / b.width - .5, y = (e.clientY - b.top) / b.height - .5; fl.style.setProperty('--ry', (x * 26 - 6) + 'deg'); fl.style.setProperty('--rx', (12 - y * 16) + 'deg'); };
+    sc.onmouseleave = function () { fl.style.removeProperty('--ry'); fl.style.removeProperty('--rx'); };
+    document.querySelectorAll('.mc').forEach(function (c) {
+      c.onmousemove = function (e) { var b = c.getBoundingClientRect(), x = (e.clientX - b.left) / b.width - .5, y = (e.clientY - b.top) / b.height - .5; c.style.transform = 'rotateY(' + (x * 10) + 'deg) rotateX(' + (-y * 10) + 'deg) translateZ(6px)'; };
+      c.onmouseleave = function () { c.style.transform = ''; };
+    });
+  }
+
+  /* ---------- exports ---------- */
+  function prodRows() { var o = []; ['SEC-1', 'SEC-2'].forEach(function (s) { S.rows[s].forEach(function (r) { if (r.p && r.b > 0) o.push({ sec: SEC[s], p: PN[r.p], b: r.b }); }); }); return o; }
+  function matRows() { return need().map(function (o) { var x = MATS[o.id], u = unitTxt(x, o.app); return { name: x.name, q: u.main, u: u.mu, alt: u.alt, au: x.unit, by: o.by.map(function (b) { return b.p + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' ' + fq(b.app * (x.recipeFactor || 1)); }).join(' · ') }; }); }
+  function printSheet() {
+    var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
+    if (!pr.length) { toast('Add at least one product first'); return; }
+    $('#sheet').innerHTML = '<div class="meta"><div><div style="font:600 10pt var(--f-mono);letter-spacing:.1em">ATIC OMAN · PREPARATION SHEET</div><h1>' + nice(S.date) + '</h1></div><div class="lotp">LOT ' + lot + '</div></div>' +
+      '<h2>Products and batches</h2><table><thead><tr><th>Section</th><th>Product</th><th class="n">Batches</th><th>Done ✓</th></tr></thead><tbody>' + pr.map(function (r) { return '<tr><td>' + r.sec + '</td><td>' + esc(r.p) + '</td><td class="n"><b>' + r.b + '</b></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+      '<h2>Raw materials to weigh</h2><table><thead><tr><th>Material</th><th class="n">Quantity</th><th>For</th><th>Weighed ✓</th></tr></thead><tbody>' + mr.map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td class="n"><b>' + fq(r.q) + ' ' + esc(r.u) + '</b>' + (r.alt != null ? '<br><small>≈ ' + fq(r.alt) + ' ' + esc(r.au) + 's</small>' : '') + '</td><td><small>' + esc(r.by) + '</small></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+      '<div class="sign"><div>Prepared by</div><div>Checked by</div><div>Time</div></div>';
+    window.print();
+  }
+  function excel() {
+    var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
+    if (!pr.length) { toast('Add at least one product first'); return; }
+    var aoa = [['ATIC Oman · Preparation sheet'], ['Date', S.date], ['Lot', lot], [], ['Section', 'Product', 'Batches']].concat(pr.map(function (r) { return [r.sec, r.p, r.b]; }))
+      .concat([[], ['Raw material', 'Quantity', 'Unit', 'In stock units', 'For']]).concat(mr.map(function (r) { return [r.name, Math.round(r.q * 100) / 100, r.u, r.alt != null ? Math.round(r.alt * 100) / 100 + ' ' + r.au + 's' : '', r.by]; }));
+    if (window.XLSX) { var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 40 }]; var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Preparation'); XLSX.writeFile(wb, 'Preparation ' + S.date + ' lot ' + lot + '.xlsx'); }
+    else A.download('Preparation ' + S.date + ' lot ' + lot + '.csv', aoa.map(function (r) { return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'));
+  }
+  function copyTxt() {
+    var pr = prodRows(), mr = matRows(); if (!pr.length) { toast('Add at least one product first'); return; }
+    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date) + '\n\n' + pr.map(function (r) { return r.sec + ': ' + r.p + ' × ' + r.b + ' batches'; }).join('\n') + '\n\nRaw materials:\n' + mr.map(function (r) { return '• ' + r.name + ': ' + fq(r.q) + ' ' + r.u + (r.alt != null ? ' (≈ ' + fq(r.alt) + ' ' + r.au + 's)' : ''); }).join('\n');
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('Copied: paste it in WhatsApp or anywhere'); }, function () { toast('Could not copy'); });
+  }
+
+  load(); render();
 })();
 </script>
 </body></html>

@@ -3,7 +3,7 @@
 <title>ATIC Line Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021254">
+<link rel="stylesheet" href="css/app.css?v=202611021311">
 <style>
 
 .lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
@@ -348,12 +348,12 @@
 </main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611021254"></script>
-<script src="js/shell.js?v=202611021254"></script>
-<script src="js/io.js?v=202611021254"></script>
-<script src="js/excel.js?v=202611021254"></script>
-<script src="js/word.js?v=202611021254"></script>
-<script src="js/line-engine.js?v=202611021254"></script>
+<script src="config.js?v=202611021311"></script>
+<script src="js/shell.js?v=202611021311"></script>
+<script src="js/io.js?v=202611021311"></script>
+<script src="js/excel.js?v=202611021311"></script>
+<script src="js/word.js?v=202611021311"></script>
+<script src="js/line-engine.js?v=202611021311"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 // The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
@@ -613,7 +613,7 @@ function renderCards() {
     }
   }
   const wd = ENGINE.weekdayIdx(S.date);
-  $('wday').textContent = ENGINE.WD[wd] + (wd === 4 ? ' · day off' : '');
+  $('wday').innerHTML = ENGINE.WD[wd] + (wd === 4 ? ' · day off' : '') + ' · <b title="Lot number: year + day of the year">Lot ' + ATIC.lot(S.date) + '</b>';
   $('friBanner').hidden = wd !== 4;
   const n = S.Lall ? S.Lall.n : 0;
   $('learnChip').querySelector('span').textContent = n ? `Model learned from ${n} logged day${n === 1 ? '' : 's'}` : 'History model · no logged days yet';
@@ -653,7 +653,7 @@ async function savePlan(sec) {
   const inp = engineInput(sec);
   const r0 = inp.runs[0];
   const doc = {
-    kind: 'plan', schema: 2, date: S.date, sec,
+    kind: 'plan', schema: 2, date: S.date, sec, lot: ATIC.lot(S.date),
     inputs: { product: r0.product, size: r0.size, batches: f.batches, targetBoxes: f.target, // round-1 fields, kept so older readers still work
       prev: inp.prev, prevSource: i.prevSrc, targetOn: i.targetOn,
       runs: inp.runs.map((r, k) => ({ product: r.product, size: r.size, batches: r.batches, opening: r.opening == null ? null : r.opening, openingResolved: f.runs[k].opening, start: r.start, target: r.target })) },
@@ -1065,11 +1065,11 @@ function changesHtml(L) {
 }
 function savedHtml() {
   const all = S.plans.map(p => ({ t: 'Forecast', d: p.date, s: p.sec, it: p.inputs && p.inputs.runs ? p.inputs.runs.map(r => `${r.product} ${r.size}`).join(' + ') : `${p.inputs?.product} ${p.inputs?.size}`, b: p.out?.boxesP50, c: p.out?.closingBatches, at: p.savedAt }))
-    .concat(S.actuals.map(a => ({ t: 'Actual', d: a.date, s: a.sec, it: ENGINE.actualRuns(a).map(r => `${r.product} ${r.size}`).join(' + '), b: a.boxes, c: ENGINE.actualTotals(a).closingBatches, at: a.savedAt })))
+    .concat(S.actuals.map(a => ({ t: 'Actual', lot: a.lot, d: a.date, s: a.sec, it: ENGINE.actualRuns(a).map(r => `${r.product} ${r.size}`).join(' + '), b: a.boxes, c: ENGINE.actualTotals(a).closingBatches, at: a.savedAt })))
     .sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : a.s < b.s ? -1 : 1);
   return `<details><summary>All saved records (${S.plans.length} forecasts, ${S.actuals.length} actuals)</summary>
     <p class="note">Stored in the shared collections <code>plans</code> and <code>actuals</code>, one document per day and section (for example <code>plans/2026-10-05_S1</code>). Field lists are in How the model works.</p>
-    ${all.length ? `<div class="tw"><table><thead><tr><th class="n">Date</th><th>Sec</th><th>Type</th><th>Items</th><th class="n">Boxes</th><th class="n">Closing bal.</th><th>Saved</th></tr></thead><tbody>${all.map(r => `<tr><td class="n">${r.d}</td><td>${r.s}</td><td>${r.t}</td><td>${esc(r.it)}</td><td class="n">${fmt(r.b)}</td><td class="n">${r.c == null ? '–' : fmt1(r.c)}</td><td class="note">${esc((r.at || '').slice(0, 16).replace('T', ' '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">No records yet.</p>'}</details>`;
+    ${all.length ? `<div class="tw"><table><thead><tr><th class="n">Date</th><th class="n">Lot</th><th>Sec</th><th>Type</th><th>Items</th><th class="n">Boxes</th><th class="n">Closing bal.</th><th>Saved</th></tr></thead><tbody>${all.map(r => `<tr><td class="n">${r.d}</td><td class="n mono">${esc(r.lot || ATIC.lot(r.d))}</td><td>${r.s}</td><td>${r.t}</td><td>${esc(r.it)}</td><td class="n">${fmt(r.b)}</td><td class="n">${r.c == null ? '–' : fmt1(r.c)}</td><td class="note">${esc((r.at || '').slice(0, 16).replace('T', ' '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">No records yet.</p>'}</details>`;
 }
 async function exportCsv() {
   if (!S.dl || !CM.last) return;
@@ -1649,7 +1649,7 @@ function wordDialog(days) {
     const runs = d.runs.map(r => `<b>${esc(pname(r.product))} ${esc(r.size || '')}</b><br><span class="small muted">${fmt1(r.batches)} prepared · balance ${r.opening == null ? '?' : fmt1(r.opening)} → ${r.closing == null ? '?' : fmt1(r.closing)} · ${r.boxes == null ? '?' : fmt(r.boxes)} boxes</span>`).join('<br>');
     const stops = `<span class="small">start ${d.startMin ?? '–'} · cleaning ${d.cleanRoutineMin ?? '–'}${d.cleanDeepMin ? ' · CIP ' + d.cleanDeepMin : ''}${d.changeoverMin ? ' · changeover ' + d.changeoverMin : ''}${d.prepMin ? ' · prep ' + d.prepMin : ''}</span>${d.reasons ? '<br><span class="small muted">' + esc(d.reasons) + '</span>' : ''}`;
     const warn = d.warnings.length ? '<br><span class="small" style="color:var(--red)">' + d.warnings.map(esc).join('<br>') + '</span>' : '';
-    return `<tr><td><b>${new Date(d.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</b><br><span class="small muted">${SECN[d.sec]} · ${esc(d.file)}</span></td><td>${runs}${warn}</td><td class="n">${d.fillMin ?? '–'} / ${d.stopMin ?? '–'} / ${d.workMin ?? '–'}</td><td>${stops}</td><td>${esc(d.lastBox || '–')}</td><td class="small">${diff(d)}</td></tr>`;
+    return `<tr><td><b>${new Date(d.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</b><br><span class="small muted">Lot ${ATIC.lot(d.date)} · ${SECN[d.sec]} · ${esc(d.file)}</span></td><td>${runs}${warn}</td><td class="n">${d.fillMin ?? '–'} / ${d.stopMin ?? '–'} / ${d.workMin ?? '–'}</td><td>${stops}</td><td>${esc(d.lastBox || '–')}</td><td class="small">${diff(d)}</td></tr>`;
   }).join('') + '</tbody></table></div>';
   h += '<p class="small muted" style="margin:0">Start-up, cleaning, changeover and batch-prep stops are sorted by their names; everything else goes to "main stop reasons". The previous product comes from the day before.</p>';
   h += `</div><footer><span class="msg" id="w_msg" style="margin-right:auto"></span><button class="btn" data-x="close">Cancel</button>${ok.length === 1 ? '<button class="btn" data-x="form">Put in the form to check</button>' : ''}<button class="btn primary" data-x="all"${ok.length && S.canWrite ? '' : ' disabled'}>Save ${ok.length} day${ok.length === 1 ? '' : 's'}</button></footer></div>`;
