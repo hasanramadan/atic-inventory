@@ -1322,3 +1322,36 @@ function paceBoxWire() {
   var _vS2 = vStock;
   vStock = function (fc) { return _vS2(fc).replace('<button data-pace="history"', '<button data-pace="manual" aria-pressed="' + ((S.saved.settings || {}).pace === 'manual') + '"' + ((S.saved.settings || {}).manualPace ? '' : ' disabled title="Set them first on the Forecast page"') + '>Set by me</button><button data-pace="history"').replace('aria-pressed="true">Recent Line Planner', 'aria-pressed="' + ((S.saved.settings || {}).pace !== 'manual' && (S.saved.settings || {}).pace !== 'history') + '">Recent Line Planner'); };
 })();
+
+/* ---------- Overview card, simple: Counted · Est. used since · Est. left now · Used on <last day with an actual> ---------- */
+function lastActualDay() {
+  var dd = dcDoc(), best = null;
+  Object.keys(LP.days).concat(Object.keys(dd)).forEach(function (d) { if (d <= TODAY && (!best || d > best)) best = d; });
+  return best;
+}
+(function () {
+  var _card4 = card;
+  card = function (r) {
+    var h = _card4(r), fc = run.cache; if (!fc) return h;
+    var d = lastActualDay(), used = d ? (dcUse(fc.model, dcDay(d))[r.id] || 0) : null;
+    var row = '<dt title="Real use that day: batches made (Line Planner) × recipe, with any corrections from Daily consumption">' + (d ? 'Used on ' + U.nice(d) : 'Used on last day') + '</dt><dd>' + (d ? fmtN(used) : '–') + '</dd>';
+    return h.replace(/<dt[^>]*>Use per day<\/dt><dd>[\s\S]*?<\/dd>/, row).replace(/<dt[^>]*>Use per week<\/dt><dd>[\s\S]*?<\/dd>/, row);
+  };
+  var _vM4 = vMaterial;
+  vMaterial = function (fc) {
+    var h = _vM4(fc), d = lastActualDay(); if (!d) return h;
+    var used = dcUse(fc.model, dcDay(d))[S.mat] || 0;
+    return h.replace(/<div class="kpi"><span class="l">Use per day<\/span>[\s\S]*?<\/div>/, '<div class="kpi"><span class="l">Used on ' + U.nice(d) + '</span><span class="v num">' + fmtN(used) + '</span><span class="small muted">batches made × recipe</span></div>');
+  };
+})();
+/* the pace you asked for: GM 13 batches a day on Section 2 only (set once; Section 1 keeps its other products from the recent Line Planner pace). Change it on Forecast & plan → "Set by me". */
+function seedManualPace() {
+  if (!S.canWrite || seedManualPace.done || !BASE) return; var st = S.saved.settings || {}; if (st.manualPaceSeeded) return; seedManualPace.done = true;
+  var rp = recentPace(), mp = { perDay: { 'GM|SEC-2': 13 }, sat: { 'GM|SEC-2': 13 } };
+  // Section 1 keeps its other products (vinegar, lemon …) from the recent Line Planner pace; GM is only the 13 on Section 2
+  Object.keys(rp.perDay || {}).forEach(function (k) { var q = k.split('|'); if (q[1] === 'SEC-1' && q[0] !== 'GM' && rp.perDay[k] >= 0.25) mp.perDay[k] = Math.round(rp.perDay[k] * 2) / 2; });
+  Object.keys(rp.sat || {}).forEach(function (k) { var q = k.split('|'); if (q[1] === 'SEC-1' && q[0] !== 'GM' && rp.sat[k] >= 0.25) mp.sat[k] = Math.round(rp.sat[k] * 2) / 2; });
+  var v = Object.assign({}, st, { pace: 'manual', manualPace: mp, manualPaceAt: new Date().toISOString(), manualPaceSeeded: true });
+  S.saved.settings = v; saveDoc('settings', v);
+}
+(function waitPace() { if (window.ATIC && ATIC.profile && BASE && S.saved && run.cache) ATIC.whenShown(function () { setTimeout(seedManualPace, 500); }); else setTimeout(waitPace, 300); })();
