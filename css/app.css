@@ -186,3 +186,4 @@ html,body{min-height:100%}
 .rail{view-transition-name:rail}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.14s}
 ::view-transition-old(rail),::view-transition-new(rail){animation:none}
+.userchip .switch{display:block;margin:6px 0 2px;color:inherit;opacity:.85;font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:5px 9px;text-align:center}.userchip .switch:hover{opacity:1;background:rgba(255,255,255,.08)}

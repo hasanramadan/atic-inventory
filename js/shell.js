@@ -10,6 +10,10 @@
     { key: 'admin', href: 'admin.html', label: 'Admin' }
   ];
   var ROLE = { admin: 'Admin', editor: 'Can edit', viewer: 'View only' };
+  /* areas: Production (this site), Lab and Preparation. The owner has all of them. */
+  var AREAS = [{ key: 'production', label: 'Production', href: null }, { key: 'lab', label: 'Lab', href: 'lab.html' }, { key: 'preparation', label: 'Preparation', href: 'prep.html' }];
+  function areasOf(p) { if (!p) return []; if (p.is_owner) return AREAS.map(function (a) { return a.key; }); var a = (p.areas && p.areas.length) ? p.areas : ['production']; return AREAS.map(function (x) { return x.key; }).filter(function (k) { return a.indexOf(k) >= 0; }); }
+  function areaHome(p) { var a = areasOf(p); if (a.length > 1) return 'start.html'; if (a[0] === 'lab') return 'lab.html'; if (a[0] === 'preparation') return 'prep.html'; return firstPageOf(p); }
   var ICON_MSG = '<svg class="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:7px"><path fill="currentColor" d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 6v2h2V9H7zm4 0v2h2V9h-2zm4 0v2h2V9h-2z"/></svg>';
   var CFG = window.ATIC_CONFIG || {};
   var sb = (window.supabase && CFG.url) ? window.supabase.createClient(CFG.url, CFG.key) : null;
@@ -20,6 +24,7 @@
     if (!profile) return false;
     if (profile.role === 'admin') return true;
     if (key === 'admin') return false;
+    if (key === 'team' && profile.role === 'viewer') return false; // Team: admins and editors only
     if (!profile.tabs) return true;
     return profile.tabs.indexOf(key) >= 0;
   }
@@ -32,9 +37,10 @@
     if (profile.role === 'admin') { list = list.filter(function (x) { return x.key !== 'admin'; }); list.push(byKey.admin); }
     return list.filter(function (x) { return allowed(profile, x.key); });
   }
-  function firstPage(profile) { var p = ordered(profile)[0]; return p ? p.href : null; }
+  function firstPageOf(profile) { var p = ordered(profile)[0]; return p ? p.href : null; }
+  function firstPage(profile) { return firstPageOf(profile); }
 
-  var A = { sb: sb, PAGES: PAGES, ROLE: ROLE, esc: esc, allowed: allowed, ordered: ordered, firstPage: firstPage, profile: null, canWrite: false, page: null, subs: [] };
+  var A = { sb: sb, PAGES: PAGES, ROLE: ROLE, AREAS: AREAS, areasOf: areasOf, areaHome: areaHome, esc: esc, allowed: allowed, ordered: ordered, firstPage: firstPage, profile: null, canWrite: false, page: null, area: 'production', subs: [] };
 
   function toast(t) {
     var el = $('#toast'); if (!el) { el = document.createElement('div'); el.className = 'toast'; el.id = 'toast'; document.body.appendChild(el); }
@@ -45,14 +51,15 @@
   function curSub() { var h = location.hash.slice(1); return h || (A.subs[0] && A.subs[0].id) || ''; }
   function railHTML() {
     var p = A.profile, cur = curSub();
-    var h = '<div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>Planning &amp; forecasting</small></div></div><nav id="shellNav" aria-label="Sections">';
-    ordered(p).forEach(function (x) {
+    var h = '<div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>' + (A.area === 'production' ? 'Planning &amp; forecasting' : esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '')) + '</small></div></div><nav id="shellNav" aria-label="Sections">';
+    (A.area === 'production' ? ordered(p) : []).forEach(function (x) {
       var on = x.key === A.page;
       h += '<div class="part"><a class="p' + (x.icon ? ' ic' : '') + '" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + (x.icon === 'msg' ? ICON_MSG : '') + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + (x.key === 'team' ? ' <span class="badge" id="teamBadge" hidden></span>' : '') + '</a>' + (on && A.subs.length ? '<button type="button" class="chev" id="railChev" aria-label="' + (subsClosed() ? 'Show' : 'Hide') + ' the sections of ' + esc(x.label) + '" aria-expanded="' + !subsClosed() + '">' + (subsClosed() ? '▸' : '▾') + '</button>' : '');
       if (on && A.subs.length) h += '<div class="subs"' + (subsClosed() ? ' hidden' : '') + '>' + A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === cur ? ' aria-current="page"' : '') + '>' + esc(s.label) + (s.badge ? ' <span class="badge" id="sb_' + s.id + '"' + (s.badgeHidden ? ' hidden' : '') + '>' + esc(s.badge) + '</span>' : '') + '</a>'; }).join('') + '</div>';
       h += '</div>';
     });
-    h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + ROLE[p.role] + '</span><button id="signOut" type="button">Sign out</button></div>';
+    if (A.area !== 'production') h += '<div class="part"><a class="p" aria-current="page" href="' + location.pathname.split('/').pop() + '">' + esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '') + '</a></div>';
+    h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + (p.is_owner ? 'Owner' : ROLE[p.role]) + '</span>' + (areasOf(p).length > 1 ? '<a class="switch" href="start.html">⇄ Switch area</a>' : '') + '<button id="signOut" type="button">Sign out</button></div>';
     return h;
   }
   function subbarHTML() {
@@ -102,7 +109,7 @@
 
   /* boot({page, subs}) → resolves with A when the person may see this page, or null after showing a message. */
   A.boot = async function (opts) {
-    A.page = opts.page; A.subs = opts.subs || [];
+    A.page = opts.page; A.subs = opts.subs || []; A.area = opts.area || 'production';
     var main = $('#main');
     if (!sb) { if (main) main.innerHTML = '<div class="panel noacc"><h2>Could not load</h2><p class="muted">Check the internet connection and refresh the page.</p></div>'; return null; }
     try { var cp = JSON.parse(localStorage.getItem('aticProfileCache') || 'null'); if (cp && !A.profile) { A.profile = cp; drawRail(); A.profile = null; } } catch (e) {}
@@ -113,7 +120,10 @@
     A.profile = pr.data; A.session = s.data.session;
     try { localStorage.setItem('aticProfileCache', JSON.stringify(pr.data)); } catch (e) {}
     A.canWrite = pr.data.role === 'admin' || pr.data.role === 'editor';
+    if (A.area !== 'start' && areasOf(A.profile).indexOf(A.area) < 0) { location.replace(areaHome(A.profile)); return null; }
+    if (A.area === 'start') return A;
     drawRail();
+    if (A.area !== 'production') return A;
     if (!allowed(A.profile, A.page)) {
       var where = firstPage(A.profile);
       if (main) main.innerHTML = '<div class="panel noacc"><h2 style="font-size:20px;margin-bottom:6px">No access to this page</h2><p class="muted" style="margin:0 0 14px">Hasan decides which pages each account can open. Ask him if you need this one.</p>' + (where ? '<a class="btn primary" href="' + where + '" style="text-decoration:none;display:inline-block">Go to my pages</a>' : '') + '</div>';
@@ -169,6 +179,11 @@
   A.download = function (filename, data, type) {
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: type || 'text/csv' })); a.download = filename;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  };
+  /* ATIC lot number: 2-digit year + day of the year (3 digits). 2 Nov 2026 = 26306, 1 Jan 2027 = 27001 */
+  A.lot = function (iso) {
+    if (!iso) return ''; var t = new Date(iso.slice(0, 10) + 'T00:00:00Z'), y = t.getUTCFullYear(), d = Math.round((t - Date.UTC(y, 0, 1)) / 864e5) + 1;
+    return String(y).slice(-2) + String(d).padStart(3, '0');
   };
   A.whenShown = function (fn) { if (document.prerendering) document.addEventListener('prerenderingchange', function () { fn(); }, { once: true }); else fn(); };
   /* load pages ahead: hovering a menu item loads that page in the background (Chrome / Edge), so the click is instant */

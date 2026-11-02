@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Preparation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>.soon{max-width:720px;margin:6vh auto 0;text-align:center}.soon .ic{font-size:56px}.soon h1{font-size:30px;margin:10px 0 8px}.soon .tag{display:inline-block;font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:4px 12px;border-radius:999px;background:var(--gold);color:#1b1306}.soon ol{text-align:left;max-width:520px;margin:18px auto;line-height:1.7}</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script>
+(async function () {
+  var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
+  document.getElementById('main').innerHTML = '<div class="soon panel"><div class="ic">🛢️</div><span class="tag">Coming in the next update</span><h1>Preparation</h1><p class="muted">Plan what to prepare in the tanks before the line starts.</p>' +
+    '<ol><li>Choose the <b>product</b> and the <b>number of batches</b> for each section.</li><li>The page tells you every <b>raw material</b> to prepare, from the saved recipes.</li><li>It checks the amounts against the stock you have now.</li></ol>' +
+    (ATIC.areasOf(A.profile).length > 1 ? '<a class="btn" href="start.html" style="text-decoration:none">⇄ Switch area</a>' : '') + '</div>';
+})();
+</script>
+</body></html>

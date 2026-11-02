@@ -294,6 +294,7 @@
   <section class="panel" role="tabpanel" id="p-actual" aria-labelledby="tab-actual" hidden>
     <form id="actForm" class="form" novalidate>
       <div class="f"><label class="l" for="a_date">Date</label><input type="date" id="a_date" required></div>
+      <div class="f"><label class="l" for="a_lot">Lot number</label><input type="text" id="a_lot" inputmode="numeric" maxlength="12" placeholder="from the date" title="Year + day of the year: 2 Nov 2026 = 26306. Change it if the sheet says otherwise."></div>
       <div class="f"><label class="l" for="a_sec">Section</label><select id="a_sec"><option value="S1">Section 1</option><option value="S2">Section 2</option></select></div>
       <div class="f"><label class="l" for="a_pprod">Previous product (yesterday)</label><select id="a_pprod"></select></div>
       <div class="f"><label class="l" for="a_psize">Previous size</label><select id="a_psize"></select></div>
@@ -737,6 +738,7 @@ function aFill(key) {
     set('a_work', a.workMin ?? 600); set('a_fill', a.fillMin); set('a_stop', a.stopMin); set('a_last', a.lastBox);
     set('a_start', a.startMin); set('a_prep', a.prepMin); set('a_rc', a.cleanRoutineMin); set('a_deep', a.cleanDeepMin); set('a_reasons', a.reasons); set('a_notes', a.notes);
     $('a_norun').checked = !!a.noRun; $('a_excl').checked = !!a.excludeFromLearning;
+    $('a_lot').value = a.lot || ATIC.lot(date);
     $('a_save').textContent = 'Update actual';
   } else {
     let runs, prev;
@@ -760,6 +762,7 @@ function aFill(key) {
     prodSel('a_pprod', prev ? prev.product : '', true); sizeSel('a_psize', prev ? prev.product : '', prev ? prev.size : '');
     ['a_fill', 'a_stop', 'a_last', 'a_start', 'a_prep', 'a_rc', 'a_deep', 'a_reasons', 'a_notes'].forEach(id => set(id, ''));
     set('a_work', 600); delete $('a_stop').dataset.touched; $('a_norun').checked = false; $('a_excl').checked = false;
+    $('a_lot').value = ATIC.lot(date);
     $('a_save').textContent = 'Save actual';
   }
   aRender(); aNoRun();
@@ -821,6 +824,7 @@ async function saveActual() {
       product: (runs.find(r => !r.prepOnly) || runs[0]).product, size: (runs.find(r => !r.prepOnly) || runs[0]).size, batches: runs.reduce((s, r) => s + (r.batches || 0), 0), boxes: 0,
       openingBalance: runs.reduce((s, r) => s + (r.opening || 0), 0), closingBalance: runs.reduce((s, r) => s + (r.closing || 0), 0),
       workMin: 0, fillMin: 0, stopMin: 0, changeover: { done: false, type: null, min: 0, count: 0 }, cleanRoutineMin: null, cleanDeepMin: null, prepMin: null, lastBox: null,
+      lot: ($('a_lot').value || '').trim() || ATIC.lot(date),
       reasons: '', notes: $('a_notes').value.trim() || 'Line did not run; batches prepared only.', savedAt: new Date().toISOString(), by: S.userId || null };
     try { await S.db.doc(`actuals/${key}`).set(doc); msg.className = 'msg ok'; msg.textContent = `Saved as a no-production day. The tank now holds ${fmt1(doc.closingBalance)} batches for the next run; the model does not learn speed or stops from this day.`; }
     catch (e) { msg.className = 'msg err'; msg.textContent = saveErr(e); }
@@ -855,6 +859,7 @@ async function saveActual() {
     changeover: { done: types.some(t => t !== 'none') || coMin > 0, type: types.find(t => t !== 'none') || null, min: coMin, count: types.filter(t => t !== 'none').length },
     cleanRoutineMin: n('a_rc'), cleanDeepMin: n('a_deep'), prepMin: n('a_prep'), startMin: n('a_start'), lastBox: $('a_last').value || null,
     reasons: $('a_reasons').value.trim(), notes: $('a_notes').value.trim(),
+    lot: ($('a_lot').value || '').trim() || ATIC.lot(date),
     excludeFromLearning: $('a_excl').checked,
     savedAt: new Date().toISOString(), by: S.userId || null,
   };
@@ -954,7 +959,7 @@ function renderCompare() {
     const p = r.pm, a = r.am;
     const err = r.boxesErr != null ? `<span class="${r.boxesErr > 0 ? 'pos' : 'neg'}">${sgn(r.boxesErr)}</span>` : '–';
     const drv = r.mainDriver ? `${esc(r.mainDriver.name)}${r.mainDriver.unit !== '' ? `<span class="tiny">${esc(String(r.mainDriver.plan))} vs ${esc(String(r.mainDriver.actual))} ${esc(r.mainDriver.unit)}</span>` : ''}` : (a ? '' : '<span class="tiny">no actual yet</span>');
-    return `<tr><td class="n">${r.date.slice(5)}</td><td>${r.sec}</td><td>${esc(r.items)}${r.source === 'reforecast' ? '<span class="tiny" title="No forecast was saved; the model re-forecast the day with what it knew before it">re-forecast</span>' : ''}</td>
+    return `<tr><td class="n">${r.date.slice(5)}<br><span class="tiny" title="Lot number">${esc((r.actual && r.actual.lot) || ATIC.lot(r.date))}</span></td><td>${r.sec}</td><td>${esc(r.items)}${r.source === 'reforecast' ? '<span class="tiny" title="No forecast was saved; the model re-forecast the day with what it knew before it">re-forecast</span>' : ''}</td>
       <td class="n">${fp(p && p.boxes)}</td><td class="n">${fp(a && a.boxes)}</td><td class="n">${err}</td>
       <td class="n">${fa(p && p.closing, a && a.closing, fmt1)}</td><td class="n">${fa(p && p.stopPct, a && a.stopPct, x => pct(x))}</td>
       <td class="n">${fa(p && p.changeMin, a && a.changeMin)}</td><td class="n">${fa(p && p.prepMin, a && a.prepMin)}</td><td class="n">${fa(p && p.cleanMin, a && a.cleanMin)}</td>
@@ -1569,7 +1574,7 @@ function seedActualDoc(d) {
     closingBalance: lastClose.every(r => r.closing != null) ? lastClose.reduce((s, r) => s + (r.closing || 0), 0) : null,
     workMin: d.work, fillMin: d.fill, stopMin: d.stop, changeover: { done: types.some(t => t !== 'none'), type: types.find(t => t !== 'none') || null, min: 0, count: types.filter(t => t !== 'none').length },
     cleanRoutineMin: d.rc, cleanDeepMin: d.deep, prepMin: null, startMin: d.start, lastBox: d.last, reasons: '', notes: d.notes, excludeFromLearning: false,
-    seed: SEED_TAG, savedAt: new Date().toISOString(), by: S.userId || null };
+    lot: ATIC.lot(d.date), seed: SEED_TAG, savedAt: new Date().toISOString(), by: S.userId || null };
 }
 function seedPlanDoc(d, known) {
   const filled = d.runs.filter(r => !r.prepOnly);

@@ -33,7 +33,7 @@
 <script>
 (function () {
 var A, USERS = [], DRAFT = {};
-var DESC = { results: 'Both forecasts on one page', line: 'Daily forecast, actuals, compare, 3D replay', model: 'How the model learns, in 3D', materials: 'Stock, orders, when to order', supply: 'Trucks, campaigns, raw materials' };
+var DESC = { results: 'Both forecasts on one page', line: 'Daily forecast, actuals, compare, 3D replay', model: 'How the model learns, in 3D', materials: 'Stock, orders, when to order', supply: 'Trucks, campaigns, raw materials', team: 'Ideas, tasks, decisions and messages (admins and editors)' };
 function $(s) { return document.querySelector(s); }
 var esc = function (s) { return A.esc(s); };
 function pagesOf(u) { // [{key, on}] in the person's order
@@ -42,21 +42,38 @@ function pagesOf(u) { // [{key, on}] in the person's order
   return on.map(function (k) { return { key: k, on: true }; }).concat(keys.filter(function (k) { return on.indexOf(k) < 0; }).map(function (k) { return { key: k, on: false }; }));
 }
 function label(k) { return A.PAGES.filter(function (p) { return p.key === k; })[0].label; }
+/* areas: Production / Lab / Preparation. Only the owner changes them (needs the 2026-11 setup script in Supabase). */
+var AREA_DESC = { production: 'This website', lab: 'Quality per lot (coming soon)', preparation: 'Raw materials to prepare (coming soon)' };
+function areasHTML(u) {
+  var on = A.areasOf(u), owner = !!A.profile.is_owner, setUp = A.profile.areas !== undefined;
+  if (u.is_owner) return '<div class="small muted">The owner opens every area and is hidden from everyone else.</div>';
+  return '<div><div class="small muted" style="margin-bottom:6px">Areas' + (on.length > 1 ? ' · sees the start screen' : '') + (owner ? '' : ' · only the owner can change them') + '</div><div class="acts">' +
+    A.AREAS.map(function (a) { return '<label class="dd" style="display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 12px"><input type="checkbox" data-area="' + u.id + '|' + a.key + '"' + (on.indexOf(a.key) >= 0 ? ' checked' : '') + (owner && setUp ? '' : ' disabled') + '><b>' + a.label + '</b><span class="small muted">' + AREA_DESC[a.key] + '</span></label>'; }).join('') +
+    (owner && setUp ? '<button class="btn" data-areasave="' + u.id + '">Save areas</button>' : '') + '</div>' + (!setUp ? '<div class="small" style="color:var(--amber);margin-top:4px">Run the setup script in Supabase to switch areas on.</div>' : '') + '</div>';
+}
 function render() {
-  var h = '<div class="top"><div><h1>Admin</h1><p class="sub" style="margin:4px 0 0">Create accounts, choose who can edit, and choose which pages each person sees and in what order.</p></div></div>';
+  var h = '<div class="top"><div><h1>Admin</h1><p class="sub" style="margin:4px 0 0">Create accounts, choose who can edit, which areas (Production, Lab, Preparation) and which pages each person sees.</p></div></div>';
   h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:10px">New account</h3><form class="form5" id="nu"><label class="field">Full name<input id="nuName" required placeholder="e.g. Yasser Mansour"></label><label class="field">Username<input id="nuUser" required autocapitalize="none" placeholder="e.g. yasser"></label><label class="field">Password<input id="nuPass" required minlength="6" placeholder="at least 6 characters"></label><label class="field">Access<select id="nuRole"><option value="viewer">View only</option><option value="editor">Can edit</option><option value="admin">Admin</option></select></label><button class="btn primary" style="padding:10px 16px">Create</button></form><p class="hint" style="margin:10px 0 0">Send the person the website link with their username and password. New accounts see every page until you choose below.</p></div>';
   h += '<div class="people">' + USERS.map(function (u) {
     var me = u.id === A.profile.id, d = DRAFT[u.id] || (DRAFT[u.id] = pagesOf(u)), adm = u.role === 'admin';
-    return '<div class="person"><div class="h"><div><h3>' + esc(u.full_name || u.username) + (me ? ' <span class="chip info">you</span>' : '') + '</h3><span class="u">' + esc(u.username) + '</span></div>' +
+    return '<div class="person"><div class="h"><div><h3>' + esc(u.full_name || u.username) + (me ? ' <span class="chip info">you</span>' : '') + (u.is_owner ? ' <span class="chip" style="background:var(--gold);color:#1b1306">Owner</span>' : '') + '</h3><span class="u">' + esc(u.username) + '</span></div>' +
       '<select data-role="' + u.id + '"' + (me ? ' disabled' : '') + ' style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">' + [['viewer', 'View only'], ['editor', 'Can edit'], ['admin', 'Admin']].map(function (o) { return '<option value="' + o[0] + '"' + (u.role === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<div><div class="small muted" style="margin-bottom:6px">' + (adm ? 'Admins open every page. Ticks and arrows set the menu order.' : 'Pages this person sees, top to bottom as in their menu') + '</div><div class="pages">' + d.map(function (p, i) {
         return '<div class="pg' + (p.on ? '' : ' off') + '"><input type="checkbox" data-pg="' + u.id + '|' + i + '"' + (p.on ? ' checked' : '') + ' aria-label="Show ' + esc(label(p.key)) + '"><span><b>' + esc(label(p.key)) + '</b><small>' + DESC[p.key] + '</small></span><button class="mv" data-up="' + u.id + '|' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="mv" data-dn="' + u.id + '|' + i + '"' + (i === d.length - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button></div>';
       }).join('') + '</div></div>' +
+      areasHTML(u) +
       '<div class="acts"><button class="btn primary" data-save="' + u.id + '">Save pages</button><input id="pw_' + u.id + '" placeholder="new password" style="width:140px"><button class="btn" data-pw="' + u.id + '">Set password</button>' + (me ? '' : '<button class="btn ghost" data-del="' + u.id + '" style="color:var(--red)">Delete</button>') + '</div></div>';
   }).join('') + '</div>';
   $('#main').innerHTML = h; wire();
 }
 function wire() {
+  document.querySelectorAll('[data-areasave]').forEach(function (b) { b.onclick = async function () {
+    var id = b.dataset.areasave, areas = [].filter.call(document.querySelectorAll('[data-area^="' + id + '|"]'), function (c) { return c.checked; }).map(function (c) { return c.dataset.area.split('|')[1]; });
+    if (!areas.length) { A.toast('Leave at least one area.'); return; }
+    var r = await A.sb.rpc('owner_set_areas', { p_user: id, p_areas: areas });
+    if (r.error) { A.toast(/function|does not exist/i.test(r.error.message) ? 'Run the setup script in Supabase first.' : r.error.message); return; }
+    var u = USERS.filter(function (x) { return x.id === id; })[0]; if (u) u.areas = areas; A.toast('Areas saved'); render();
+  }; });
   $('#nu').onsubmit = async function (e) {
     e.preventDefault();
     var r = await A.sb.rpc('admin_create_user', { p_username: $('#nuUser').value.trim(), p_password: $('#nuPass').value, p_full_name: $('#nuName').value.trim(), p_role: $('#nuRole').value });

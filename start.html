@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC · Choose where to go</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+html,body{height:100%}
+body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d2e22 55%,#081d16 100%);color:#eef5f1;overflow:hidden;font-family:var(--f-body,'IBM Plex Sans',sans-serif)}
+.st{height:100%;display:flex;flex-direction:column}
+.st-top{display:flex;justify-content:space-between;align-items:center;padding:22px 32px}
+.st-top .logo{display:flex;gap:12px;align-items:center}.st-top .mark{width:38px;height:38px;border-radius:10px;background:var(--gold,#d4a017);color:#1b1306;display:grid;place-items:center;font:700 15px 'Sora',sans-serif}
+.st-top b{font:600 15px 'Sora',sans-serif;letter-spacing:.06em}.st-top small{display:block;opacity:.65;font-size:12px}
+.st-top .me{display:flex;gap:12px;align-items:center;font-size:14px}.st-top button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:inherit;border-radius:9px;padding:7px 14px;cursor:pointer}
+.st-h{text-align:center;padding:0 20px 8px}.st-h h1{font:600 clamp(24px,3vw,36px) 'Sora',sans-serif;margin:0 0 6px;color:#fff}.st-h p{margin:0;opacity:.7}
+.stage{flex:1;display:flex;gap:clamp(14px,2.2vw,34px);justify-content:center;align-items:center;padding:20px 32px 40px;perspective:1400px}
+.door{position:relative;width:min(30vw,380px);height:min(62vh,520px);border-radius:22px;cursor:pointer;transform-style:preserve-3d;transition:transform .45s cubic-bezier(.2,.7,.2,1),filter .3s;border:0;padding:0;color:inherit;text-align:left;background:none;outline:none}
+.door .face{position:absolute;inset:0;border-radius:22px;overflow:hidden;background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.18);box-shadow:0 30px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.2);transform:translateZ(0);backdrop-filter:blur(6px)}
+.door .glow{position:absolute;inset:-40%;background:radial-gradient(closest-side,var(--c) 0%,transparent 70%);opacity:.35;transition:opacity .3s;transform:translateZ(-1px)}
+.door:hover .glow,.door:focus-visible .glow{opacity:.6}
+.door .scene{position:absolute;left:0;right:0;top:9%;height:52%;display:grid;place-items:center;transform:translateZ(70px)}
+.door .txt{position:absolute;left:28px;right:28px;bottom:28px;transform:translateZ(50px)}
+.door h2{font:600 30px 'Sora',sans-serif;margin:0 0 6px;color:#fff}.door p{margin:0;opacity:.75;font-size:14.5px;line-height:1.45}
+.door .tag{display:inline-block;margin-bottom:12px;font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.12)}
+.door .tag.soon{background:var(--gold,#d4a017);color:#1b1306}
+.door .go{margin-top:16px;display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:14px;opacity:.9}
+.door:focus-visible .face{outline:3px solid var(--gold,#d4a017);outline-offset:4px}
+.stage:hover .door:not(:hover){filter:brightness(.7) saturate(.8)}
+/* scenes */
+.belt{width:230px;height:120px;position:relative}
+.belt .rail{position:absolute;left:0;right:0;bottom:22px;height:14px;border-radius:7px;background:repeating-linear-gradient(90deg,#2b6a50 0 14px,#1f5640 14px 28px);animation:belt 1s linear infinite}
+@keyframes belt{to{background-position:28px 0}}
+.belt .b{position:absolute;bottom:36px;width:22px;height:54px;border-radius:7px 7px 4px 4px;background:linear-gradient(180deg,#c2385a,#7d1530);box-shadow:inset 0 0 0 2px rgba(255,255,255,.15);animation:move 4s linear infinite}
+.belt .b::before{content:"";position:absolute;top:-9px;left:6px;width:10px;height:10px;border-radius:3px;background:#d4a017}
+.belt .b::after{content:"";position:absolute;top:20px;left:3px;right:3px;height:14px;background:#f2e6c9;border-radius:2px}
+@keyframes move{from{transform:translateX(-30px)}to{transform:translateX(250px)}}
+.flask{width:150px;height:160px;position:relative}
+.flask svg{width:100%;height:100%;overflow:visible}
+.bub{animation:bub 2.2s ease-in infinite;opacity:0}
+@keyframes bub{0%{transform:translateY(0);opacity:0}20%{opacity:.9}100%{transform:translateY(-70px);opacity:0}}
+.tank{width:170px;height:170px;position:relative}
+.tank svg{width:100%;height:100%;overflow:visible}
+.mix{transform-origin:85px 105px;animation:spin 2.4s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.wave{animation:wave 3s ease-in-out infinite}@keyframes wave{50%{transform:translateY(4px)}}
+@media (max-width:820px){body{overflow:auto}.stage{flex-direction:column;perspective:none}.door{width:min(92vw,420px);height:300px}.door .scene{top:6%;height:48%;transform:none}.door .txt{transform:none}}
+@media (prefers-reduced-motion:reduce){.belt .rail,.belt .b,.bub,.mix,.wave{animation:none}.door{transition:none}}
+</style>
+</head><body>
+<div class="st" id="st" hidden>
+  <div class="st-top"><div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>Choose where to go</small></div></div><div class="me"><span id="who"></span><button id="out" type="button">Sign out</button></div></div>
+  <div class="st-h"><h1 id="hello">Welcome</h1><p>Where do you want to work today?</p></div>
+  <div class="stage" id="stage"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script>
+(async function () {
+  var A = await ATIC.boot({ page: 'start', area: 'start' }); if (!A) return;
+  var p = A.profile, areas = ATIC.areasOf(p);
+  if (areas.length < 2) { location.replace(ATIC.areaHome(p)); return; }
+  var SCENE = {
+    production: '<div class="belt"><div class="rail"></div>' + [0, 1, 2, 3].map(function (i) { return '<div class="b" style="animation-delay:-' + i + 's"></div>'; }).join('') + '</div>',
+    lab: '<div class="flask"><svg viewBox="0 0 150 160"><path d="M55 10h40v8h-6v42l40 72a12 12 0 0 1-10 18H31a12 12 0 0 1-10-18l40-72V18h-6z" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.6)" stroke-width="3"/><path class="wave" d="M36 108c14-6 26 6 40 0s26-6 40 0l12 22a8 8 0 0 1-7 12H31a8 8 0 0 1-7-12z" fill="#4fb3e8" opacity=".85"/>' + [[62, 0], [80, .7], [95, 1.4], [72, 1.9]].map(function (b) { return '<circle class="bub" cx="' + b[0] + '" cy="128" r="5" fill="#bfe6fb" style="animation-delay:' + b[1] + 's"/>'; }).join('') + '</svg></div>',
+    preparation: '<div class="tank"><svg viewBox="0 0 170 170"><ellipse cx="85" cy="38" rx="55" ry="14" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.6)" stroke-width="3"/><path d="M30 38v96c0 8 25 16 55 16s55-8 55-16V38" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.6)" stroke-width="3"/><path class="wave" d="M33 88c18 8 34-6 52 0s34 8 52 0v44c0 7-24 14-52 14s-52-7-52-14z" fill="#c2385a" opacity=".85"/><line x1="85" y1="10" x2="85" y2="105" stroke="#d4a017" stroke-width="4"/><g class="mix"><rect x="60" y="102" width="50" height="6" rx="3" fill="#d4a017"/></g></svg></div>'
+  };
+  var INFO = {
+    production: { c: '#2f9e6c', h: 'Production', p: 'Line Planner, raw materials, inventory, supply planning and the team.', tag: 'Open', href: ATIC.firstPage(p) || 'materials.html' },
+    lab: { c: '#4fb3e8', h: 'Lab', p: 'Quality tests per lot: results, approvals and trends.', tag: 'Coming soon', href: 'lab.html' },
+    preparation: { c: '#d4a017', h: 'Preparation', p: 'Tell it the product and batches per section; it tells you the raw materials to prepare.', tag: 'Coming soon', href: 'prep.html' }
+  };
+  document.getElementById('hello').textContent = 'Welcome, ' + String(p.full_name || p.username).split(' ')[0];
+  document.getElementById('who').textContent = (p.full_name || p.username) + (p.is_owner ? ' · Owner' : '');
+  document.getElementById('out').onclick = ATIC.signOut;
+  var stage = document.getElementById('stage');
+  stage.innerHTML = areas.map(function (k) { var x = INFO[k]; return '<button class="door" data-href="' + x.href + '" style="--c:' + x.c + '" aria-label="' + x.h + (x.tag === 'Coming soon' ? ' (coming soon)' : '') + '"><span class="glow"></span><span class="face"></span><span class="scene">' + SCENE[k] + '</span><span class="txt"><span class="tag' + (x.tag === 'Coming soon' ? ' soon' : '') + '">' + x.tag + '</span><h2>' + x.h + '</h2><p>' + x.p + '</p><span class="go">Enter →</span></span></button>'; }).join('');
+  document.getElementById('st').hidden = false;
+  var doors = [].slice.call(document.querySelectorAll('.door')), n = doors.length;
+  // resting 3D pose: the outer doors turn in, like a three-panel screen
+  function rest(d, i) { var y = n === 3 ? (i - 1) * -16 : (i === 0 ? 10 : -10); return 'rotateY(' + y + 'deg) translateZ(' + (n === 3 && i === 1 ? 30 : 0) + 'px)'; }
+  doors.forEach(function (d, i) {
+    d.style.transform = rest(d, i);
+    d.onmousemove = function (e) { var r = d.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; d.style.transform = 'rotateY(' + (x * 18) + 'deg) rotateX(' + (-y * 14) + 'deg) translateZ(60px)'; };
+    d.onmouseleave = function () { d.style.transform = rest(d, i); };
+    d.onclick = function () { d.style.transform = 'translateZ(260px) scale(1.04)'; d.style.filter = 'brightness(1.1)'; setTimeout(function () { location.href = d.dataset.href; }, 260); };
+  });
+  if (doors[0]) doors[0].focus({ preventScroll: true });
+})();
+</script>
+</body></html>

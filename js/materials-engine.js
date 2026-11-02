@@ -27,6 +27,24 @@
     return out;
   }
 
+  /* A recipe belongs to the PRODUCT: whatever section the batch is made on, it uses the same materials.
+     A material missing (or 0) on one section is taken from the other section, so e.g. GM on Section 1 uses the
+     same salt as GM on Section 2. Two different, non-zero amounts stay as set (a deliberate section recipe). */
+  function productRecipes(m) {
+    Object.keys(m.recipes || {}).forEach(function (p) {
+      var r = m.recipes[p] || {}, secs = ['SEC-1', 'SEC-2'], mats = {};
+      Object.keys(r).forEach(function (s) { if (secs.indexOf(s) < 0) secs.push(s); Object.keys(r[s] || {}).forEach(function (k) { if (Number(r[s][k]) > 0) mats[k] = 1; }); });
+      secs.forEach(function (s) {
+        r[s] = Object.assign({}, r[s] || {});
+        Object.keys(mats).forEach(function (k) {
+          if (Number(r[s][k]) > 0) return;
+          var v = 0; secs.forEach(function (o) { if (o !== s && r[o] && Number(r[o][k]) > v) v = Number(r[o][k]); });
+          if (v > 0) r[s][k] = v;
+        });
+      });
+      m.recipes[p] = r;
+    });
+  }
   /* Merge saved edits (db) over the baseline built from the Jan–Sep sheets. */
   function buildModel(base, saved) {
     saved = saved || {};
@@ -40,12 +58,14 @@
         Object.keys(r[p]).forEach(function (s) { m.recipes[p][s] = r[p][s]; });
       });
     }
+    productRecipes(m);
     var st = (saved.stock && saved.stock.items) || {};
     Object.keys(st).forEach(function (k) { m.stock[k] = st[k]; });
     m.plan = (saved.plan && saved.plan.days) ? saved.plan : { days: {}, weeks: [] };
     m.orders = orderEvents(saved.orders || []);
     m.settings = Object.assign({ basisWeeks: 8 }, saved.settings || {});
     m.actualDays = saved.actualDays || {};
+    m.dailyAdj = saved.dailyAdj || {}; /* hand corrections from Daily consumption: { date: { materialId: extra (+/-) } } */
     m.actualSections = saved.actualSections || {}; /* sections with an actual entered that day (even 0 batches) */ /* batches really prepared, from the Line Planner actuals: { date: { 'GM|SEC-2': 13 } } */
     return m;
   }
@@ -109,6 +129,7 @@
     return res;
   }
 
+  function adjOn(m, matId, day) { var a = m.dailyAdj && m.dailyAdj[day]; return a ? (Number(a[matId]) || 0) : 0; }
   function useOn(m, matId, items) {
     var total = 0, by = {};
     items.forEach(function (it) {
@@ -140,7 +161,7 @@
       var actualSince = 0;
       while (d < start) {
         if (m.actualDays[d]) actualSince++;
-        var u0 = useOn(m, mat.id, items(d)).total; qty -= u0; gap += u0;
+        var u0 = useOn(m, mat.id, items(d)).total + adjOn(m, mat.id, d); qty -= u0; gap += u0;
         m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === d) qty += Number(o.qty) || 0; });
         d = addDays(d, 1);
       }
@@ -165,7 +186,7 @@
         for (var j = 0; j < 7; j++) {
           var day = addDays(ws, j);
           if (day <= st.asOf) { daily.push({ date: day, use: 0, received: 0, closing: cur, planned: false, beforeCount: true }); continue; } // already inside the count
-          var r = useOn(m, mat.id, items(day));
+          var r = useOn(m, mat.id, items(day)); r = { total: r.total + adjOn(m, mat.id, day), by: r.by };
           m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === day) { cur += Number(o.qty) || 0; rec += Number(o.qty) || 0; } });
           cur -= r.total; use += r.total;
           var recD = 0; m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === day) recD += Number(o.qty) || 0; });
@@ -261,6 +282,6 @@
     return h;
   }
 
-  var api = { forecast: forecast, buildModel: buildModel, avgWeekly: avgWeekly, orderEvents: orderEvents, emailHTML: emailHTML, util: { iso: iso, addDays: addDays, weekStart: weekStart, nice: nice, fmt: fmt, diffDays: diffDays } };
+  var api = { forecast: forecast, buildModel: buildModel, productRecipes: productRecipes, avgWeekly: avgWeekly, orderEvents: orderEvents, emailHTML: emailHTML, util: { iso: iso, addDays: addDays, weekStart: weekStart, nice: nice, fmt: fmt, diffDays: diffDays } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ATICEngine = api;
 })(typeof window !== 'undefined' ? window : globalThis);

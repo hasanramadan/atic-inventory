@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>.soon{max-width:720px;margin:6vh auto 0;text-align:center}.soon .ic{font-size:56px}.soon h1{font-size:30px;margin:10px 0 8px}.soon .tag{display:inline-block;font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:4px 12px;border-radius:999px;background:var(--gold);color:#1b1306}.soon ul{text-align:left;max-width:520px;margin:18px auto;line-height:1.7}</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/shell.js"></script>
+<script>
+(async function () {
+  var A = await ATIC.boot({ page: 'lab', area: 'lab' }); if (!A) return;
+  document.getElementById('main').innerHTML = '<div class="soon panel"><div class="ic">🧪</div><span class="tag">Coming soon</span><h1>Lab</h1><p class="muted">The lab area is being prepared. It will hold the quality checks for each lot.</p>' +
+    '<ul><li>Test results per <b>lot number</b> (e.g. 26306) and product</li><li>Approve or hold a lot before it ships</li><li>Trends over time for each test</li></ul>' +
+    (ATIC.areasOf(A.profile).length > 1 ? '<a class="btn" href="start.html" style="text-decoration:none">⇄ Switch area</a>' : '') + '</div>';
+})();
+</script>
+</body></html>

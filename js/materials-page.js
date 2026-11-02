@@ -275,11 +275,11 @@ function fileBtn(id, label) { return '<label class="btn" for="' + id + '" style=
 
 /* ---------- start ---------- */
 (async function () {
-  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
+  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'daily', label: 'Daily consumption' }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
   if (!A) return;
   S.profile = A.profile; S.canWrite = A.canWrite;
   try { var acts = await A.planner.list('actuals'); buildLP(acts.map(function (x) { return x.data; })); } catch (e) { /* no Line Planner access: forecast uses plan / average pace */ }
-  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
+  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'daily', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
   await loadDocs();
   if (!S.channel) S.channel = A.docs.subscribe(function () { loadDocs(); });
 })();
@@ -379,17 +379,18 @@ function vInventory(fc) {
   var list = invItems(), groups = [];
   list.forEach(function (i) { var g = (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group; if (groups.indexOf(g) < 0) groups.push(g); });
   var est = {}; (fc.results || []).forEach(function (r) { est[r.id] = r; });
-  h += '<div class="tablewrap"><table class="inv"><thead><tr><th>Item</th><th>Packing</th><th class="n">Quantity</th><th>Unit</th><th>Critical</th><th>Cover / use</th><th>Forecast</th><th class="n">On order</th><th>Last change</th></tr></thead><tbody>';
+  h += '<div class="tablewrap"><table class="inv"><thead><tr><th>Item</th><th>Packing</th><th class="n">Counted</th><th>Unit</th><th class="n">Estimated now</th><th>Critical</th><th>Cover / use</th><th>Forecast</th><th class="n">On order</th><th>Last change</th></tr></thead><tbody>';
   groups.forEach(function (g) {
-    h += '<tr class="grp" data-grp="' + esc(g) + '"><td colspan="9">' + esc(g) + '</td></tr>';
+    h += '<tr class="grp" data-grp="' + esc(g) + '"><td colspan="10">' + esc(g) + '</td></tr>';
     list.filter(function (i) { return (i.cat === 'raw' ? 'Raw materials' : 'Packaging') + ' · ' + i.group === g; }).forEach(function (i) {
       var dv = S.inv.dirty[i.id] || {}, q = dv.qty !== undefined ? dv.qty : i.qty, cr = dv.critical !== undefined ? dv.critical : i.critical;
-      var r = i.mat && est[i.mat], estTxt = r && i.toApp ? '<br><span class="small muted" title="Forecast estimate for today from the batches prepared">≈ ' + fmtN(Math.max(0, r.stockNow) / i.toApp) + ' now</span>' : '';
+      var ev = invEstimate(fc, i), estTxt = '';
+      var estCell = !ev ? '<td class="n muted small">–</td>' : ev.shared ? '<td class="n muted small">with the line above</td>' : '<td class="n" title="Count − daily consumption since the count + deliveries received"><b>' + fmtN(Math.max(0, ev.v)) + '</b>' + (ev.multi ? '<br><span class="small muted">all ' + ev.multi + ' lines: ' + fmtN(Math.max(0, ev.app)) + ' ' + esc(ev.unit) + '</span>' : '') + '</td>';
       var oo = openOnItem(i.id);
       h += '<tr data-iid="' + esc(i.id) + '" data-g="' + esc(g) + '" class="' + (cr ? 'crit' : '') + (i.missing ? ' gone' : '') + '"><td><b>' + esc(i.name) + '</b>' + (i.note ? '<br><span class="small muted">' + esc(i.note) + '</span>' : '') + (i.qtyText ? '<br><span class="small muted">In the file: "' + esc(i.qtyText) + '"' + (i.qtyNote ? ' · ' + esc(i.qtyNote) : '') + '</span>' : '') + (i.missing ? '<br><span class="small" style="color:var(--amber)">Not in the count of ' + U.nice(i.missing) + ', kept as it was</span>' : '') + '</td>' +
         '<td class="small">' + esc(i.packTxt || '') + '</td>' +
         '<td class="n">' + (S.canWrite ? '<input type="number" step="any" data-invq="' + esc(i.id) + '" value="' + (q == null ? '' : q) + '" style="width:110px">' : fmtN(q)) + estTxt + '</td>' +
-        '<td class="small">' + esc(i.unit || '') + '</td>' +
+        '<td class="small">' + esc(i.unit || '') + '</td>' + estCell +
         '<td><label class="dd small"><input type="checkbox" data-invc="' + esc(i.id) + '"' + (cr ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>' + (cr ? '<span class="chip order" style="padding:1px 8px">Critical</span>' : 'Critical') + '</label>' + (cr && i.critFrom ? '<span class="small muted" style="display:block">' + esc(i.critFrom) + '</span>' : '') +
           (i.cat === 'raw' && i.mat ? '<label class="dd small" style="display:flex;margin-top:4px" title="Only you set this: the Overview shows Not in use only when it is ticked"><input type="checkbox" data-invu="' + esc(i.id) + '"' + ((dv.notInUse !== undefined ? dv.notInUse : i.notInUse) ? ' checked' : '') + (S.canWrite ? '' : ' disabled') + '>Not in use</label>' : '') + '</td>' +
         '<td class="small">' + esc([i.enough, i.use].filter(Boolean).join(' · ')) + (i.needOrder ? ' <span class="chip soon" style="padding:1px 8px">Need to order</span>' : '') + '</td>' +
@@ -398,7 +399,7 @@ function vInventory(fc) {
         '<td class="small muted">' + (i.asOf ? U.nice(i.asOf) : '') + (i.source ? '<br>' + esc(i.source) : '') + '</td></tr>';
     });
   });
-  h += '<tr id="invNone" hidden><td colspan="9" class="muted">No item matches.</td></tr>';
+  h += '<tr id="invNone" hidden><td colspan="10" class="muted">No item matches.</td></tr>';
   h += '</tbody></table></div>';
   var nd = Object.keys(S.inv.dirty).length;
   if (S.canWrite) h += '<div class="row"><button class="btn primary" id="invSave"' + (nd ? '' : ' disabled') + '>Save changes' + (nd ? ' (' + nd + ')' : '') + '</button>' + (nd ? '<button class="btn ghost" id="invUndo">Undo changes</button>' : '') + '<span class="small muted">Change a quantity or the critical tick, then save. Every change is kept in the history below.</span></div>';
@@ -981,3 +982,115 @@ after.usage = function () { var p = $('#usPer'); if (p) p.onchange = function ()
 /* the small Count vs production panel on the Stock page now points here */
 var SHOW_USAGE = false; /* the Usage: real vs plan tab is built but hidden for now; set true to bring it back (also add it to the tabs list at start-up) */
 if (SHOW_USAGE) reconHTML = function () { return '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Count vs production</h3><p class="hint" style="margin:0">The full comparison (real use between counts, against the batches, and this month\'s plan) is on the <a href="#usage">Usage: real vs plan</a> tab.</p></div>'; };
+
+/* =====================================================================================================
+   DAILY CONSUMPTION: by day, the batches really made (Line Planner actuals, never the forecast) and the raw
+   materials they used (batches × recipe). A day can be corrected by hand (batches, or extra / less of a material)
+   and saved in app_docs "daily": { days: { date: { batches:{'GM|SEC-2':13}, adj:{salt:+5}, note, by, at } } }.
+   Saved days are what the forecast and the "Estimated now" use.
+   ===================================================================================================== */
+S.dc = { month: null };
+function dcDoc() { return (S.saved.daily && S.saved.daily.days) || {}; }
+function dcDay(date) { // effective batches + adjustments for one day
+  var o = dcDoc()[date], lp = LP.days[date] || {};
+  return { batches: o && o.batches ? o.batches : lp, adj: (o && o.adj) || {}, edited: !!o, note: o ? o.note : '', by: o ? o.by : '', at: o ? o.at : '', fromLP: !!LP.days[date] || !!LP.secs[date] };
+}
+function dcUse(model, d) { // { matId: qty in app units }
+  var out = {};
+  Object.keys(d.batches || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}, b = Number(d.batches[k]) || 0; Object.keys(r).forEach(function (m) { var q = (Number(r[m]) || 0) * b; if (q) out[m] = (out[m] || 0) + q; }); });
+  Object.keys(d.adj || {}).forEach(function (m) { out[m] = (out[m] || 0) + (Number(d.adj[m]) || 0); });
+  return out;
+}
+/* the engine gets the corrected days */
+(function () {
+  var _sfe = savedForEngine;
+  savedForEngine = function () {
+    var s = _sfe(), days = Object.assign({}, s.actualDays || {}), secs = Object.assign({}, s.actualSections || {}), adj = {};
+    Object.keys(dcDoc()).forEach(function (d) { var o = dcDoc()[d]; if (o.batches) { days[d] = o.batches; secs[d] = Object.assign({}, secs[d] || {}); Object.keys(o.batches).forEach(function (k) { secs[d][k.split('|')[1]] = 1; }); } if (o.adj && Object.keys(o.adj).length) adj[d] = o.adj; });
+    s.actualDays = days; s.actualSections = secs; s.dailyAdj = adj; return s;
+  };
+})();
+function dcLot(date) { var a = LP.list.filter(function (x) { return x.date === date && x.lot; })[0]; return a ? a.lot : ATIC.lot(date); }
+function vDaily(fc) {
+  var model = fc.model, mk = S.dc.month || TODAY.slice(0, 7);
+  var months = {}; months[TODAY.slice(0, 7)] = 1; Object.keys(LP.days).concat(Object.keys(LP.secs), Object.keys(dcDoc())).forEach(function (d) { months[d.slice(0, 7)] = 1; });
+  var mStart = mk + '-01', mEnd = U.addDays(U.addDays(mStart, 32).slice(0, 7) + '-01', -1), last = mEnd < TODAY ? mEnd : TODAY;
+  var rows = [], totals = {}, used = {};
+  for (var d = mStart; d <= last; d = U.addDays(d, 1)) {
+    var fri = new Date(d + 'T00:00:00Z').getUTCDay() === 5, x = dcDay(d), u = dcUse(model, x);
+    Object.keys(u).forEach(function (m) { if (Math.abs(u[m]) > 1e-9) { used[m] = 1; totals[m] = (totals[m] || 0) + u[m]; } });
+    rows.push({ d: d, fri: fri, x: x, u: u });
+  }
+  var mats = model.materials.filter(function (m) { return used[m.id]; });
+  var nameOfMonth = function (k) { return new Date(k + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); };
+  var h = head('Daily consumption', 'Raw materials used each day: the batches really made (Line Planner actuals) × the recipe. Open a day to correct it.',
+    '<select id="dcMonth" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' + Object.keys(months).sort().reverse().map(function (k) { return '<option value="' + k + '"' + (k === mk ? ' selected' : '') + '>' + nameOfMonth(k) + '</option>'; }).join('') + '</select>');
+  h += accessNote();
+  var missing = rows.filter(function (r) { return !r.fri && !r.x.fromLP && !r.x.edited && r.d < TODAY; }).length, edited = rows.filter(function (r) { return r.x.edited; }).length;
+  var nb = 0; rows.forEach(function (r) { Object.keys(r.x.batches || {}).forEach(function (k) { nb += Number(r.x.batches[k]) || 0; }); });
+  h += '<div class="kpis"><div class="kpi"><span class="l">Batches made</span><span class="v num">' + fmtN(nb) + '</span><span class="small muted">' + esc(nameOfMonth(mk)) + '</span></div>' +
+    '<div class="kpi ' + (missing ? 'soon' : 'ok') + '"><span class="l">Working days with no actual</span><span class="v num">' + missing + '</span><span class="small muted">enter them in the Line Planner</span></div>' +
+    '<div class="kpi"><span class="l">Days corrected by hand</span><span class="v num">' + edited + '</span><span class="small muted">saved as real use</span></div>' +
+    '<div class="kpi"><span class="l">Materials used</span><span class="v num">' + mats.length + '</span><span class="small muted">this month</span></div></div>';
+  h += '<div class="tablewrap"><table class="dc"><thead><tr><th>Day</th><th>Lot</th><th>Batches made</th>' + mats.map(function (m) { return '<th class="n">' + esc(m.name) + '<br><span class="small muted">' + esc(m.unit) + '</span></th>'; }).join('') + '<th></th></tr></thead><tbody>';
+  rows.slice().reverse().forEach(function (r) {
+    var b = Object.keys(r.x.batches || {}).filter(function (k) { return Number(r.x.batches[k]); }).map(function (k) { var p = k.split('|'); return '<span class="bt">' + esc(p[0]) + ' <b>' + fmtN(r.x.batches[k]) + '</b> <small>' + (p[1] === 'SEC-1' ? 'S1' : 'S2') + '</small></span>'; }).join(' ');
+    var dn = DAYS[new Date(r.d + 'T00:00:00Z').getUTCDay()] + ' ' + U.nice(r.d);
+    if (r.fri) { h += '<tr class="off"><td>' + dn + '</td><td></td><td colspan="' + (mats.length + 2) + '" class="muted">Day off</td></tr>'; return; }
+    var st = r.x.edited ? '<span class="chip info" style="padding:1px 8px" title="' + esc((r.x.by ? 'by ' + r.x.by : '') + (r.x.note ? ' · ' + r.x.note : '')) + '">Corrected</span>' : r.x.fromLP ? '' : (r.d < TODAY ? '<span class="chip soon" style="padding:1px 8px">No actual</span>' : '');
+    h += '<tr data-dc="' + r.d + '"><td><b>' + dn + '</b></td><td class="mono">' + esc(dcLot(r.d)) + '</td><td>' + (b || '<span class="muted">–</span>') + ' ' + st + '</td>' +
+      mats.map(function (m) { var v = r.u[m.id], a = (r.x.adj || {})[m.id]; return '<td class="n">' + (v ? fmtN(v) : '') + (a ? '<br><span class="small" style="color:var(--amber)">' + (a > 0 ? '+' : '') + fmtN(a) + ' by hand</span>' : '') + '</td>'; }).join('') +
+      '<td>' + (S.canWrite ? '<button class="btn ghost" data-dce="' + r.d + '">Open</button>' : '') + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td colspan="3"><b>Total ' + esc(nameOfMonth(mk)) + '</b></td>' + mats.map(function (m) { return '<td class="n"><b>' + fmtN(totals[m.id]) + '</b></td>'; }).join('') + '<td></td></tr></tfoot></table></div>';
+  h += '<p class="hint">Batches come from the actuals saved in the Line Planner (batches prepared, also prep-only). Every product made that day uses its own recipe, so two products with salt both use salt. A corrected day replaces the Line Planner numbers for raw materials only; the Line Planner itself is not changed.</p>';
+  return h;
+}
+after.daily = function (fc) {
+  var mo = $('#dcMonth'); if (mo) mo.onchange = function () { S.dc.month = mo.value; render(); };
+  document.querySelectorAll('[data-dce]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); dcEdit(fc, b.dataset.dce); }; });
+};
+function dcEdit(fc, date) {
+  X.ensureCss();
+  var model = fc.model, x = dcDay(date), st = { batches: JSON.parse(JSON.stringify(x.batches || {})), adj: JSON.parse(JSON.stringify(x.adj || {})), note: x.note || '' };
+  var back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
+  var prods = model.products.map(function (p) { return p.id; });
+  function draw() {
+    var u = dcUse(model, { batches: st.batches, adj: {} }), all = dcUse(model, st);
+    var mats = model.materials.filter(function (m) { return u[m.id] || st.adj[m.id]; });
+    var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Daily consumption" style="width:min(760px,100%)"><header><div><h2>' + DAYS[new Date(date + 'T00:00:00Z').getUTCDay()] + ' ' + U.nice(date) + ' · lot ' + esc(dcLot(date)) + '</h2><p class="small muted" style="margin:4px 0 0">' + (x.edited ? 'Corrected' + (x.by ? ' by ' + esc(x.by) : '') : x.fromLP ? 'From the Line Planner actuals' : 'No actual in the Line Planner for this day') + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
+    h += '<div><h3 style="font-size:14px;margin:0 0 6px">Batches made</h3><div class="tablewrap"><table><thead><tr><th>Product</th><th class="n">Section 1</th><th class="n">Section 2</th></tr></thead><tbody>' + prods.map(function (p) {
+      return '<tr><td>' + esc(PN[p] || p) + '</td>' + ['SEC-1', 'SEC-2'].map(function (s) { var k = p + '|' + s; return '<td class="n"><input type="number" step="any" min="0" data-db="' + k + '" value="' + (st.batches[k] != null && Number(st.batches[k]) ? st.batches[k] : '') + '" placeholder="0" style="width:80px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></td>'; }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div></div>';
+    h += '<div><h3 style="font-size:14px;margin:0 0 6px">Raw materials used</h3><div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Batches × recipe</th><th class="n">Extra (+) or less (−)</th><th class="n">Total used</th></tr></thead><tbody>' + mats.map(function (m) {
+      return '<tr><td>' + esc(m.name) + ' <span class="small muted">' + esc(m.unit) + '</span></td><td class="n">' + fmtN(u[m.id] || 0) + '</td><td class="n"><input type="number" step="any" data-da="' + m.id + '" value="' + (st.adj[m.id] || '') + '" placeholder="0" style="width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></td><td class="n"><b>' + fmtN(all[m.id] || 0) + '</b></td></tr>';
+    }).join('') + (mats.length ? '' : '<tr><td colspan="4" class="muted">No batches on this day.</td></tr>') + '</tbody></table></div>' +
+      '<div class="top" style="margin-top:8px"><label>Add another material<select id="daAdd"><option value="">Choose…</option>' + model.materials.filter(function (m) { return mats.indexOf(m) < 0; }).map(function (m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join('') + '</select></label></div></div>';
+    h += '<label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600">Note (why it was corrected)<input id="daNote" value="' + esc(st.note) + '" placeholder="e.g. one GM batch took 5 kg more salt" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-weight:400"></label>';
+    h += '</div><footer>' + (x.edited ? '<button class="btn ghost" data-x="reset" style="margin-right:auto">Back to the Line Planner numbers</button>' : '<span class="small muted" style="margin-right:auto">Saved days count as real use in the forecast.</span>') + '<button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="save">Save day</button></footer></div>';
+    back.innerHTML = h;
+    back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
+    back.querySelectorAll('[data-db]').forEach(function (i) { i.onchange = function () { var v = +i.value || 0; if (v) st.batches[i.dataset.db] = v; else delete st.batches[i.dataset.db]; draw(); }; });
+    back.querySelectorAll('[data-da]').forEach(function (i) { i.onchange = function () { var v = +i.value || 0; if (v) st.adj[i.dataset.da] = v; else delete st.adj[i.dataset.da]; draw(); }; });
+    back.querySelector('#daAdd').onchange = function () { if (this.value) { st.adj[this.value] = st.adj[this.value] || 0.0001; draw(); var i = back.querySelector('[data-da="' + this.value + '"]'); if (i) { i.value = ''; i.focus(); } } };
+    back.querySelector('#daNote').oninput = function () { st.note = this.value; };
+    back.querySelector('[data-x="save"]').onclick = function () {
+      Object.keys(st.adj).forEach(function (k) { if (Math.abs(st.adj[k]) < 0.001) delete st.adj[k]; });
+      var days = JSON.parse(JSON.stringify(dcDoc()));
+      days[date] = { batches: st.batches, adj: st.adj, note: st.note, lot: dcLot(date), by: (S.profile && (S.profile.full_name || S.profile.username)) || '', at: new Date().toISOString() };
+      back.remove(); saveDoc('daily', { days: days });
+    };
+    var rs = back.querySelector('[data-x="reset"]'); if (rs) rs.onclick = function () { var days = JSON.parse(JSON.stringify(dcDoc())); delete days[date]; back.remove(); saveDoc('daily', { days: days }); };
+  }
+  draw();
+}
+/* Inventory: "Estimated now" next to the counted quantity (count − daily use + received, from the forecast) */
+function invEstimate(fc, it) {
+  if (!it.mat || !(it.toApp > 0)) return null;
+  var r = (fc.results || []).filter(function (x) { return x.id === it.mat; })[0]; if (!r) return null;
+  var lines = invItems().filter(function (i) { return i.mat === it.mat && !i.missing; });
+  var y = U.addDays(TODAY, -1), v = r.stockNow;
+  (r.daily || []).forEach(function (x) { if (x.date <= y && x.date >= r.weeks[0].start) v = x.closing; });
+  if (lines.length > 1) { if (lines[0].id !== it.id) return { shared: true }; return { v: v / it.toApp, shared: false, multi: lines.length, unit: r.unit, app: v }; }
+  return { v: v / it.toApp };
+}
