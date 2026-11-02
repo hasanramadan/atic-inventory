@@ -1197,7 +1197,7 @@ function recentPace() {
 })();
 function paceNote(fc) {
   var rp = fc.recentPace, use = fc.pace === 'recent';
-  var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0.05; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ' + fmtN(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
+  var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0.05; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ≈ ' + Math.round(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
   var h = '<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px"><span><b>Days with no factory plan</b> use ' + (use ? 'the <b>recent pace from the Line Planner</b>: ' + rp.days + ' working day' + (rp.days === 1 ? '' : 's') + ' of actuals (' + U.nice(rp.from) + ' – ' + U.nice(rp.to) + ').' : 'the <b>Jan–Sep history average</b>' + (rp && rp.days < 3 ? ' (fewer than 3 recent Line Planner days to use instead).' : ' (chosen on Stock & lead times).')) + '</span>';
   if (use) h += '<span class="small">Sun–Thu: ' + (fmtK(rp.perDay) || 'none') + (rp.satDays ? ' · Saturday: ' + (fmtK(rp.sat) || 'none') : ' · Saturday: half a day (no Saturday logged yet)') + ' · Friday: off.</span>';
   h += '<span class="small muted">Days with a factory plan use the plan; past days use the actual batches. Enter the factory plan in step 1 for the most exact forecast.</span></div>';
@@ -1217,7 +1217,7 @@ function paceNote(fc) {
 })();
 
 /* ---------- per day + approximate batches, everywhere the forecast shows use ---------- */
-function btTxt(o, digits) { return Object.keys(o || {}).filter(function (p) { return o[p] > 0.05; }).sort(function (a, b) { return o[b] - o[a]; }).map(function (p) { return p + ' ≈ ' + fmtN(o[p]); }).join(' · '); }
+function btTxt(o, digits) { return Object.keys(o || {}).filter(function (p) { return o[p] > 0.05; }).sort(function (a, b) { return o[b] - o[a]; }).map(function (p) { return p + ' ≈ ' + Math.round(o[p]); }).join(' · '); }
 function periodBatches(fc, from, to) { var o = {}; Object.keys(fc.dayBatches || {}).forEach(function (d) { if (d >= from && d <= to) Object.keys(fc.dayBatches[d]).forEach(function (p) { o[p] = (o[p] || 0) + fc.dayBatches[d][p]; }); }); return o; }
 function perBatchOf(fc, matId, p) { // average amount of this material per batch of product p over the period's batches (both sections)
   var r = fc.model.recipes[p] || {}, a = Number((r['SEC-1'] || {})[matId]) || 0, b = Number((r['SEC-2'] || {})[matId]) || 0; return a && b ? (a + b) / 2 : (a || b);
@@ -1235,7 +1235,7 @@ function perBatchOf(fc, matId, p) { // average amount of this material per batch
       Object.keys(pb).forEach(function (p) {
         var per = perBatchOf(fc, r.id, p); if (!per) return;
         var re = new RegExp('(data-fm="' + r.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[\\s\\S]*?<span class="bysplit">[\\s\\S]*?<span>' + p + ' [^<]*)(</span>)');
-        h = h.replace(re, '$1 <i>(≈ ' + fmtN(pb[p]) + ' bt)</i>$2');
+        h = h.replace(re, '$1 <i>(≈ ' + Math.round(pb[p]) + ' bt)</i>$2');
       });
     });
     return h;
@@ -1270,7 +1270,7 @@ function perBatchOf(fc, matId, p) { // average amount of this material per batch
   var _sfe3 = savedForEngine;
   savedForEngine = function () {
     var s = _sfe3(), st = S.saved.settings || {};
-    if (st.pace === 'manual' && st.manualPace) s.recentPace = { days: 99, weekdays: 5, satDays: 1, perDay: st.manualPace.perDay || {}, sat: st.manualPace.sat || {}, manual: true, from: null, to: null };
+    if (st.pace === 'manual' && st.manualPace) { var rnd = function (o) { var r = {}; Object.keys(o || {}).forEach(function (k) { var v = Math.round(o[k]); if (v > 0) r[k] = v; }); return r; }; s.recentPace = { days: 99, weekdays: 5, satDays: 1, perDay: rnd(st.manualPace.perDay), sat: rnd(st.manualPace.sat), manual: true, from: null, to: null }; }
     return s;
   };
 })();
@@ -1280,12 +1280,12 @@ function paceBox(fc) {
     [['recent', 'Recent actuals (' + rp.days + ' days)'], ['manual', 'Set by me'], ['history', 'Jan–Sep history']].map(function (o) { return '<button data-pm="' + o[0] + '" aria-pressed="' + (mode === o[0]) + '"' + (o[0] === 'recent' && rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>';
   if (mode === 'manual' || S.paceEdit) {
     var mp = st.manualPace || { perDay: {}, sat: {} }, prods = fc.model.products.map(function (p) { return p.id; });
-    var val = function (o, k) { var v = (o || {})[k]; return v != null ? v : ''; };
-    var seed = function (k, sat) { var src = sat ? (rp.satDays ? rp.sat : null) : rp.perDay; return src && src[k] ? Math.round(src[k] * 10) / 10 : ''; };
+    var val = function (o, k) { var v = (o || {})[k]; return v != null ? Math.round(v) : ''; };
+    var seed = function (k, sat) { var src = sat ? (rp.satDays ? rp.sat : null) : rp.perDay; return src && src[k] ? Math.round(src[k]) || '' : ''; };
     var have = Object.keys(mp.perDay || {}).length || Object.keys(mp.sat || {}).length;
     h += '<div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Product</th><th class="n">Section 1<br><small>Sun–Thu</small></th><th class="n">Section 2<br><small>Sun–Thu</small></th><th class="n">Section 1<br><small>Saturday</small></th><th class="n">Section 2<br><small>Saturday</small></th></tr></thead><tbody>' +
-      prods.map(function (p) { return '<tr><td><b>' + esc(PN[p] || p) + '</b></td>' + [['perDay', 'SEC-1'], ['perDay', 'SEC-2'], ['sat', 'SEC-1'], ['sat', 'SEC-2']].map(function (c) { var k = p + '|' + c[1], v = have ? val(mp[c[0]], k) : seed(k, c[0] === 'sat'); return '<td class="n"><input type="number" step="0.5" min="0" data-mp="' + c[0] + '|' + k + '" value="' + v + '" placeholder="0" style="width:80px"' + (S.canWrite ? '' : ' disabled') + '></td>'; }).join('') + '</tr>'; }).join('') +
-      '</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn primary" id="mpSave"' + (S.canWrite ? '' : ' disabled') + '>Use these batches per day</button><span class="small muted">Batches prepared per day. Friday is always off. ' + (have ? '' : 'Filled in from your recent Line Planner actuals; change what you need.') + '</span></div>';
+      prods.map(function (p) { return '<tr><td><b>' + esc(PN[p] || p) + '</b></td>' + [['perDay', 'SEC-1'], ['perDay', 'SEC-2'], ['sat', 'SEC-1'], ['sat', 'SEC-2']].map(function (c) { var k = p + '|' + c[1], v = have ? val(mp[c[0]], k) : seed(k, c[0] === 'sat'); return '<td class="n"><input type="number" step="1" min="0" data-mp="' + c[0] + '|' + k + '" value="' + v + '" placeholder="0" style="width:80px"' + (S.canWrite ? '' : ' disabled') + '></td>'; }).join('') + '</tr>'; }).join('') +
+      '</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn primary" id="mpSave"' + (S.canWrite ? '' : ' disabled') + '>Use these batches per day</button><span class="small muted">Approximate batches prepared per day (whole numbers). Friday is always off. ' + (have ? '' : 'Filled in from your recent Line Planner actuals; change what you need.') + '</span></div>';
   }
   return h + '</div>';
 }
@@ -1297,7 +1297,7 @@ function paceBoxWire() {
   }; });
   var sv = $('#mpSave'); if (sv) sv.onclick = function () {
     var mp = { perDay: {}, sat: {} };
-    document.querySelectorAll('[data-mp]').forEach(function (i) { var q = i.dataset.mp.split('|'), v = +i.value; if (v > 0) mp[q[0]][q[1] + '|' + q[2]] = v; });
+    document.querySelectorAll('[data-mp]').forEach(function (i) { var q = i.dataset.mp.split('|'), v = Math.round(+i.value); if (v > 0) mp[q[0]][q[1] + '|' + q[2]] = v; });
     var st = Object.assign({}, S.saved.settings || {}, { pace: 'manual', manualPace: mp, manualPaceAt: new Date().toISOString() });
     S.paceEdit = false; S.saved.settings = st; saveDoc('settings', st);
   };
@@ -1311,7 +1311,7 @@ function paceBoxWire() {
   paceNote = function (fc) {
     var st = S.saved.settings || {};
     if (st.pace === 'manual' && fc.pace === 'recent') {
-      var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ' + fmtN(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
+      var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ≈ ' + Math.round(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
       return '<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px"><span><b>Days with no factory plan</b> use the <b>batches per day you set</b>' + (st.manualPaceAt ? ' (' + U.nice(st.manualPaceAt.slice(0, 10)) + ')' : '') + '.</span><span class="small">Sun–Thu: ' + (fmtK(st.manualPace.perDay) || 'none') + ' · Saturday: ' + (fmtK(st.manualPace.sat) || 'none') + ' · Friday: off.</span><span class="small muted">Days with a factory plan use the plan; past days use the actual batches.</span></div>';
     }
     return _pn(fc);
@@ -1352,8 +1352,8 @@ function seedManualPace() {
   if (!S.canWrite || seedManualPace.done || !BASE) return; var st = S.saved.settings || {}; if (st.manualPaceSeeded) return; seedManualPace.done = true;
   var rp = recentPace(), mp = { perDay: { 'GM|SEC-2': 13 }, sat: { 'GM|SEC-2': 13 } };
   // Section 1 keeps its other products (vinegar, lemon …) from the recent Line Planner pace; GM is only the 13 on Section 2
-  Object.keys(rp.perDay || {}).forEach(function (k) { var q = k.split('|'); if (q[1] === 'SEC-1' && q[0] !== 'GM' && rp.perDay[k] >= 0.25) mp.perDay[k] = Math.round(rp.perDay[k] * 2) / 2; });
-  Object.keys(rp.sat || {}).forEach(function (k) { var q = k.split('|'); if (q[1] === 'SEC-1' && q[0] !== 'GM' && rp.sat[k] >= 0.25) mp.sat[k] = Math.round(rp.sat[k] * 2) / 2; });
+  Object.keys(rp.perDay || {}).forEach(function (k) { var q = k.split('|'); if (q[1] === 'SEC-1' && q[0] !== 'GM' && rp.perDay[k] >= 0.25) mp.perDay[k] = Math.max(1, Math.round(rp.perDay[k])); });
+  Object.keys(rp.sat || {}).forEach(function (k) { var q = k.split('|'); if (q[1] === 'SEC-1' && q[0] !== 'GM' && rp.sat[k] >= 0.25) mp.sat[k] = Math.max(1, Math.round(rp.sat[k])); });
   var v = Object.assign({}, st, { pace: 'manual', manualPace: mp, manualPaceAt: new Date().toISOString(), manualPaceSeeded: true });
   S.saved.settings = v; saveDoc('settings', v);
 }
