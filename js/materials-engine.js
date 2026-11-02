@@ -64,6 +64,12 @@
       });
     }
     productRecipes(m);
+    /* extra recipes per product (e.g. a second GM recipe): { GM: { v1: { name, 'SEC-1': {...}, 'SEC-2': {...} } } }.
+       A section left empty uses the other section's amounts, like the main recipe. */
+    m.variants = clone((saved.recipes && saved.recipes.variants) || {});
+    Object.keys(m.variants).forEach(function (p) { Object.keys(m.variants[p] || {}).forEach(function (v) {
+      var r = m.variants[p][v]; ['SEC-1', 'SEC-2'].forEach(function (s) { var o = s === 'SEC-1' ? 'SEC-2' : 'SEC-1'; r[s] = Object.assign({}, r[s] || {}); Object.keys(r[o] || {}).forEach(function (k) { if (!(Number(r[s][k]) > 0) && Number(r[o][k]) > 0) r[s][k] = Number(r[o][k]); }); });
+    }); });
     var st = (saved.stock && saved.stock.items) || {};
     Object.keys(st).forEach(function (k) { m.stock[k] = st[k]; });
     m.plan = (saved.plan && saved.plan.days) ? saved.plan : { days: {}, weeks: [] };
@@ -145,7 +151,7 @@
       var d = m.plan.days[day] || {};
       Object.keys(d).forEach(function (k) {
         var b = Number(d[k]) || 0; if (!b) return;
-        var parts = k.split('|'); res.push({ product: parts[0], section: parts[1], batches: b, source: 'plan' });
+        var parts = k.split('|'); res.push({ product: parts[0], section: parts[1], batches: b, source: 'plan', variant: (m.plan.recipeOf && m.plan.recipeOf[day] && m.plan.recipeOf[day][k]) || null });
       });
     } else res = paceItems(m, dow(day), avg, sc);
     return res;
@@ -155,7 +161,8 @@
   function useOn(m, matId, items) {
     var total = 0, by = {};
     items.forEach(function (it) {
-      var r = (m.recipes[it.product] || {})[it.section] || {};
+      var vr = it.variant && m.variants && m.variants[it.product] && m.variants[it.product][it.variant];
+      var r = (vr ? vr[it.section] : (m.recipes[it.product] || {})[it.section]) || {};
       var q = Number(r[matId]) || 0;
       if (!q) return;
       var u = q * it.batches;

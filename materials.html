@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021345">
+<link rel="stylesheet" href="css/app.css?v=202611021349">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611021345"></script>
-<script src="js/shell.js?v=202611021345"></script>
-<script src="js/io.js?v=202611021345"></script>
-<script src="js/excel.js?v=202611021345"></script>
-<script src="js/materials-engine.js?v=202611021345"></script>
-<script src="js/inventory.js?v=202611021345"></script>
+<script src="config.js?v=202611021349"></script>
+<script src="js/shell.js?v=202611021349"></script>
+<script src="js/io.js?v=202611021349"></script>
+<script src="js/excel.js?v=202611021349"></script>
+<script src="js/materials-engine.js?v=202611021349"></script>
+<script src="js/inventory.js?v=202611021349"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -206,6 +206,8 @@ function estBatches(p, size, sec) {
   if (e) return { b: Math.round(e.v), n: e.n, src: 'Line Planner' };
   var h = (BASE.runDayBatches[p] || {})[sec] || 0; return { b: Math.max(1, Math.round(h)), n: 0, src: 'history' };
 }
+function recipeList(p) { var V = ((S.saved.recipes && S.saved.recipes.variants) || {})[p] || {}; return [{ id: '', name: (S.saved.recipes && S.saved.recipes.names && S.saved.recipes.names[p]) || 'Standard' }].concat(Object.keys(V).map(function (k) { return { id: k, name: V[k].name || k }; })); }
+function recipeName(p, id) { return (recipeList(p).filter(function (x) { return x.id === (id || ''); })[0] || { name: 'Standard' }).name; }
 function satLines(r) { return r.sat === 'same' ? (r.lines === 'both' ? ['SEC-1', 'SEC-2'] : [r.lines]) : r.sat === 'both' ? ['SEC-1', 'SEC-2'] : r.sat && r.sat !== 'none' ? [r.sat] : []; }
 /* Turn production runs (product + size + dates + lines) into batches per day and per line.
    A day where two runs share a line is a CHANGEOVER day: one finishes, the next starts. Unless you split it yourself
@@ -213,23 +215,23 @@ function satLines(r) { return r.sat === 'same' ? (r.lines === 'both' ? ['SEC-1',
    are listed too, so the batches still to finish of the old run can be entered. */
 function deriveDays(runs, split) {
   split = split || (S.saved.plan && S.saved.plan.split) || {};
-  var days = {}, from = null, to = null, slots = {}, lineDays = {}, raw = {};
+  var days = {}, from = null, to = null, slots = {}, lineDays = {}, raw = {}, recipeOf = {};
   runs.forEach(function (r, ri) {
     for (var d = r.from; d <= r.to; d = U.addDays(d, 1)) {
       var w = new Date(d + 'T00:00:00Z').getUTCDay(); if (w === 5) continue;
       var lines = w === 6 ? satLines(r) : (r.lines === 'both' ? ['SEC-1', 'SEC-2'] : [r.lines]);
       lines.forEach(function (s) { var fx = r.dayBatches && r.dayBatches[d + '|' + s] != null ? Number(r.dayBatches[d + '|' + s]) : (r.batches > 0 ? Number(r.batches) : null);
-        (raw[d + '|' + s] = raw[d + '|' + s] || []).push({ product: r.product, size: r.size || '', fixed: fx, run: ri }); });
+        (raw[d + '|' + s] = raw[d + '|' + s] || []).push({ product: r.product, size: r.size || '', recipe: r.recipe || '', fixed: fx, run: ri }); });
     }
     if (!from || r.from < from) from = r.from; if (!to || r.to > to) to = r.to;
   });
   Object.keys(raw).forEach(function (k) {
     var q = k.split('|'), d = q[0], s = q[1], L = raw[k], out;
-    if (split[k] && split[k].length) out = split[k].map(function (x) { return { product: x.product, size: x.size || '', batches: Math.max(0, Number(x.batches) || 0), set: true }; });
-    else out = L.map(function (x) { var full = x.fixed != null ? x.fixed : estBatches(x.product, x.size, s).b; return { product: x.product, size: x.size, batches: L.length > 1 ? Math.round(full / L.length) : full, est: x.fixed == null }; });
+    if (split[k] && split[k].length) out = split[k].map(function (x) { var src = L.filter(function (y) { return y.product === x.product && y.size === (x.size || ''); })[0]; return { product: x.product, size: x.size || '', recipe: x.recipe || (src && src.recipe) || '', batches: Math.max(0, Number(x.batches) || 0), set: true }; });
+    else out = L.map(function (x) { var full = x.fixed != null ? x.fixed : estBatches(x.product, x.size, s).b; return { product: x.product, size: x.size, recipe: x.recipe, batches: L.length > 1 ? Math.round(full / L.length) : full, est: x.fixed == null }; });
     slots[k] = out.map(function (x) { return x.product; });
     (lineDays[d] = lineDays[d] || {})[s] = out;
-    out.forEach(function (x) { if (x.batches > 0) { days[d] = days[d] || {}; days[d][x.product + '|' + s] = (days[d][x.product + '|' + s] || 0) + x.batches; } });
+    out.forEach(function (x) { if (x.batches > 0) { days[d] = days[d] || {}; days[d][x.product + '|' + s] = (days[d][x.product + '|' + s] || 0) + x.batches; if (x.recipe) { (recipeOf[d] = recipeOf[d] || {})[x.product + '|' + s] = x.recipe; } } });
   });
   /* changeover days: shared line-days, and the first day of a new product/size on a line */
   var co = [];
@@ -243,7 +245,7 @@ function deriveDays(runs, split) {
       prev = L[L.length - 1];
     });
   });
-  return { days: days, from: from, to: to, slots: slots, lineDays: lineDays, changeovers: co };
+  return { days: days, from: from, to: to, slots: slots, lineDays: lineDays, recipeOf: recipeOf, changeovers: co };
 }
 function horizonDate() { return S.until || U.addDays(TODAY, 60); }
 function vForecast(fc) {
@@ -258,12 +260,14 @@ function vForecast(fc) {
   else h += '<div class="tablewrap"><table><thead><tr><th>Product</th><th>Size</th><th>From</th><th>To</th><th>Lines (Sun–Thu)</th><th>Saturday</th><th class="n">Batches / day / line</th><th></th></tr></thead><tbody>' + runs.map(function (r, i) {
     var ln = r.lines === 'both' ? 'SEC-1' : r.lines, e = estBatches(r.product, r.size, ln), e2 = r.lines === 'both' ? estBatches(r.product, r.size, 'SEC-2') : null;
     var estTxt = '≈ ' + e.b + (e2 && e2.b !== e.b ? ' / ' + e2.b : '') + (e.src === 'Line Planner' ? ' from ' + e.n + ' Line Planner day' + (e.n === 1 ? '' : 's') : ' from history');
-    return '<tr><td><b>' + PN[r.product] + '</b></td><td>' + (r.size ? esc(r.size) : '<span class="muted">–</span>') + '</td><td>' + U.nice(r.from) + '</td><td>' + U.nice(r.to) + '</td><td>' + (r.lines === 'both' ? 'Both lines' : LINES[r.lines]) + '</td><td>' + ({ none: 'No work', same: 'Same line' + (r.lines === 'both' ? 's' : ''), both: 'Both lines', 'SEC-1': 'Line 1 only', 'SEC-2': 'Line 2 only' }[r.sat || 'none']) + '</td>' +
+    var rl = recipeList(r.product);
+    return '<tr><td><b>' + PN[r.product] + '</b>' + (rl.length > 1 ? '<br><select class="rrec" data-ri="' + i + '" aria-label="Recipe" style="margin-top:4px;font-size:13px">' + rl.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === (r.recipe || '') ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select>' : '') + '</td><td>' + (r.size ? esc(r.size) : '<span class="muted">–</span>') + '</td><td>' + U.nice(r.from) + '</td><td>' + U.nice(r.to) + '</td><td>' + (r.lines === 'both' ? 'Both lines' : LINES[r.lines]) + '</td><td>' + ({ none: 'No work', same: 'Same line' + (r.lines === 'both' ? 's' : ''), both: 'Both lines', 'SEC-1': 'Line 1 only', 'SEC-2': 'Line 2 only' }[r.sat || 'none']) + '</td>' +
       '<td class="n"><input type="number" min="0" step="1" class="bpd" data-ri="' + i + '" value="' + (r.batches > 0 ? r.batches : '') + '" placeholder="≈ ' + e.b + '" style="width:72px;text-align:right" title="Leave empty to use the estimate"><div class="small muted" style="white-space:nowrap">' + (r.batches > 0 ? 'Set by you' : estTxt) + '</div></td><td><button class="btn ghost" data-rr="' + i + '">Remove</button></td></tr>';
   }).join('') + '</tbody></table></div>';
   h += '<div class="row" style="margin-top:12px">' +
     '<select id="rP">' + BASE.products.map(function (p) { return '<option value="' + p.id + '">' + PN[p.id] + '</option>'; }).join('') + '</select>' +
     '<select id="rZ" aria-label="Size">' + (SIZES[BASE.products[0].id] || []).map(function (z) { return '<option>' + z + '</option>'; }).join('') + '</select>' +
+    '<select id="rR" aria-label="Recipe"' + (recipeList(BASE.products[0].id).length > 1 ? '' : ' hidden') + '>' + recipeList(BASE.products[0].id).map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>'; }).join('') + '</select>' +
     '<label class="small muted">From <input type="date" id="rF" value="' + TODAY + '"></label><label class="small muted">To <input type="date" id="rT" value="' + U.addDays(TODAY, 6) + '"></label>' +
     '<select id="rL"><option value="both">Both lines</option><option value="SEC-1">Line 1</option><option value="SEC-2">Line 2</option></select>' +
     '<select id="rS"><option value="same">Saturday: same line(s)</option><option value="both">Saturday: both lines</option><option value="SEC-1">Saturday: Line 1 only</option><option value="SEC-2">Saturday: Line 2 only</option><option value="none">Saturday: no work</option></select>' +
@@ -316,7 +320,7 @@ function vForecast(fc) {
       '<div class="chartbox"><canvas id="fch"></canvas></div><ul class="why small" style="margin-top:12px">' + sel.why.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
     h += '<div class="tablewrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>Day</th><th>Producing</th><th class="n">Use</th><th class="n">Arriving</th><th class="n">Stock end of day</th></tr></thead><tbody>' + dd.map(function (x) {
       var w = new Date(x.date + 'T00:00:00Z').getUTCDay();
-      var prod = ['SEC-1', 'SEC-2'].map(function (s) { var L = (dv.lineDays[x.date] || {})[s]; return L ? LINES[s] + ': ' + L.map(function (y) { return y.product + (y.size ? ' ' + y.size : '') + ' ×' + y.batches; }).join(' → ') : ''; }).filter(Boolean).join(' · ');
+      var prod = ['SEC-1', 'SEC-2'].map(function (s) { var L = (dv.lineDays[x.date] || {})[s]; return L ? LINES[s] + ': ' + L.map(function (y) { return y.product + (y.size ? ' ' + y.size : '') + (y.recipe ? ' (' + esc(recipeName(y.product, y.recipe)) + ')' : '') + ' ×' + y.batches; }).join(' → ') : ''; }).filter(Boolean).join(' · ');
       if (!prod) prod = w === 5 ? '<span class="muted">Friday off</span>' : x.planned ? '<span class="muted">Nothing planned</span>' : '<span class="muted">Average pace</span>';
       return '<tr class="' + (x.closing < 0 ? 'neg' : '') + '"><td>' + DAYS[w] + ' ' + U.nice(x.date) + '</td><td>' + prod + '</td><td class="n">' + (x.use ? fmtN(x.use) : '') + '</td><td class="n">' + (x.received ? '+' + fmtN(x.received) : '') + '</td><td class="n">' + fmtN(x.closing) + '</td></tr>';
     }).join('') + '</tbody></table></div>';
@@ -327,13 +331,14 @@ after.forecast = function (fc) {
   var runs = planRuns();
   function savePlan(rs, source) {
     var sp = (S.saved.plan && S.saved.plan.split) || {}, dv = deriveDays(rs, sp);
-    var doc = { runs: rs, split: sp, lineDays: dv.lineDays, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source || (S.saved.plan && S.saved.plan.source) || 'Entered in app', updatedAt: new Date().toISOString() };
+    var doc = { runs: rs, split: sp, lineDays: dv.lineDays, recipeOf: dv.recipeOf, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source || (S.saved.plan && S.saved.plan.source) || 'Entered in app', updatedAt: new Date().toISOString() };
     if (!rs.length) doc = { runs: [], days: {}, weeks: [], updatedAt: doc.updatedAt };
     return saveDoc('plan', doc);
   }
-  function stage(rs, source, sp) { sp = sp || (S.saved.plan && S.saved.plan.split) || {}; var dv = deriveDays(rs, sp); S.saved.plan = { runs: rs, split: sp, lineDays: dv.lineDays, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; var y = window.scrollY; render(); window.scrollTo(0, y); }
+  function stage(rs, source, sp) { sp = sp || (S.saved.plan && S.saved.plan.split) || {}; var dv = deriveDays(rs, sp); S.saved.plan = { runs: rs, split: sp, lineDays: dv.lineDays, recipeOf: dv.recipeOf, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; var y = window.scrollY; render(); window.scrollTo(0, y); }
   var src0 = function () { return (S.saved.plan && S.saved.plan.source) || 'Entered in app'; };
-  $('#rP').onchange = function () { $('#rZ').innerHTML = (SIZES[this.value] || []).map(function (z) { return '<option>' + z + '</option>'; }).join(''); };
+  $('#rP').onchange = function () { $('#rZ').innerHTML = (SIZES[this.value] || []).map(function (z) { return '<option>' + z + '</option>'; }).join(''); var rl = recipeList(this.value); $('#rR').innerHTML = rl.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>'; }).join(''); $('#rR').hidden = rl.length < 2; };
+  document.querySelectorAll('.rrec').forEach(function (el) { el.onchange = function () { runs[+el.dataset.ri].recipe = el.value || ''; stage(runs, src0()); toast('Recipe changed. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.bpd').forEach(function (el) { el.onchange = function () { var v = Math.round(Number(el.value) || 0); runs[+el.dataset.ri].batches = v > 0 ? v : null; stage(runs, src0()); toast('Changed. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.cob').forEach(function (el) { el.onchange = function () {
     var k = el.dataset.k, sp = Object.assign({}, (S.saved.plan && S.saved.plan.split) || {});
@@ -341,7 +346,7 @@ after.forecast = function (fc) {
     sp[k] = list; stage(runs, src0(), sp); toast('Changeover set. Press Save plan to keep it.'); }; });
   document.querySelectorAll('[data-cox]').forEach(function (b) { b.onclick = function () { var sp = Object.assign({}, (S.saved.plan && S.saved.plan.split) || {}); delete sp[b.dataset.cox]; S.saved.plan.split = sp; stage(runs, src0(), sp); }; });
   $('#rAdd').onclick = function () {
-    var r = { product: $('#rP').value, size: $('#rZ').value || '', from: $('#rF').value, to: $('#rT').value, lines: $('#rL').value, sat: $('#rS').value, batches: Math.round(Number($('#rB').value) || 0) || null };
+    var r = { product: $('#rP').value, size: $('#rZ').value || '', recipe: ($('#rR') && !$('#rR').hidden && $('#rR').value) || '', from: $('#rF').value, to: $('#rT').value, lines: $('#rL').value, sat: $('#rS').value, batches: Math.round(Number($('#rB').value) || 0) || null };
     if (!r.from || !r.to || r.to < r.from) { toast('Pick a start date and an end date after it.'); return; }
     runs.push(r); stage(runs, (S.saved.plan && S.saved.plan.source) || 'Entered in app'); toast('Run added. Press Save plan to keep it.');
   };
@@ -587,5 +592,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611021345"></script>
+<script src="js/materials-page.js?v=202611021349"></script>
+<script src="js/recipe-variants.js?v=202611021349"></script>
 </body></html>
