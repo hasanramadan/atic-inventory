@@ -65,7 +65,7 @@ function lastSaved(name) {
 }
 async function saveDoc(name, data) {
   data = Object.assign({}, data); delete data.unsaved;
-  if (!S.canWrite) { toast('You have view access. Ask Hasan for edit access.'); return; }
+  if (!S.canWrite) { toast('You have view access. Ask your admin for edit access.'); return; }
   var r = await sb.from('app_docs').upsert({ name: name, data: data }).select().single();
   if (r.error) { toast('Could not save: ' + r.error.message); return; }
   S.saved[name] = r.data.data; S.meta[name] = r.data; toast('Saved'); render();
@@ -95,7 +95,7 @@ function head(title, sub, right) {
 }
 function weekLabel(ws) { return 'Week of ' + U.nice(ws) + ' – ' + U.nice(U.addDays(ws, 6)); }
 function accessNote() {
-  if (!S.canWrite) return '<div class="banner note">You have view access. Ask Hasan for edit access to change plans or stock.</div>';
+  if (!S.canWrite) return '<div class="banner note">You have view access. Ask your admin for edit access to change plans or stock.</div>';
   return '';
 }
 
@@ -487,7 +487,7 @@ function vAlerts() {
   var h = head('Email alerts', 'Who gets the weekly outlook, and alerts when something turns red.');
   h += accessNote(); h += lastSaved('alerts');
   h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:8px">Recipients</h3><div class="pill-input"><input id="em" type="email" placeholder="name@aticoman.com or any email"><button class="btn primary" id="emAdd">Add</button></div>' +
-    '<div class="emails">' + (a.emails || []).map(function (e, i) { return '<span>' + esc(e) + '<button data-rm="' + i + '" aria-label="Remove ' + esc(e) + '">×</button></span>'; }).join('') + (!(a.emails || []).length ? '<span class="muted small" style="background:transparent">No recipients yet. Emails go to Hasan until you add some.</span>' : '') + '</div></div>';
+    '<div class="emails">' + (a.emails || []).map(function (e, i) { return '<span>' + esc(e) + '<button data-rm="' + i + '" aria-label="Remove ' + esc(e) + '">×</button></span>'; }).join('') + (!(a.emails || []).length ? '<span class="muted small" style="background:transparent">No recipients yet. No emails are sent until you add a recipient.</span>' : '') + '</div></div>';
   h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:8px">Schedule</h3><ul class="why"><li><b>Weekly outlook</b>: every Sunday at 7:00, the full status table with the reason for each red or amber material.</li><li><b>Urgent alert</b>: checked every working morning at 7:30; sent only when a material newly turns red or will run out within 14 days.</li></ul>' +
     '<p class="small muted" style="margin:10px 0 0">' + (last && last.sentAt ? 'Last email sent ' + esc(last.sentAt.slice(0, 16).replace('T', ' ')) + ' (' + esc(last.kind || '') + ')' : 'No email sent yet.') + '</p></div>';
   return h;

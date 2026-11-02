@@ -313,7 +313,7 @@ async function saveSettings(s, msg) {
   catch (e) { A.toast('Not saved: ' + (e.message || e)); }
 }
 function saveForecast(kind) {
-  if (!A.canWrite) { A.toast('View only: ask Hasan for edit access.'); return; }
+  if (!A.canWrite) { A.toast('View only: ask your admin for edit access.'); return; }
   var x = kind === 'order' ? ST.order : ST.camp, summary;
   if (kind === 'order') {
     var c = SP.orderCalc(x.lines, { samples: !!x.samples, sections: x.sections, start: x.start, saturdays: sats(x.saturdays), model: D.model, items: D.items });

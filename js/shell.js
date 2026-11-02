@@ -126,7 +126,7 @@
     if (A.area !== 'production') return A;
     if (!allowed(A.profile, A.page)) {
       var where = firstPage(A.profile);
-      if (main) main.innerHTML = '<div class="panel noacc"><h2 style="font-size:20px;margin-bottom:6px">No access to this page</h2><p class="muted" style="margin:0 0 14px">Hasan decides which pages each account can open. Ask him if you need this one.</p>' + (where ? '<a class="btn primary" href="' + where + '" style="text-decoration:none;display:inline-block">Go to my pages</a>' : '') + '</div>';
+      if (main) main.innerHTML = '<div class="panel noacc"><h2 style="font-size:20px;margin-bottom:6px">No access to this page</h2><p class="muted" style="margin:0 0 14px">Your admin decides which pages each account can open. Ask them if you need this one.</p>' + (where ? '<a class="btn primary" href="' + where + '" style="text-decoration:none;display:inline-block">Go to my pages</a>' : '') + '</div>';
       return null;
     }
     return A;

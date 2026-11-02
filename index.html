@@ -11,7 +11,7 @@
 </head><body>
 <div class="login" id="loginView" hidden><form class="box" id="loginForm">
   <div class="logo" style="padding:0"><div class="mark">AT</div><div><b style="color:var(--ink)">ATIC OMAN</b><small class="muted">Planning &amp; forecasting</small></div></div>
-  <h2 id="lgTitle" style="font-size:22px">Sign in</h2><p class="small muted" id="lgSub" style="margin:0">Use the username and password Hasan gave you.</p>
+  <h2 id="lgTitle" style="font-size:22px">Sign in</h2><p class="small muted" id="lgSub" style="margin:0">Sign in with your username and password.</p>
   <label id="lgNameRow" hidden>Full name<input id="lgName" autocomplete="name"></label>
   <label>Username<input id="lgUser" autocomplete="username" required autocapitalize="none"></label>
   <label>Password<input id="lgPass" type="password" autocomplete="current-password" required></label>
@@ -31,20 +31,20 @@
   function toEmail(u) { return String(u || '').trim().toLowerCase() + '@atic.local'; }
   async function goIn(session) {
     var p = await sb.from('profiles').select('*').eq('id', session.user.id).single();
-    if (p.error || !p.data) { await sb.auth.signOut(); $('#lgErr').textContent = 'This account has no access. Ask Hasan.'; return show(); }
+    if (p.error || !p.data) { await sb.auth.signOut(); $('#lgErr').textContent = 'This account has no access. Ask your admin.'; return show(); }
     var next = q.get('next') || '', key = next.split('.html')[0], page = ATIC.PAGES.filter(function (x) { return x.key === key || (key === 'index' && false); })[0];
     var areas = ATIC.areasOf(p.data), prodOk = areas.indexOf('production') >= 0;
     var dest = page && prodOk && ATIC.allowed(p.data, page.key) ? next : ATIC.areaHome(p.data);
-    if (!dest) { await sb.auth.signOut(); $('#lgErr').textContent = 'No pages are switched on for this account yet. Ask Hasan.'; return show(); }
+    if (!dest) { await sb.auth.signOut(); $('#lgErr').textContent = 'No pages are switched on for this account yet. Ask your admin.'; return show(); }
     location.replace(dest);
   }
   async function show() {
     $('#loginView').hidden = false;
     var r = await sb.rpc('needs_setup'); setup = !r.error && r.data === true;
     $('#lgTitle').textContent = setup ? 'Create the admin account' : 'Sign in';
-    $('#lgSub').textContent = setup ? 'First time only. This account will create everyone else\'s.' : 'Use the username and password Hasan gave you.';
+    $('#lgSub').textContent = setup ? 'First time only. This account will create everyone else\'s.' : 'Sign in with your username and password.';
     $('#lgNameRow').hidden = !setup; $('#lgBtn').textContent = setup ? 'Create admin and sign in' : 'Sign in';
-    if (q.get('err') === 'noaccess') $('#lgErr').textContent = 'This account has no access. Ask Hasan.';
+    if (q.get('err') === 'noaccess') $('#lgErr').textContent = 'This account has no access. Ask your admin.';
   }
   $('#loginForm').onsubmit = async function (e) {
     e.preventDefault(); $('#lgErr').textContent = ''; $('#lgBtn').disabled = true;

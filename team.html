@@ -103,7 +103,7 @@
     });
     h += '</div><div class="tm-comp">';
     if (T.ch === 'feed') h += '<p class="small muted" style="margin:0">The site posts here by itself: new inventory counts, deliveries received and Line Planner actuals.</p>';
-    else if (!A.canWrite) h += '<p class="small muted" style="margin:0">You have view access, so you can read the Team chat but not post. Ask Hasan for edit access.</p>';
+    else if (!A.canWrite) h += '<p class="small muted" style="margin:0">You have view access, so you can read the Team chat but not post. Ask your admin for edit access.</p>';
     else if (T.ch !== 'feed') {
       var pages = ATIC.ordered(me).filter(function (p) { return p.key !== 'team'; });
       h += (T.att ? '<div><span class="tm-att">' + (T.att.points ? '📍 ' + (T.att.points.length > 1 ? T.att.points.length + ' things: ' + esc(T.att.points.map(function (p) { return p.label; }).join(', ')) : esc(T.att.points[0].label)) + ' · ' + esc(T.att.title) : '📄 ' + esc(T.att.title)) + '<button id="tmAttX" aria-label="Remove page">×</button></span></div>' : '') +
@@ -143,7 +143,7 @@
     if (T.kind === 'decision') doc.decision = true;
     $('#tmSend').disabled = true;
     try { await ATIC.planner.set('team', id, doc); T.att = null; T.kind = 'msg'; T.due = ''; T.who = ''; T.msgs.push(Object.assign({ id: id }, doc)); render(); var x = $('#tmText'); if (x) x.focus(); }
-    catch (e) { ATIC.toast(/row-level|permission|42501/i.test(e.message || '') ? 'Not sent: this account cannot post. Ask Hasan for edit access.' : 'Not sent: ' + (e.message || e)); $('#tmSend').disabled = false; }
+    catch (e) { ATIC.toast(/row-level|permission|42501/i.test(e.message || '') ? 'Not sent: this account cannot post. Ask your admin for edit access.' : 'Not sent: ' + (e.message || e)); $('#tmSend').disabled = false; }
   }
   async function load() {
     try { var rows = await ATIC.planner.list('team'); T.msgs = rows.map(function (r) { return Object.assign({ id: r.id }, r.data); }).filter(function (m) { return m && m.at && mine(m); }); }
