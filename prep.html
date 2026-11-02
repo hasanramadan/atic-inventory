@@ -3,7 +3,7 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021311">
+<link rel="stylesheet" href="css/app.css?v=202611021313">
 <style>
 .pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 /* ---------- hero ---------- */
@@ -105,9 +105,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js?v=202611021311"></script>
-<script src="js/shell.js?v=202611021311"></script>
-<script src="js/materials-engine.js?v=202611021311"></script>
+<script src="config.js?v=202611021313"></script>
+<script src="js/shell.js?v=202611021313"></script>
+<script src="js/materials-engine.js?v=202611021313"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
@@ -118,6 +118,7 @@
   var $ = function (s, r) { return (r || document).querySelector(s); }, esc = A.esc;
   function toast(t) { var el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { el.hidden = true; }, 2600); }
   function fq(x) { if (!x) return '0'; var a = Math.abs(x); return a >= 100 ? Math.round(x).toLocaleString('en-US') : a >= 10 ? (Math.round(x * 10) / 10).toLocaleString('en-US') : (Math.round(x * 100) / 100).toLocaleString('en-US'); }
+  function pl(u, q) { u = String(u || ''); return /^(kg|g|l|L|ml|mL|ton|t)$/.test(u) || Math.abs(q - 1) < 1e-9 || /s$/.test(u) ? u : u + 's'; }
   function nice(d) { return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
 
   /* ---------- data: recipes, materials, stock; Line Planner plans & actuals ---------- */
@@ -231,7 +232,7 @@
       if (have != null && !isNaN(have)) {
         var pct = have > 0 ? Math.min(100, o.app / have * 100) : 100;
         cls = o.app > have ? 'short' : pct > 70 ? 'tight' : '';
-        st = '<div class="bar"><b style="width:' + Math.max(3, pct).toFixed(0) + '%"></b></div><div class="st">' + (o.app > have ? 'Not enough: about ' + fq(Math.max(0, have)) + ' ' + x.unit + ' left in stock' : 'Uses ' + Math.round(pct) + '% of the ≈ ' + fq(have) + ' ' + x.unit + ' in stock') + '</div>';
+        st = '<div class="bar"><b style="width:' + Math.max(3, pct).toFixed(0) + '%"></b></div><div class="st">' + (o.app > have ? 'Not enough: about ' + fq(Math.max(0, have)) + ' ' + pl(x.unit, have) + ' left in stock' : 'Uses ' + Math.round(pct) + '% of the ≈ ' + fq(have) + ' ' + pl(x.unit, have) + ' in stock') + '</div>';
       }
       return '<div class="mc ' + cls + '" style="animation-delay:' + (k * 40) + 'ms"><div class="nm">' + esc(x.name) + '</div><div class="q">' + fq(u.main) + '<small>' + esc(u.mu) + '</small></div>' +
         (u.alt != null ? '<div class="alt">≈ ' + fq(u.alt) + ' ' + esc(u.au) + (u.alt === 1 ? '' : 's') + '</div>' : '') +
@@ -284,7 +285,7 @@
     if (!pr.length) { toast('Add at least one product first'); return; }
     $('#sheet').innerHTML = '<div class="meta"><div><div style="font:600 10pt var(--f-mono);letter-spacing:.1em">ATIC OMAN · PREPARATION SHEET</div><h1>' + nice(S.date) + '</h1></div><div class="lotp">LOT ' + lot + '</div></div>' +
       '<h2>Products and batches</h2><table><thead><tr><th>Section</th><th>Product</th><th class="n">Batches</th><th>Done ✓</th></tr></thead><tbody>' + pr.map(function (r) { return '<tr><td>' + r.sec + '</td><td>' + esc(r.p) + '</td><td class="n"><b>' + r.b + '</b></td><td></td></tr>'; }).join('') + '</tbody></table>' +
-      '<h2>Raw materials to weigh</h2><table><thead><tr><th>Material</th><th class="n">Quantity</th><th>For</th><th>Weighed ✓</th></tr></thead><tbody>' + mr.map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td class="n"><b>' + fq(r.q) + ' ' + esc(r.u) + '</b>' + (r.alt != null ? '<br><small>≈ ' + fq(r.alt) + ' ' + esc(r.au) + 's</small>' : '') + '</td><td><small>' + esc(r.by) + '</small></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+      '<h2>Raw materials to weigh</h2><table><thead><tr><th>Material</th><th class="n">Quantity</th><th>For</th><th>Weighed ✓</th></tr></thead><tbody>' + mr.map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td class="n"><b>' + fq(r.q) + ' ' + esc(pl(r.u, r.q)) + '</b>' + (r.alt != null ? '<br><small>≈ ' + fq(r.alt) + ' ' + esc(pl(r.au, r.alt)) + '</small>' : '') + '</td><td><small>' + esc(r.by) + '</small></td><td></td></tr>'; }).join('') + '</tbody></table>' +
       '<div class="sign"><div>Prepared by</div><div>Checked by</div><div>Time</div></div>';
     window.print();
   }
@@ -292,13 +293,13 @@
     var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
     if (!pr.length) { toast('Add at least one product first'); return; }
     var aoa = [['ATIC Oman · Preparation sheet'], ['Date', S.date], ['Lot', lot], [], ['Section', 'Product', 'Batches']].concat(pr.map(function (r) { return [r.sec, r.p, r.b]; }))
-      .concat([[], ['Raw material', 'Quantity', 'Unit', 'In stock units', 'For']]).concat(mr.map(function (r) { return [r.name, Math.round(r.q * 100) / 100, r.u, r.alt != null ? Math.round(r.alt * 100) / 100 + ' ' + r.au + 's' : '', r.by]; }));
+      .concat([[], ['Raw material', 'Quantity', 'Unit', 'In stock units', 'For']]).concat(mr.map(function (r) { return [r.name, Math.round(r.q * 100) / 100, r.u, r.alt != null ? Math.round(r.alt * 100) / 100 + ' ' + pl(r.au, r.alt) : '', r.by]; }));
     if (window.XLSX) { var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 40 }]; var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Preparation'); XLSX.writeFile(wb, 'Preparation ' + S.date + ' lot ' + lot + '.xlsx'); }
     else A.download('Preparation ' + S.date + ' lot ' + lot + '.csv', aoa.map(function (r) { return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'));
   }
   function copyTxt() {
     var pr = prodRows(), mr = matRows(); if (!pr.length) { toast('Add at least one product first'); return; }
-    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date) + '\n\n' + pr.map(function (r) { return r.sec + ': ' + r.p + ' × ' + r.b + ' batches'; }).join('\n') + '\n\nRaw materials:\n' + mr.map(function (r) { return '• ' + r.name + ': ' + fq(r.q) + ' ' + r.u + (r.alt != null ? ' (≈ ' + fq(r.alt) + ' ' + r.au + 's)' : ''); }).join('\n');
+    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date) + '\n\n' + pr.map(function (r) { return r.sec + ': ' + r.p + ' × ' + r.b + ' batches'; }).join('\n') + '\n\nRaw materials:\n' + mr.map(function (r) { return '• ' + r.name + ': ' + fq(r.q) + ' ' + pl(r.u, r.q) + (r.alt != null ? ' (≈ ' + fq(r.alt) + ' ' + pl(r.au, r.alt) + ')' : ''); }).join('\n');
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('Copied: paste it in WhatsApp or anywhere'); }, function () { toast('Could not copy'); });
   }
 
