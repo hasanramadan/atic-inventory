@@ -1264,3 +1264,61 @@ function perBatchOf(fc, matId, p) { // average amount of this material per batch
     return h.replace(/<span class="l">Stock now<\/span><span class="v num">[^<]*<\/span><span class="small muted">[^<]*<\/span>/, '<span class="l">Est. left now</span><span class="v num">' + fmtN(Math.max(0, n.left)) + '</span><span class="small muted">counted ' + fmtN(n.counted) + ' on ' + U.nice(n.asOf) + ' · used ' + fmtN(n.used) + (n.received ? ' · received ' + fmtN(n.received) : '') + '</span>');
   };
 })();
+
+/* ---------- pace "Set by me": batches per day per product and section, typed by hand ---------- */
+(function () {
+  var _sfe3 = savedForEngine;
+  savedForEngine = function () {
+    var s = _sfe3(), st = S.saved.settings || {};
+    if (st.pace === 'manual' && st.manualPace) s.recentPace = { days: 99, weekdays: 5, satDays: 1, perDay: st.manualPace.perDay || {}, sat: st.manualPace.sat || {}, manual: true, from: null, to: null };
+    return s;
+  };
+})();
+function paceBox(fc) {
+  var st = S.saved.settings || {}, mode = st.pace === 'manual' ? 'manual' : st.pace === 'history' ? 'history' : 'recent', rp = recentPace();
+  var h = '<div class="panel pacebox"><div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 style="font-size:16px">Batches per day for days with no factory plan</h3><div class="tabs">' +
+    [['recent', 'Recent actuals (' + rp.days + ' days)'], ['manual', 'Set by me'], ['history', 'Jan–Sep history']].map(function (o) { return '<button data-pm="' + o[0] + '" aria-pressed="' + (mode === o[0]) + '"' + (o[0] === 'recent' && rp.days < 3 ? ' disabled title="Needs 3 recent days in the Line Planner"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>';
+  if (mode === 'manual' || S.paceEdit) {
+    var mp = st.manualPace || { perDay: {}, sat: {} }, prods = fc.model.products.map(function (p) { return p.id; });
+    var val = function (o, k) { var v = (o || {})[k]; return v != null ? v : ''; };
+    var seed = function (k, sat) { var src = sat ? (rp.satDays ? rp.sat : null) : rp.perDay; return src && src[k] ? Math.round(src[k] * 10) / 10 : ''; };
+    var have = Object.keys(mp.perDay || {}).length || Object.keys(mp.sat || {}).length;
+    h += '<div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Product</th><th class="n">Section 1<br><small>Sun–Thu</small></th><th class="n">Section 2<br><small>Sun–Thu</small></th><th class="n">Section 1<br><small>Saturday</small></th><th class="n">Section 2<br><small>Saturday</small></th></tr></thead><tbody>' +
+      prods.map(function (p) { return '<tr><td><b>' + esc(PN[p] || p) + '</b></td>' + [['perDay', 'SEC-1'], ['perDay', 'SEC-2'], ['sat', 'SEC-1'], ['sat', 'SEC-2']].map(function (c) { var k = p + '|' + c[1], v = have ? val(mp[c[0]], k) : seed(k, c[0] === 'sat'); return '<td class="n"><input type="number" step="0.5" min="0" data-mp="' + c[0] + '|' + k + '" value="' + v + '" placeholder="0" style="width:80px"' + (S.canWrite ? '' : ' disabled') + '></td>'; }).join('') + '</tr>'; }).join('') +
+      '</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn primary" id="mpSave"' + (S.canWrite ? '' : ' disabled') + '>Use these batches per day</button><span class="small muted">Batches prepared per day. Friday is always off. ' + (have ? '' : 'Filled in from your recent Line Planner actuals; change what you need.') + '</span></div>';
+  }
+  return h + '</div>';
+}
+function paceBoxWire() {
+  document.querySelectorAll('[data-pm]').forEach(function (b) { b.onclick = function () {
+    var m = b.dataset.pm, st = Object.assign({}, S.saved.settings || {});
+    if (m === 'manual' && !st.manualPace) { S.paceEdit = true; render(); return; } // show the table first; it switches on Save
+    st.pace = m; S.paceEdit = false; S.saved.settings = st; saveDoc('settings', st);
+  }; });
+  var sv = $('#mpSave'); if (sv) sv.onclick = function () {
+    var mp = { perDay: {}, sat: {} };
+    document.querySelectorAll('[data-mp]').forEach(function (i) { var q = i.dataset.mp.split('|'), v = +i.value; if (v > 0) mp[q[0]][q[1] + '|' + q[2]] = v; });
+    var st = Object.assign({}, S.saved.settings || {}, { pace: 'manual', manualPace: mp, manualPaceAt: new Date().toISOString() });
+    S.paceEdit = false; S.saved.settings = st; saveDoc('settings', st);
+  };
+}
+(function () {
+  // Forecast page: the choice sits right above "Forecast until"; the explanation box says what is used
+  var _vF4 = vForecast, _aF = after.forecast;
+  vForecast = function (fc) { var h = _vF4(fc), i = h.indexOf('<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px"><span><b>Days with no factory plan</b>'); return i < 0 ? h : h.slice(0, i) + paceBox(fc) + h.slice(i); };
+  after.forecast = function (fc) { if (_aF) _aF(fc); paceBoxWire(); };
+  var _pn = paceNote;
+  paceNote = function (fc) {
+    var st = S.saved.settings || {};
+    if (st.pace === 'manual' && fc.pace === 'recent') {
+      var fmtK = function (o) { return Object.keys(o || {}).filter(function (k) { return o[k] > 0; }).sort().map(function (k) { var q = k.split('|'); return '<b>' + q[0] + ' ' + fmtN(o[k]) + '</b>/day ' + (q[1] === 'SEC-1' ? 'S1' : 'S2'); }).join(' · '); };
+      return '<div class="callout" style="flex-direction:column;align-items:flex-start;gap:4px"><span><b>Days with no factory plan</b> use the <b>batches per day you set</b>' + (st.manualPaceAt ? ' (' + U.nice(st.manualPaceAt.slice(0, 10)) + ')' : '') + '.</span><span class="small">Sun–Thu: ' + (fmtK(st.manualPace.perDay) || 'none') + ' · Saturday: ' + (fmtK(st.manualPace.sat) || 'none') + ' · Friday: off.</span><span class="small muted">Days with a factory plan use the plan; past days use the actual batches.</span></div>';
+    }
+    return _pn(fc);
+  };
+  // Stock page tabs: same three choices
+  var _aS2 = after.stock;
+  after.stock = function (fc) { _aS2(fc); document.querySelectorAll('[data-pace]').forEach(function (b) { b.onclick = function () { var v = Object.assign({}, S.saved.settings || {}, { pace: b.dataset.pace }); S.saved.settings = v; saveDoc('settings', v); }; }); };
+  var _vS2 = vStock;
+  vStock = function (fc) { return _vS2(fc).replace('<button data-pace="history"', '<button data-pace="manual" aria-pressed="' + ((S.saved.settings || {}).pace === 'manual') + '"' + ((S.saved.settings || {}).manualPace ? '' : ' disabled title="Set them first on the Forecast page"') + '>Set by me</button><button data-pace="history"').replace('aria-pressed="true">Recent Line Planner', 'aria-pressed="' + ((S.saved.settings || {}).pace !== 'manual' && (S.saved.settings || {}).pace !== 'history') + '">Recent Line Planner'); };
+})();
