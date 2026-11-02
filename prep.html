@@ -3,7 +3,7 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021313">
+<link rel="stylesheet" href="css/app.css?v=202611021315">
 <style>
 .pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 /* ---------- hero ---------- */
@@ -95,7 +95,7 @@
   #sheet h2{font:600 13pt var(--f-display);margin:12px 0 4px}
   #sheet .sign{display:flex;gap:30px;margin-top:26px}#sheet .sign div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10pt}
 }
-@media (max-width:900px){.hero{grid-template-columns:1fr}.scene{min-height:300px}.grid2{grid-template-columns:1fr}.pp{padding:16px 14px 50px}}
+@media (max-width:900px){.hero{grid-template-columns:1fr}.scene{padding:0 10px 18px}.floor{height:262px}.grid2{grid-template-columns:1fr}.pp{padding:16px 14px 50px}}
 @media (prefers-reduced-motion:reduce){.wv,.mixr,.bb,.mc{animation:none}.floor,.ticket .t,.mc{transition:none}}
 </style>
 </head><body>
@@ -105,9 +105,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js?v=202611021313"></script>
-<script src="js/shell.js?v=202611021313"></script>
-<script src="js/materials-engine.js?v=202611021313"></script>
+<script src="config.js?v=202611021315"></script>
+<script src="js/shell.js?v=202611021315"></script>
+<script src="js/materials-engine.js?v=202611021315"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
