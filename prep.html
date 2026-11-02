@@ -3,7 +3,7 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611021344">
+<link rel="stylesheet" href="css/app.css?v=202611021345">
 <style>
 .pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 /* ---------- hero ---------- */
@@ -105,9 +105,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js?v=202611021344"></script>
-<script src="js/shell.js?v=202611021344"></script>
-<script src="js/materials-engine.js?v=202611021344"></script>
+<script src="config.js?v=202611021345"></script>
+<script src="js/shell.js?v=202611021345"></script>
+<script src="js/materials-engine.js?v=202611021345"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
@@ -119,7 +119,7 @@
   var $ = function (s, r) { return (r || document).querySelector(s); }, esc = A.esc;
   function toast(t) { var el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { el.hidden = true; }, 2600); }
   function fq(x) { if (!x) return '0'; var a = Math.abs(x); return a >= 100 ? Math.round(x).toLocaleString('en-US') : a >= 10 ? (Math.round(x * 10) / 10).toLocaleString('en-US') : (Math.round(x * 100) / 100).toLocaleString('en-US'); }
-  function pl(u, q) { u = String(u || ''); return /^(kg|g|l|L|ml|mL|ton|t)$/.test(u) || Math.abs(q - 1) < 1e-9 || /s$/.test(u) ? u : u + 's'; }
+  function pl(u, q) { u = String(u || ''); return /^(kg|g|l|L|ml|mL|ton|t)$/.test(u) || Math.abs(q - 1) < 1e-9 || /s$/.test(u) ? u : /(x|ch|sh)$/.test(u) ? u + 'es' : u + 's'; }
   function nice(d) { return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
 
   /* ---------- data: recipes, materials, stock; Line Planner plans & actuals ---------- */
@@ -181,11 +181,13 @@
     }
     return { rows: out, src: src };
   }
+  function fixSizes() { Object.keys(S.rows).forEach(function (sc) { S.rows[sc].forEach(function (r) { var L = SIZES[r.p] || []; if (L.length && L.indexOf(r.z) < 0) r.z = L[L.length - 1]; }); }); }
   function load() {
     var saved = null; try { saved = JSON.parse(localStorage.getItem(key()) || 'null'); } catch (e) {}
     if (saved) { S.rows = saved; S.src = 'mine'; return; }
     var f = fromLP(S.date); S.rows = f.rows; S.src = f.src;
   }
+  var _load = load; load = function () { _load(); fixSizes(); };
 
   /* ---------- the maths: batches × recipe ---------- */
   function need() {
@@ -282,7 +284,7 @@
   function wire() {
     $('#d').onchange = function () { if (this.value) { S.date = this.value; load(); render(); } };
     $('#today').onclick = function () { S.date = TODAY; load(); render(); };
-    $('#lp').onclick = function () { try { localStorage.removeItem(key()); } catch (e) {} var f = fromLP(S.date); S.rows = f.rows; S.src = f.src; render(); toast(f.src ? 'Taken from the Line Planner' : 'Nothing in the Line Planner for this day'); };
+    $('#lp').onclick = function () { try { localStorage.removeItem(key()); } catch (e) {} var f = fromLP(S.date); S.rows = f.rows; S.src = f.src; fixSizes(); render(); toast(f.src ? 'Taken from the Line Planner' : 'Nothing in the Line Planner for this day'); };
     document.querySelectorAll('.prow select:not(.zs)').forEach(function (el) { el.onchange = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.p = el.value; r.z = (SIZES[r.p] || [''])[SIZES[r.p] && SIZES[r.p].length > 1 ? SIZES[r.p].length - 1 : 0]; S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.prow select.zs').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].z = el.value; S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.step input').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].b = Math.max(0, Math.round(Number(el.value) || 0)); S.src = 'mine'; store(); render(); }; });
