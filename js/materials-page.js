@@ -48,6 +48,7 @@ function bestSheet(book) {
 /* Read a plan file: ANY dates (any month, any year). A workbook is read sheet by sheet; you tick the sheets to use
    (by default every sheet that looks like a month plan, or the one with the coming days). */
 function importPlan(file, stage, picks) {
+  if (!/\.csv$/i.test(file.name || '')) { toast('The factory plan is read from a CSV file. In Excel: File → Save As → CSV, then import that.'); return; }
   X.readFile(file).then(function (book) {
     var per = book.sheets.map(function (sh, i) {
       var g; try { g = X.planGrid({ name: book.name, sheets: [Object.assign({}, sh, { hidden: false })] }, { ref: TODAY }); } catch (e) { g = { days: [], notes: [], datesSeen: 0, productsSeen: 0 }; }
@@ -886,7 +887,7 @@ function registerIO() {
     ],
     imports: [
       { label: 'Inventory count (weekly or monthly)', hint: 'Weekly or month-end file: Raw Material and CRITICAL STOCK sheets', run: function (f) { go('inventory'); invImport(f); } },
-      { label: 'Factory plan', hint: 'The production plan: Excel, CSV or PDF', accept: '.xlsx,.xls,.xlsm,.csv,.pdf', run: function (f) { go('forecast'); importPlan(f, function (rs, source) { var dv = deriveDays(rs); S.saved.plan = { runs: rs, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; render(); }); } },
+      { label: 'Factory plan', hint: 'The production plan as a CSV file', accept: '.csv', run: function (f) { go('forecast'); importPlan(f, function (rs, source) { var dv = deriveDays(rs); S.saved.plan = { runs: rs, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; render(); }); } },
       { label: 'Open orders', hint: 'One row per order line', run: function (f) { go('orders'); ordersImport(f); } },
       { label: 'Recipes', hint: 'Per batch, per product and section', run: function (f) { go('recipes'); recipesImport(f); } }
     ]
