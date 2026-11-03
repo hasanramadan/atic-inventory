@@ -557,6 +557,31 @@ function invImportDialog(book, p) {
 /* =====================================================================================================
    RECEIVING: open orders for tracked raw materials or any inventory item; mark received in full or in part
    ===================================================================================================== */
+/* ---------- UNITS: every material is kept in ONE unit (its stock unit). Its packs come from the Inventory
+   ("25 Kg/bag", "265 kg/drum"); wherever you type a number you can type it in kg or in the pack, and it is converted. */
+function matOf(id) { return (run.cache ? run.cache.model.materials : BASE.materials).filter(function (x) { return x.id === id; })[0]; }
+function packsOf(id) {
+  var out = []; invItems().forEach(function (i) { if (i.mat !== id || i.missing) return; var pk = i.pack || (INV.parsePack ? INV.parsePack(i.packTxt) : null); if (pk && pk.size > 0 && (pk.of === 'kg' || pk.of === 'l')) { var per = pk.per || INV.unitWord(i.unit) || 'pack'; if (!out.some(function (x) { return x.per === per && x.size === pk.size; })) out.push({ per: per, size: pk.size, of: pk.of }); } });
+  return out;
+}
+/* kg (or L) in one stock unit of the material, when it can be known */
+function kgPerUnit(id) {
+  var m = matOf(id); if (!m) return null; var u = INV.unitWord(m.unit);
+  if (u === 'kg' || u === 'l') return 1;
+  var p = packsOf(id).filter(function (x) { return x.per === u; })[0]; if (p) return p.size;
+  if ((INV.unitWord(m.recipeUnit) === 'kg' || INV.unitWord(m.recipeUnit) === 'l') && m.recipeFactor > 0) return m.recipeFactor;
+  return null;
+}
+/* the units a number can be typed in for this material: [{u, f}] where f = how many of u in one stock unit */
+function unitChoices(id) {
+  var m = matOf(id); if (!m) return []; var su = INV.unitWord(m.unit) || m.unit, k = kgPerUnit(id), out = [{ u: su, f: 1 }];
+  if (k && su !== 'kg' && su !== 'l') out.push({ u: packsOf(id)[0] && packsOf(id)[0].of === 'l' ? 'l' : 'kg', f: k });
+  if (k) packsOf(id).forEach(function (p) { if (p.per !== su && !out.some(function (x) { return x.u === p.per; })) out.push({ u: p.per, f: k / p.size, label: p.per + ' of ' + p.size + ' ' + p.of }); });
+  return out;
+}
+function bothUnits(id, q) { var m = matOf(id), k = kgPerUnit(id); if (!m) return fmtN(q); var su = INV.unitWord(m.unit) || m.unit; return fmtN(q) + ' ' + su + (k && su !== 'kg' && su !== 'l' ? ' = ' + fmtN(q * k) + ' kg' : '') + (k && (su === 'kg' || su === 'l') && packsOf(id)[0] ? ' = ' + fmtN(q / packsOf(id)[0].size) + ' ' + packsOf(id)[0].per + 's' : ''); }
+function unitSelect(id, cls, cur) { var ch = unitChoices(id); if (ch.length < 2) return ''; return '<select class="' + cls + '" data-m="' + esc(id) + '" style="padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">' + ch.map(function (c, i) { return '<option value="' + i + '"' + (cur === c.u ? ' selected' : '') + '>' + esc(c.label || c.u) + '</option>'; }).join('') + '</select>'; }
+
 function orderGot(o) { return (o.receipts || []).reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0); }
 function orderItem(o) {
   if (o.inv) { var it = invById(o.inv); if (it) return { name: it.name + (it.packTxt ? ' (' + it.packTxt + ')' : ''), unit: o.unit || it.unit }; }
@@ -595,7 +620,7 @@ vOrders = function (fc) {
   var h = head('Open orders & receiving', 'Orders already placed. What is still to come counts on its expected date; what arrives is added to the inventory the day you mark it received.', fileBtn('xlOrd', 'Import orders (Excel)'));
   h += accessNote(); h += lastSaved('orders');
   if (S.canWrite) h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:8px">New order</h3><div class="row"><select id="oMat" style="max-width:340px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' + orderPicker(fc) + '</select>' +
-    '<input id="oQty" type="number" step="any" placeholder="Quantity" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)"><span class="small muted" id="oUnit"></span>' +
+    '<input id="oQty" type="number" step="any" placeholder="Quantity" style="width:120px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)"><span class="small muted" id="oUnit"></span><span id="oUsel"></span><span class="small muted" id="oConv"></span>' +
     '<input id="oEta" type="date" title="Expected arrival" style="padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' +
     '<input id="oRef" placeholder="PO / supplier" style="padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg)">' +
     '<button class="btn primary" id="oAdd">Add order</button></div>' + '' + '</div>';
@@ -617,9 +642,16 @@ after.orders = function (fc) {
   var f = $('#xlOrd'); if (f) f.onchange = function () { if (this.files[0]) ordersImport(this.files[0]); this.value = ''; };
   var sel = $('#oMat');
   function unitHint() { if (!sel) return; var v = sel.value, u = ''; if (v.indexOf('i:') === 0) { var it = invById(v.slice(2)); u = it ? it.unit : ''; } else { var m = fc.model.materials.filter(function (x) { return 'm:' + x.id === v; })[0]; u = m ? m.unit : ''; } $('#oUnit').textContent = u; }
-  if (sel) { sel.onchange = unitHint; unitHint(); }
+  function orderMat() { var v = sel.value; if (v.indexOf('m:') === 0) return v.slice(2); var it = invById(v.slice(2)); return it && it.mat; }
+  function uWire() { var id = orderMat(), ch = id ? unitChoices(id) : [], v = sel.value; var natural = v.indexOf('i:') === 0;
+    $('#oUsel').innerHTML = !natural && ch.length > 1 ? unitSelect(id, 'oU', ch[0].u) : '';
+    if ($('#oUnit')) $('#oUnit').style.display = $('#oUsel').innerHTML ? 'none' : '';
+    var conv = function () { var q = +$('#oQty').value || 0, us = $('.oU'), c = us ? ch[+us.value] : null; $('#oConv').textContent = q && id ? '= ' + bothUnits(id, c ? q / c.f : q) : ''; };
+    $('#oQty').oninput = conv; if ($('.oU')) $('.oU').onchange = conv; conv(); }
+  if (sel) { sel.onchange = function () { unitHint(); uWire(); }; unitHint(); uWire(); }
   var add = $('#oAdd'); if (add) add.onclick = function () {
     var q = +$('#oQty').value, eta = $('#oEta').value; if (!q || !eta) { toast('Enter a quantity and an expected arrival date.'); return; }
+    var us = $('.oU'), id0 = orderMat(); if (us && id0) { var c = unitChoices(id0)[+us.value]; if (c && c.f !== 1) q = Math.round(q / c.f * 1000) / 1000; }
     items.push(newOrder(sel.value, q, eta, $('#oRef').value.trim())); saveDoc('orders', { items: items });
   };
   document.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = 'Click again to remove'; setTimeout(function () { b.textContent = 'Remove'; delete b.dataset.arm; }, 4000); return; } items.splice(+b.dataset.del, 1); saveDoc('orders', { items: items }); }; });
@@ -634,11 +666,12 @@ function receiveDialog(items, idx) {
   var back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
   var st = { full: true, qty: rest, date: TODAY, keep: true, eta: o.eta && o.eta > TODAY ? o.eta : U.addDays(TODAY, 7), note: '' };
   function draw() {
-    var recv = st.full ? rest : (+st.qty || 0), left = Math.max(0, rest - recv);
+    var fR = (st.u && o.material) ? ((unitChoices(o.material).filter(function (c) { return c.u === st.u; })[0] || { f: 1 }).f) : 1;
+    var recv = st.full ? rest : (+st.qty || 0) / fR, left = Math.max(0, rest - recv);
     var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Mark received" style="width:min(620px,100%)"><header><div><h2>Mark received</h2><p class="small muted" style="margin:4px 0 0">' + esc(it.name) + (o.ref ? ' · ' + esc(o.ref) : '') + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
     h += '<p class="sum" style="margin:0">Ordered <b>' + fmtN(q) + ' ' + esc(it.unit) + '</b>' + (got ? ' · already received <b>' + fmtN(got) + '</b>' : '') + ' · still to come <b>' + fmtN(rest) + '</b></p>';
     h += '<div style="display:flex;flex-direction:column;gap:8px"><label class="dd"><input type="radio" name="rf" value="full"' + (st.full ? ' checked' : '') + '> <span><b>Full quantity</b> arrived: ' + fmtN(rest) + ' ' + esc(it.unit) + '</span></label>' +
-      '<label class="dd"><input type="radio" name="rf" value="part"' + (st.full ? '' : ' checked') + '> <span><b>Part of it</b>, quantity received:</span> <input type="number" step="any" min="0" id="rQty" value="' + (st.full ? '' : st.qty) + '" ' + (st.full ? 'disabled' : '') + ' style="width:110px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"> ' + esc(it.unit) + '</label></div>';
+      '<label class="dd"><input type="radio" name="rf" value="part"' + (st.full ? '' : ' checked') + '> <span><b>Part of it</b>, quantity received:</span> <input type="number" step="any" min="0" id="rQty" value="' + (st.full ? '' : st.qty) + '" ' + (st.full ? 'disabled' : '') + ' style="width:110px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"> ' + (o.material && !o.inv && unitChoices(o.material).length > 1 ? unitSelect(o.material, 'rU', st.u) : esc(it.unit)) + '</label></div>';
     if (!st.full && recv > rest + 1e-9) h += '<div class="callout">More than ordered (' + fmtN(recv - rest) + ' extra). That is fine if the supplier sent extra; the order will close as received.</div>';
     if (!st.full && left > 0) h += '<div style="display:flex;flex-direction:column;gap:6px;padding-left:22px"><label class="dd small"><input type="radio" name="rk" value="keep"' + (st.keep ? ' checked' : '') + '> The rest (' + fmtN(left) + ') is still coming, expected <input type="date" id="rEta" value="' + esc(st.eta) + '" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg)"></label><label class="dd small"><input type="radio" name="rk" value="close"' + (st.keep ? '' : ' checked') + '> Nothing more is coming: close the order short</label></div>';
     h += '<div class="top"><label>Date received<input type="date" id="rDate" value="' + esc(st.date) + '" max="' + U.addDays(TODAY, 1) + '" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label><label style="flex:1">Note (GRN / Odoo receipt)<input id="rNote" value="' + esc(st.note) + '" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></label></div>';
@@ -653,11 +686,13 @@ function receiveDialog(items, idx) {
     back.querySelectorAll('[name="rf"]').forEach(function (r) { r.onchange = function () { st.full = r.value === 'full'; if (!st.full && !st.qty) st.qty = ''; draw(); var e = back.querySelector('#rQty'); if (e && !st.full) e.focus(); }; });
     var rq = back.querySelector('#rQty'); if (rq) rq.oninput = function () { st.qty = rq.value; clearTimeout(draw.t); draw.t = setTimeout(function () { draw(); var e = back.querySelector('#rQty'); if (e) { e.focus(); e.setSelectionRange && e.type === 'text' && e.setSelectionRange(e.value.length, e.value.length); } }, 450); };
     back.querySelectorAll('[name="rk"]').forEach(function (r) { r.onchange = function () { st.keep = r.value === 'keep'; draw(); }; });
+    var ruS = back.querySelector('.rU'); if (ruS) ruS.onchange = function () { st.u = unitChoices(o.material)[+ruS.value].u; draw(); };
     var re = back.querySelector('#rEta'); if (re) re.onchange = function () { st.eta = re.value; };
     back.querySelector('#rDate').onchange = function () { st.date = this.value; draw(); };
     back.querySelector('#rNote').oninput = function () { st.note = this.value; };
     back.querySelector('[data-x="ok"]').onclick = function () {
       var recv2 = st.full ? rest : (+back.querySelector('#rQty').value || 0); if (!(recv2 > 0)) return;
+      var ru = back.querySelector('.rU'); if (!st.full && ru) { var cR = unitChoices(o.material)[+ru.value]; if (cR && cR.f !== 1) recv2 = Math.round(recv2 / cR.f * 1000) / 1000; }
       /* inCount: this receipt is added straight to the count (inventory line and forecast stock), so the forecast does not add it again */
       o.receipts = (o.receipts || []).concat([{ date: st.date, qty: recv2, note: st.note, at: new Date().toISOString(), full: !!st.full, inCount: true }]);
       var left2 = Math.max(0, rest - recv2);

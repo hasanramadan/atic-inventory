@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611030837">
+<link rel="stylesheet" href="css/app.css?v=202611030838">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611030837"></script>
-<script src="js/shell.js?v=202611030837"></script>
-<script src="js/io.js?v=202611030837"></script>
-<script src="js/excel.js?v=202611030837"></script>
-<script src="js/materials-engine.js?v=202611030837"></script>
-<script src="js/inventory.js?v=202611030837"></script>
+<script src="config.js?v=202611030838"></script>
+<script src="js/shell.js?v=202611030838"></script>
+<script src="js/io.js?v=202611030838"></script>
+<script src="js/excel.js?v=202611030838"></script>
+<script src="js/materials-engine.js?v=202611030838"></script>
+<script src="js/inventory.js?v=202611030838"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -474,7 +474,9 @@ function vRecipes(fc) {
     h += '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="font-size:17px">' + PN[p.id] + '</h3><span class="small muted">Per batch</span></div><div class="tablewrap"><table><thead><tr><th>Material</th><th>Unit</th><th class="n">Section 1</th><th class="n">Section 2</th></tr></thead><tbody>';
     used.forEach(function (x) {
       var f = x.recipeFactor || 1;
-      h += '<tr><td>' + esc(x.name) + '</td><td class="muted">' + esc(x.recipeUnit) + (f !== 1 ? ' <small>(stock in ' + x.unit + 's of ' + f + ')</small>' : '') + '</td>' +
+      var uc = typeof unitChoices === 'function' ? unitChoices(x.id) : [], ru = INV.unitWord(x.recipeUnit) || x.recipeUnit;
+      h += '<tr><td>' + esc(x.name) + (typeof kgPerUnit === 'function' && kgPerUnit(x.id) && INV.unitWord(x.unit) !== 'kg' ? '<div class="small muted">1 ' + esc(x.unit) + ' = ' + fmtN(kgPerUnit(x.id)) + ' kg</div>' : '') + '</td><td>' +
+        (uc.length > 1 ? '<select class="recU" data-mid="' + esc(x.id) + '" title="What the numbers in this row are" style="padding:5px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">' + uc.map(function (c, ci) { return '<option value="' + ci + '"' + (c.u === ru && Math.abs(c.f - f) < 1e-9 ? ' selected' : '') + '>' + esc(c.label || c.u) + '</option>'; }).join('') + (uc.some(function (c) { return c.u === ru && Math.abs(c.f - f) < 1e-9; }) ? '' : '<option selected>' + esc(x.recipeUnit) + '</option>') + '</select>' : '<span class="muted">' + esc(x.recipeUnit) + (f !== 1 ? ' <small>(stock in ' + x.unit + 's of ' + f + ')</small>' : '') + '</span>') + '</td>' +
         ['SEC-1', 'SEC-2'].map(function (s) {
           var v = (r[s] || {})[x.id] || 0, own = Number(((given[s] || {})[x.id])) > 0;
           return '<td class="n"><input type="number" step="any" min="0" id="r_' + p.id + '_' + s + '_' + x.id + '" data-p="' + p.id + '" data-s="' + s + '" data-m="' + x.id + '" value="' + +(v * f).toFixed(3) + '"' + (own ? '' : ' style="border-style:dashed" title="Not set for this section: uses the other section\'s amount"') + '>' + (own ? '' : '<br><span class="small muted">same as the other section</span>') + '</td>';
@@ -499,6 +501,15 @@ after.recipes = function (fc) {
       addRow(sel.value);
     };
   });
+  /* the unit of a recipe row (kg or the pack): only how the numbers are typed and shown; the amounts stay the same */
+  document.querySelectorAll('.recU').forEach(function (el) { el.onchange = function () {
+    var id = el.dataset.mid, c = unitChoices(id)[+el.value]; if (!c) return;
+    var typed = recTyped(), mats = JSON.parse(JSON.stringify(S.saved.materials || { items: {} })); mats.items = mats.items || {};
+    var x = fc.model.materials.filter(function (m) { return m.id === id; })[0], oldF = x.recipeFactor || 1;
+    mats.items[id] = Object.assign({}, mats.items[id] || {}, { recipeUnit: c.u, recipeFactor: c.f });
+    Object.keys(typed).forEach(function (k) { if (k.slice(-('_' + id).length) === '_' + id && typed[k] !== '') typed[k] = String(+(Number(typed[k]) / oldF * c.f).toFixed(4)); });
+    Promise.resolve(saveDoc('materials', mats)).then(function () { recRestore(typed); toast('This row is now in ' + (c.label || c.u) + '. Amounts converted, nothing else changed.'); });
+  }; });
   $('#saveRec').onclick = function () { var rec = collectRec(fc); S.recAdd = {}; saveDoc('recipes', { recipes: rec, updatedAt: new Date().toISOString() }); };
 };
 /* keep what was typed when the page redraws (adding a row) */
@@ -632,6 +643,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611030837"></script>
-<script src="js/recipe-variants.js?v=202611030837"></script>
+<script src="js/materials-page.js?v=202611030838"></script>
+<script src="js/recipe-variants.js?v=202611030838"></script>
 </body></html>
