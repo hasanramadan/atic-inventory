@@ -82,7 +82,7 @@
           var ctx = await context();
           var r = await A.sb.functions.invoke('ask', { body: { question: q, context: ctx, history: H.slice(-6) } });
           var wt = w.querySelector('#asWait'); if (wt) wt.remove();
-          var err = r.error ? (r.error.context && r.error.context.status === 404 ? 'The assistant is not switched on yet (the "ask" function is not set up in Supabase).' : (r.data && r.data.error) || r.error.message) : (r.data && r.data.error);
+          var err = r.error ? ((r.error.context && r.error.context.status === 404) || /Failed to send/i.test(r.error.message || '') ? 'The assistant is not switched on yet (the "ask" function is not set up in Supabase).' : (r.data && r.data.error) || r.error.message) : (r.data && r.data.error);
           if (err) { log.insertAdjacentHTML('beforeend', '<div class="m e">' + esc(err) + '</div>'); }
           else { var ans = (r.data && r.data.answer) || '(no answer)'; H.push({ role: 'user', content: q }, { role: 'assistant', content: ans }); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(ans) + '</div>'); }
         } catch (e) { var wt2 = w.querySelector('#asWait'); if (wt2) wt2.remove(); log.insertAdjacentHTML('beforeend', '<div class="m e">' + esc(e.message || String(e)) + '</div>'); }
