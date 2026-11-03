@@ -112,24 +112,26 @@ function runOutBoth(r) {
   var due = (r.openOrders || []).filter(function (o) { return o.eta >= TODAY && o.qty > 0; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
   return { actual: act, expected: r.runOut, orders: due };
 }
-function runOutHTML(r, long) {
+function runOutParts(r) {
   var b = runOutBoth(r), unit = r.unit || '', many = b.orders.length > 1;
   var a = b.actual ? U.nice(b.actual) : 'not in 26 weeks', e = b.expected ? U.nice(b.expected) : 'not in 26 weeks';
-  var h = '<span class="ro"><b class="ro1">' + a + '</b>';
-  if (b.orders.length && a !== e) h += '<span class="ro2">(' + e + ' if the deliver' + (many ? 'ies arrive' : 'y arrives') + ')</span>';
-  if (b.orders.length) h += b.orders.map(function (o) { return '<span class="ro3">Delivery: +' + fmtN(o.qty) + ' ' + esc(unit) + ' on ' + U.nice(o.eta) + (o.ref ? ' · ' + esc(String(o.ref).split('·')[0].trim()) : '') + '</span>'; }).join('');
-  return h + '</span>';
+  var extra = [];
+  if (b.orders.length && a !== e) extra.push('<span class="ro2">(' + e + ' if the deliver' + (many ? 'ies arrive' : 'y arrives') + ')</span>');
+  b.orders.forEach(function (o) { extra.push('<span class="ro3">Delivery: +' + fmtN(o.qty) + ' ' + esc(unit) + ' on ' + U.nice(o.eta) + '</span>'); });
+  return { date: a, extra: extra.join('') };
 }
+function runOutHTML(r) { var p = runOutParts(r); return '<span class="ro"><b class="ro1">' + p.date + '</b>' + p.extra + '</span>'; }
 (function () { /* same look everywhere: normal text, one line each */
   var st = document.createElement('style');
-  st.textContent = '.ro{display:block;font-family:var(--f-body);white-space:normal;line-height:1.35;letter-spacing:0}.ro .ro1{display:block;font-size:inherit}.ro .ro2,.ro .ro3,.wd2{display:block;font-family:var(--f-body);font-weight:400;font-size:12.5px;color:var(--muted);white-space:normal;letter-spacing:0}.ro .ro2{color:var(--ink)}';
+  st.textContent = '.stat dd.rofull{grid-column:1/-1;margin-top:-4px;text-align:right;font-family:var(--f-body)}.stat dd.rofull span{display:block;white-space:normal}' + '.ro{display:block;font-family:var(--f-body);white-space:normal;line-height:1.35;letter-spacing:0}.ro .ro1{display:block;font-size:inherit}.ro .ro2,.ro .ro3,.wd2{display:block;font-family:var(--f-body);font-weight:400;font-size:12.5px;color:var(--muted);white-space:normal;letter-spacing:0}.ro .ro2{color:var(--ink)}';
   document.head.appendChild(st);
 })();
 (function () {
   var _c = card;
   card = function (r) {
     var h = _c(r);
-    return h.replace(/<dt>Runs out<\/dt><dd>[^<]*<\/dd>/, '<dt title="Without deliveries; in brackets: with the deliveries still to come">Runs out</dt><dd>' + runOutHTML(r) + '</dd>');
+    var p = runOutParts(r);
+    return h.replace(/<dt>Runs out<\/dt><dd>[^<]*<\/dd>/, '<dt title="Without deliveries; below: with the deliveries still to come">Runs out</dt><dd><b>' + p.date + '</b></dd>' + (p.extra ? '<dd class="rofull">' + p.extra + '</dd>' : ''));
   };
   if (typeof vMaterial === 'function') {
     var _vm = vMaterial;
