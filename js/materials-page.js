@@ -69,7 +69,7 @@ function planDialog(book, g, days, stage, ctx) {
   var pgs = back.querySelector('#pgSheet'); if (pgs) pgs.onchange = function () { back.remove(); importPlan(ctx.file, stage, pgs.value === 'all' ? null : +pgs.value); };
   back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
   back.querySelector('[data-x="table"]').onclick = function () { back.remove(); planAsTable(book, stage); };
-  var ap = back.querySelector('[data-x="apply"]'); if (ap) ap.onclick = function () { back.remove(); stage(daysToRuns(days), book.name); toast('Read ' + days.length + ' line-days from ' + book.name + '. Check them, then press Save plan.'); };
+  var ap = back.querySelector('[data-x="apply"]'); if (ap) ap.onclick = function () { back.remove(); stage(daysToRuns(days), book.name, {}); toast('Read ' + days.length + ' line-days from ' + book.name + '. Check them, then press Save plan.'); };
 }
 function planAsTable(book, stage) {
   var spec = { fields: [
@@ -82,7 +82,7 @@ function planAsTable(book, stage) {
     applyLabel: 'Use this plan',
     onApply: function (recs) {
       var days = []; recs.forEach(function (r) { var secs = r.sec === 'both' ? ['S1', 'S2'] : [r.sec || 'S2']; secs.forEach(function (s) { days.push({ date: r.date, sec: s, product: r.product, size: r.size, batches: r.batches }); }); });
-      stage(daysToRuns(days.filter(function (d) { return d.date >= U.weekStart(TODAY); })), book.name); toast('Read ' + days.length + ' line-days. Check them, then press Save plan.');
+      stage(daysToRuns(days.filter(function (d) { return d.date >= U.weekStart(TODAY); })), book.name, {}); toast('Read ' + days.length + ' line-days. Check them, then press Save plan.');
     } });
 }
 /* consecutive days of the same product, line and batches become one run (Friday gaps allowed) */
@@ -93,7 +93,10 @@ function daysToRuns(days) {
     var p = k.split('|'), ds = by[k].filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(), start = ds[0], prev = ds[0], sat = 'none';
     function close(end) {
       var cs = days.filter(function (x) { return x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end && x.cartons > 0; }).map(function (x) { return x.cartons; });
-      var same = cs.length && cs.every(function (v) { return v === cs[0]; }), dcm = null;
+      /* a carton number written on each day of the run = cartons for THAT day (e.g. 1,680 on 7 Nov and 1,680 on 8 Nov = 1,680 a day);
+         a number only on the run's first day = one order for the whole run */
+      var nDays = days.filter(function (x) { return x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end; }).length;
+      var same = cs.length === 1 && nDays > 1, dcm = null;
       if (cs.length && !same) { dcm = {}; days.forEach(function (x) { if (x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end && x.cartons > 0) dcm[x.date] = x.cartons; }); }
       runs.push({ product: p[0], size: p[3] || '', from: start, to: end, lines: p[1], sat: sat, batches: p[2] ? +p[2] : null, cartons: same ? cs[0] : null, dayCartons: dcm }); }
     ds.forEach(function (d, i) {
