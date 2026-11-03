@@ -113,12 +113,18 @@ function runOutBoth(r) {
   return { actual: act, expected: r.runOut, orders: due };
 }
 function runOutHTML(r, long) {
-  var b = runOutBoth(r), unit = r.unit || '';
-  var a = b.actual ? U.nice(b.actual) : 'not in 26 wk', e = b.expected ? U.nice(b.expected) : 'not in 26 wk';
-  var h = '<b>' + a + '</b>' + (b.orders.length && a !== e ? ' <span class="small muted">(' + e + ' with deliveries)</span>' : '');
-  if (b.orders.length && (long || a !== e)) h += '<div class="small muted" style="line-height:1.35;margin-top:2px">' + b.orders.map(function (o) { return '+' + fmtN(o.qty) + ' ' + esc(unit) + ' on ' + U.nice(o.eta) + (o.ref ? ' · ' + esc(String(o.ref).split('·')[0].trim()) : ''); }).join('<br>') + '</div>';
-  return h;
+  var b = runOutBoth(r), unit = r.unit || '', many = b.orders.length > 1;
+  var a = b.actual ? U.nice(b.actual) : 'not in 26 weeks', e = b.expected ? U.nice(b.expected) : 'not in 26 weeks';
+  var h = '<span class="ro"><b class="ro1">' + a + '</b>';
+  if (b.orders.length && a !== e) h += '<span class="ro2">(' + e + ' if the deliver' + (many ? 'ies arrive' : 'y arrives') + ')</span>';
+  if (b.orders.length) h += b.orders.map(function (o) { return '<span class="ro3">Delivery: +' + fmtN(o.qty) + ' ' + esc(unit) + ' on ' + U.nice(o.eta) + (o.ref ? ' · ' + esc(String(o.ref).split('·')[0].trim()) : '') + '</span>'; }).join('');
+  return h + '</span>';
 }
+(function () { /* same look everywhere: normal text, one line each */
+  var st = document.createElement('style');
+  st.textContent = '.ro{display:block;font-family:var(--f-body);white-space:normal;line-height:1.35;letter-spacing:0}.ro .ro1{display:block;font-size:inherit}.ro .ro2,.ro .ro3,.wd2{display:block;font-family:var(--f-body);font-weight:400;font-size:12.5px;color:var(--muted);white-space:nowrap;letter-spacing:0}.ro .ro2{color:var(--ink)}';
+  document.head.appendChild(st);
+})();
 (function () {
   var _c = card;
   card = function (r) {
@@ -129,7 +135,7 @@ function runOutHTML(r, long) {
     var _vm = vMaterial;
     vMaterial = function (fc) {
       var h = _vm(fc), r = fc.results.filter(function (x) { return x.id === S.mat; })[0]; if (!r) return h;
-      return h.replace(/(<span class="l">Runs out<\/span><span class="v" style="font-size:22px">)[^<]*(<\/span>)/, '$1' + (runOutBoth(r).actual ? U.nice(runOutBoth(r).actual) : 'Not in 26 wk') + '$2<span class="small" style="display:block">' + (runOutBoth(r).orders.length ? '(' + (r.runOut ? U.nice(r.runOut) : 'not in 26 wk') + ' with deliveries)' : '') + '</span>' + (runOutBoth(r).orders.length ? '<span class="small muted" style="display:block">' + runOutBoth(r).orders.map(function (o) { return '+' + fmtN(o.qty) + ' ' + esc(r.unit) + ' on ' + U.nice(o.eta); }).join(' · ') + '</span>' : ''));
+      return h.replace(/(<span class="l">Runs out<\/span><span class="v" style="font-size:22px">)[^<]*(<\/span>)/, '$1' + runOutHTML(r) + '$2');
     };
   }
 })();
