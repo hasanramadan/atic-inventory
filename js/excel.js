@@ -125,7 +125,52 @@
     if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
     return rows;
   }
+  /* ---------- PDF: rebuild the table from where the words sit on the page (text PDFs, e.g. a printed plan) ---------- */
+  var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  function loadPdfJs() {
+    if (root.pdfjsLib) return Promise.resolve(root.pdfjsLib);
+    return new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = PDFJS + 'pdf.min.js'; sc.onload = function () { root.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(root.pdfjsLib); }; sc.onerror = function () { rej(new Error('The PDF reader did not load. Check the internet connection and refresh.')); }; document.head.appendChild(sc); });
+  }
+  function pdfRows(items) {
+    var lines = []; /* group words by their height on the page */
+    items.forEach(function (it) { var t = String(it.str || '').trim(); if (!t) return; var x = it.transform[4], y = it.transform[5], l = lines.filter(function (L) { return Math.abs(L.y - y) <= 3; })[0]; if (!l) lines.push(l = { y: y, w: [] }); l.w.push({ x: x, e: x + (Number(it.width) || t.length * 4), t: t }); });
+    lines.sort(function (a, b) { return b.y - a.y; }); lines.forEach(function (l) { l.w.sort(function (a, b) { return a.x - b.x; }); });
+    /* the header row: the one with "Day" */
+    var hi = -1; lines.forEach(function (l, i) { if (hi < 0 && l.w.some(function (w) { return /^day\b/i.test(w.t); })) hi = i; });
+    if (hi < 0) return lines.map(function (l) { return l.w.map(function (w) { return w.t; }); });
+    /* header words that touch form one heading ("Qty in CTS") */
+    var head = []; lines[hi].w.forEach(function (w) { var p = head[head.length - 1]; if (p && w.x - p.e < 5 && !/^day\b/i.test(w.t)) { p.t += ' ' + w.t; p.e = w.e; } else head.push({ x: w.x, e: w.e, t: w.t }); });
+    var dayIdx = []; head.forEach(function (h, i) { if (/^day\b/i.test(h.t)) dayIdx.push(i); });
+    /* the line blocks: from one "Day" heading to the next; the border sits halfway between them */
+    var blocks = dayIdx.map(function (di, b) { var end = b + 1 < dayIdx.length ? dayIdx[b + 1] : head.length; return { cols: head.slice(di, end) }; });
+    blocks.forEach(function (B, b) { var nx = blocks[b + 1]; B.x1 = nx ? (B.cols[B.cols.length - 1].e + nx.cols[0].x) / 2 : 1e9; });
+    var W = 12, out = [];
+    var labels = []; lines.slice(0, hi).forEach(function (l) { l.w.forEach(function (w, i) { var t = w.t + (l.w[i + 1] && l.w[i + 1].x - w.e < 8 ? ' ' + l.w[i + 1].t : ''); if (/^(line|sec(tion)?)\s*[12]\b/i.test(t)) labels.push({ x: w.x, t: t.match(/^(line|sec(tion)?)\s*[12]/i)[0] }); }); });
+    var blockOf = function (x) { for (var b = 0; b < blocks.length; b++) if (x < blocks[b].x1) return b; return blocks.length - 1; };
+    if (labels.length) { var r0 = []; labels.forEach(function (w) { r0[blockOf(w.x) * W] = w.t; }); for (var q = 0; q < r0.length; q++) if (r0[q] == null) r0[q] = ''; out.push(r0); }
+    lines.slice(hi).forEach(function (l) {
+      var row = [];
+      l.w.forEach(function (w) {
+        var b = blockOf(w.x), cols = blocks[b].cols, c = 0, best = 1e9;
+        /* the column whose heading is nearest (by its left edge or its middle) */
+        cols.forEach(function (h, i) { var d = Math.min(Math.abs(w.x - h.x), Math.abs((w.x + w.e) / 2 - (h.x + h.e) / 2)); if (d < best) { best = d; c = i; } });
+        var k = b * W + c; row[k] = row[k] ? row[k] + ' ' + w.t : w.t;
+      });
+      for (var i = 0; i < row.length; i++) if (row[i] == null) row[i] = '';
+      out.push(row);
+    });
+    return out;
+  }
+  function readPdf(file) {
+    return Promise.all([loadPdfJs(), file.arrayBuffer()]).then(function (r) {
+      return r[0].getDocument({ data: r[1] }).promise.then(function (doc) {
+        var ps = []; for (var i = 1; i <= doc.numPages; i++) ps.push(doc.getPage(i).then(function (pg) { return pg.getTextContent().then(function (tc) { return pdfRows(tc.items); }); }));
+        return Promise.all(ps).then(function (pages) { var base = file.name.replace(/\.\w+$/, ''); return { name: file.name, sheets: pages.map(function (rows, i) { return { name: pages.length > 1 ? base + ' p' + (i + 1) : base, rows: rows }; }) }; });
+      });
+    });
+  }
   function readFile(file) {
+    if (/\.pdf$/i.test(file.name)) return readPdf(file).then(function (b) { var n = b.sheets.reduce(function (a, s) { return a + s.rows.length; }, 0); if (!n) throw new Error('This PDF has no text to read (it may be a scan or a photo). Export the plan as Excel or CSV instead.'); return b; });
     return new Promise(function (resolve, reject) {
       var isCsv = /\.(csv|txt)$/i.test(file.name);
       var rd = new FileReader();
@@ -321,5 +366,5 @@
     function fail(msg) { if (o.onError) o.onError(msg); else if (root.ATIC) root.ATIC.toast(msg); }
   }
 
-  root.ATICExcel = { ensureCss: ensureCss, readFile: readFile, importTable: importTable, planGrid: planGrid, parse: { toNumber: toNumber, toDate: toDate, productOf: productOf, sizeOf: sizeOf, matchName: matchName, findTable: findTable, extract: extract, parseCsv: parseCsv, fillMerges: fillMerges, cellDate: cellDate, planGrid: planGrid } };
+  root.ATICExcel = { ensureCss: ensureCss, readFile: readFile, pdfRows: pdfRows, importTable: importTable, planGrid: planGrid, parse: { toNumber: toNumber, toDate: toDate, productOf: productOf, sizeOf: sizeOf, matchName: matchName, findTable: findTable, extract: extract, parseCsv: parseCsv, fillMerges: fillMerges, cellDate: cellDate, planGrid: planGrid } };
 })(typeof window !== 'undefined' ? window : globalThis);

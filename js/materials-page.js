@@ -865,7 +865,7 @@ function registerIO() {
     ],
     imports: [
       { label: 'Inventory count (weekly or monthly)', hint: 'Weekly or month-end file: Raw Material and CRITICAL STOCK sheets', run: function (f) { go('inventory'); invImport(f); } },
-      { label: 'Factory plan', hint: 'The weekly production plan', run: function (f) { go('forecast'); importPlan(f, function (rs, source) { var dv = deriveDays(rs); S.saved.plan = { runs: rs, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; render(); }); } },
+      { label: 'Factory plan', hint: 'The production plan: Excel, CSV or PDF', accept: '.xlsx,.xls,.xlsm,.csv,.pdf', run: function (f) { go('forecast'); importPlan(f, function (rs, source) { var dv = deriveDays(rs); S.saved.plan = { runs: rs, days: dv.days, from: dv.from, to: dv.to, weeks: [], source: source, updatedAt: new Date().toISOString(), unsaved: true }; render(); }); } },
       { label: 'Open orders', hint: 'One row per order line', run: function (f) { go('orders'); ordersImport(f); } },
       { label: 'Recipes', hint: 'Per batch, per product and section', run: function (f) { go('recipes'); recipesImport(f); } }
     ]

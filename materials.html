@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611030918">
+<link rel="stylesheet" href="css/app.css?v=202611030931">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611030918"></script>
-<script src="js/shell.js?v=202611030918"></script>
-<script src="js/io.js?v=202611030918"></script>
-<script src="js/excel.js?v=202611030918"></script>
-<script src="js/materials-engine.js?v=202611030918"></script>
-<script src="js/inventory.js?v=202611030918"></script>
+<script src="config.js?v=202611030931"></script>
+<script src="js/shell.js?v=202611030931"></script>
+<script src="js/io.js?v=202611030931"></script>
+<script src="js/excel.js?v=202611030931"></script>
+<script src="js/materials-engine.js?v=202611030931"></script>
+<script src="js/inventory.js?v=202611030931"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -329,7 +329,7 @@ function horizonDate() { return S.until || U.addDays(TODAY, 60); }
 function vForecast(fc) {
   var runs = planRuns(), dv = deriveDays(runs), until = horizonDate();
   var h = head('Production forecast', 'Say what you will produce and until when. The app turns it into batches and shows every material day by day.',
-    '<label class="btn" for="xl" style="display:inline-flex">Import factory plan (Excel)</label><input type="file" id="xl" accept=".xlsx,.xls,.csv" hidden>');
+    '<label class="btn" for="xl" style="display:inline-flex">Import factory plan (Excel, CSV or PDF)</label><input type="file" id="xl" accept=".xlsx,.xls,.csv,.pdf" hidden>');
   h += accessNote(); h += lastSaved('plan');
   if (S.saved.plan && S.saved.plan.unsaved) h += '<div class="banner demo"><b>Not saved yet.</b> Check the runs below, then press Save plan so everyone sees them.</div>';
   // 1. runs
@@ -721,6 +721,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611030918"></script>
-<script src="js/recipe-variants.js?v=202611030918"></script>
+<script src="js/materials-page.js?v=202611030931"></script>
+<script src="js/recipe-variants.js?v=202611030931"></script>
 </body></html>
