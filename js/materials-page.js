@@ -993,7 +993,7 @@ function learnUse() {
   var model = E.buildModel(BASE, { materials: S.saved.materials, recipes: S.saved.recipes }), per = [], out = {};
   for (var i = 1; i < counts.length; i++) {
     var a = counts[i - 1], b = counts[i]; if (!(b.date > a.date)) continue;
-    var p = usPeriod(model, a, b); if (p.days < 3 || p.missing.length > p.days * 0.3) continue; per.push(p);
+    var p = usPeriod(model, a, b); if (p.days < 2 || p.missing.length > p.days * 0.3) continue; per.push(p);
   }
   var acc = {};
   per.forEach(function (p, j) { var w0 = Math.pow(0.5, per.length - 1 - j); p.rows.forEach(function (r) { if (!(r.expected > 0) || r.used < 0) return; var a2 = acc[r.id] = acc[r.id] || { sw: 0, s: 0, n: 0, last: null }; var w = w0 * r.expected; a2.sw += w; a2.s += w * (r.used / r.expected); a2.n++; a2.last = { from: p.from, to: p.to, used: r.used, expected: r.expected }; }); });
