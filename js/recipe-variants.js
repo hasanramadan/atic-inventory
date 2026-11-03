@@ -141,3 +141,13 @@ function runOutHTML(r) { var p = runOutParts(r); return '<span class="ro"><b cla
     };
   }
 })();
+
+/* "ordered through WhatsApp" (or any channel) under the material's name */
+(function () {
+  var _c = card;
+  card = function (r) {
+    var h = _c(r), m = (run.cache && run.cache.model.materials.filter(function (x) { return x.id === r.id; })[0]) || {};
+    if (m.orderVia) h = h.replace(/(<span class="unit">)([^<]*)(<\/span>)/, '$1$2 · <b style="color:var(--ink)">ordered through ' + esc(m.orderVia) + '</b>$3');
+    return h;
+  };
+})();

@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611031305">
+<link rel="stylesheet" href="css/app.css?v=202611031313">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,14 +27,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611031305"></script>
-<script src="js/shell.js?v=202611031305"></script>
-<script src="js/backup.js?v=202611031305" defer></script>
-<script src="js/assistant.js?v=202611031305" defer></script>
-<script src="js/io.js?v=202611031305"></script>
-<script src="js/excel.js?v=202611031305"></script>
-<script src="js/materials-engine.js?v=202611031305"></script>
-<script src="js/inventory.js?v=202611031305"></script>
+<script src="config.js?v=202611031313"></script>
+<script src="js/shell.js?v=202611031313"></script>
+<script src="js/backup.js?v=202611031313" defer></script>
+<script src="js/assistant.js?v=202611031313" defer></script>
+<script src="js/io.js?v=202611031313"></script>
+<script src="js/excel.js?v=202611031313"></script>
+<script src="js/materials-engine.js?v=202611031313"></script>
+<script src="js/inventory.js?v=202611031313"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -637,7 +637,7 @@ function vStock(fc) {
   h += accessNote(); h += lastSaved('stock');
   var lastThu = U.addDays(TODAY, -((new Date(TODAY + 'T00:00:00Z').getUTCDay() + 3) % 7)), lastSat = U.addDays(TODAY, -((new Date(TODAY + 'T00:00:00Z').getUTCDay() + 1) % 7));
   h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Weekly closing count</h3><p class="hint" style="margin:0 0 10px">At the end of the week, type the closing stock of each material below, set the date for all of them in one click, and save. That closing becomes the opening for Sunday. Between counts the app deducts the planned use day by day, so on a Wednesday it already shows the estimated stock for Wednesday.</p><div class="row"><span class="small muted">Set every count date to:</span><button class="btn" data-alld="' + lastThu + '">Thursday ' + U.nice(lastThu) + '</button><button class="btn" data-alld="' + lastSat + '">Saturday ' + U.nice(lastSat) + '</button><button class="btn" data-alld="' + TODAY + '">Today ' + U.nice(TODAY) + '</button></div></div>';
-  h += '<div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Counted qty</th><th>Unit</th><th>Count date</th><th>Odoo: order → receipt</th><th class="n">Lead min (days)</th><th class="n">Lead max (days)</th><th class="n">Safety (weeks)</th><th class="n">Order covers (weeks)</th></tr></thead><tbody>';
+  h += '<div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Counted qty</th><th>Unit</th><th>Count date</th><th>Odoo: order → receipt</th><th class="n">Lead time (days, minimum)</th><th>Ordered through</th><th class="n">Safety (weeks)</th><th class="n">Order covers (weeks)</th></tr></thead><tbody>';
   m.materials.forEach(function (x) {
     var st = m.stock[x.id] || {};
     h += '<tr><td><b>' + esc(x.name) + '</b><br><span class="small muted">' + esc(st.source || '') + '</span></td>' +
@@ -645,12 +645,12 @@ function vStock(fc) {
       '<td><input class="wide" type="date" id="d_' + x.id + '" data-d="' + x.id + '" value="' + (st.asOf || '') + '"></td>' +
       '<td class="small">' + leadNote(x.id) + '</td>' +
       '<td class="n"><input type="number" id="lmin_' + x.id + '" data-lmin="' + x.id + '" value="' + x.leadMinDays + '"></td>' +
-      '<td class="n"><input type="number" id="lmax_' + x.id + '" data-lmax="' + x.id + '" value="' + x.leadMaxDays + '"></td>' +
+      '<td><input id="via_' + x.id + '" value="' + esc(x.orderVia || '') + '" placeholder="e.g. WhatsApp" style="width:120px"></td>' +
       '<td class="n"><input type="number" step="0.5" id="sw_' + x.id + '" data-sw="' + x.id + '" value="' + x.safetyWeeks + '"></td>' +
       '<td class="n"><input type="number" id="cw_' + x.id + '" data-cw="' + x.id + '" value="' + x.orderCoverWeeks + '"></td></tr>';
   });
   h += '</tbody></table></div><div class="row"><button class="btn primary" id="saveStock">Save stock &amp; lead times</button></div>';
-  h += '<p class="hint">Lead times start at 60–90 days for every material, as agreed. The Odoo column shows what purchase history says (order date to first receipt, Oct 2025 – Oct 2026). Local items like sugar and salt usually arrive within a week, so you may want to shorten those. Odoo order dates are sometimes entered on arrival, so treat short times with care.</p>';
+  h += '<p class="hint">The lead time is the <b>minimum</b> days from ordering to arrival; the order-by dates use it. The Odoo column shows what purchase history says (order date to first receipt).</p>';
   var bw = (S.saved.settings && S.saved.settings.basisWeeks) || 8;
   h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:6px">Normal production pace</h3><p class="hint" style="margin:0 0 10px">Weeks without a factory plan use the average batches from the last weeks of history (Jan–Sep 2026, October not used).</p><div class="tabs">' +
     [[4, 'Last 4 weeks'], [8, 'Last 8 weeks'], [13, 'Last 13 weeks'], ['all', 'All of Jan–Sep']].map(function (o) { return '<button data-bw="' + o[0] + '" aria-pressed="' + (String(bw) === String(o[0])) + '">' + o[1] + '</button>'; }).join('') + '</div>' +
@@ -669,7 +669,7 @@ after.stock = function (fc) {
     fc.model.materials.forEach(function (x) {
       var q = $('#q_' + x.id).value, d = $('#d_' + x.id).value, old = fc.model.stock[x.id] || {};
       if (q !== '' && d) st[x.id] = { qty: +q, asOf: d, source: (+q === old.qty && d === old.asOf) ? old.source : 'Entered in app ' + U.nice(TODAY) };
-      mats[x.id] = { leadMinDays: +$('#lmin_' + x.id).value || 60, leadMaxDays: +$('#lmax_' + x.id).value || 90, safetyWeeks: +$('#sw_' + x.id).value || 0, orderCoverWeeks: +$('#cw_' + x.id).value || 8 };
+      var lt = +$('#lmin_' + x.id).value || 60; mats[x.id] = { leadMinDays: lt, leadMaxDays: lt, orderVia: ($('#via_' + x.id).value || '').trim(), safetyWeeks: +$('#sw_' + x.id).value || 0, orderCoverWeeks: +$('#cw_' + x.id).value || 8 };
     });
     var oldMats = (S.saved.materials && S.saved.materials.items) || {}; Object.keys(mats).forEach(function (k) { mats[k] = Object.assign({}, oldMats[k] || {}, mats[k]); });
     var changed = {}; Object.keys(st).forEach(function (k) { var o = fc.model.stock[k] || {}; if (st[k].qty !== o.qty || st[k].asOf !== o.asOf) changed[k] = st[k]; });
@@ -748,6 +748,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611031305"></script>
-<script src="js/recipe-variants.js?v=202611031305"></script>
+<script src="js/materials-page.js?v=202611031313"></script>
+<script src="js/recipe-variants.js?v=202611031313"></script>
 </body></html>
