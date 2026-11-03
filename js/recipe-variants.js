@@ -122,7 +122,7 @@ function runOutHTML(r, long) {
 }
 (function () { /* same look everywhere: normal text, one line each */
   var st = document.createElement('style');
-  st.textContent = '.ro{display:block;font-family:var(--f-body);white-space:normal;line-height:1.35;letter-spacing:0}.ro .ro1{display:block;font-size:inherit}.ro .ro2,.ro .ro3,.wd2{display:block;font-family:var(--f-body);font-weight:400;font-size:12.5px;color:var(--muted);white-space:nowrap;letter-spacing:0}.ro .ro2{color:var(--ink)}';
+  st.textContent = '.ro{display:block;font-family:var(--f-body);white-space:normal;line-height:1.35;letter-spacing:0}.ro .ro1{display:block;font-size:inherit}.ro .ro2,.ro .ro3,.wd2{display:block;font-family:var(--f-body);font-weight:400;font-size:12.5px;color:var(--muted);white-space:normal;letter-spacing:0}.ro .ro2{color:var(--ink)}';
   document.head.appendChild(st);
 })();
 (function () {
