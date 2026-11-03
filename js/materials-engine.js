@@ -260,7 +260,7 @@
 
   var PNAME = { GM: 'Grenadine Molasses', BW: 'Blossom Water', RW: 'Rose Water', LS: 'Lemon Substitute', WV: 'White Vinegar' };
   function fmt(x, unit) {
-    var n = Math.abs(x) >= 100 ? Math.round(x).toLocaleString('en-US') : (Math.round(x * 10) / 10).toLocaleString('en-US');
+    var n = (Math.round(x * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }); /* no rounding */
     return unit ? n + ' ' + unit + (Math.abs(x) === 1 || /kg|gal/.test(unit) ? '' : 's') : n;
   }
   function nice(s) { var d = new Date(parse(s)); return d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; }

@@ -3,7 +3,7 @@
 <title>ATIC Line Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611030933">
+<link rel="stylesheet" href="css/app.css?v=202611030936">
 <style>
 
 .lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
@@ -348,12 +348,12 @@
 </main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611030933"></script>
-<script src="js/shell.js?v=202611030933"></script>
-<script src="js/io.js?v=202611030933"></script>
-<script src="js/excel.js?v=202611030933"></script>
-<script src="js/word.js?v=202611030933"></script>
-<script src="js/line-engine.js?v=202611030933"></script>
+<script src="config.js?v=202611030936"></script>
+<script src="js/shell.js?v=202611030936"></script>
+<script src="js/io.js?v=202611030936"></script>
+<script src="js/excel.js?v=202611030936"></script>
+<script src="js/word.js?v=202611030936"></script>
+<script src="js/line-engine.js?v=202611030936"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 // The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
@@ -371,7 +371,7 @@ const SECN = { S1: 'Section 1', S2: 'Section 2' };
 const SCOL = { S1: '#3d8fd1', S2: '#c7742f' };
 const COL = { mach: '#ef5a4c', clean: '#4fb3e8', plan: '#f2b33d', unpl: '#a97ee8', run: '#1f3a2e', idle: '#4a565e' };
 const fmt = n => n == null || !isFinite(n) ? '–' : Math.round(n).toLocaleString('en-US');
-const fmt1 = n => n == null || !isFinite(n) ? '–' : (Math.round(n * 10) / 10).toLocaleString('en-US');
+const fmt1 = n => n == null || !isFinite(n) ? '–' : (Math.round(n * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 });
 const pct = (x, d = 0) => x == null || !isFinite(x) ? '–' : (x * 100).toFixed(d) + '%';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = id => document.getElementById(id);
