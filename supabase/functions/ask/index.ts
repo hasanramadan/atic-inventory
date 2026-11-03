@@ -22,6 +22,9 @@ Rules:
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
+    /* only people signed in to the ATIC website (a real user token, not just the public key) */
+    const who = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, { headers: { Authorization: req.headers.get("Authorization") || "", apikey: Deno.env.get("SUPABASE_ANON_KEY") || "" } });
+    if (!who.ok) return json({ error: "Please sign in to the ATIC website first." }, 401);
     const key = Deno.env.get("ANTHROPIC_API_KEY");
     if (!key) return json({ error: "The assistant is not set up yet: add the ANTHROPIC_API_KEY secret in Supabase." }, 500);
     const { question, context, history } = await req.json();
