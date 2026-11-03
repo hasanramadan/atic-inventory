@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611030959">
+<link rel="stylesheet" href="css/app.css?v=202611031004">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611030959"></script>
-<script src="js/shell.js?v=202611030959"></script>
-<script src="js/io.js?v=202611030959"></script>
-<script src="js/excel.js?v=202611030959"></script>
-<script src="js/materials-engine.js?v=202611030959"></script>
-<script src="js/inventory.js?v=202611030959"></script>
+<script src="config.js?v=202611031004"></script>
+<script src="js/shell.js?v=202611031004"></script>
+<script src="js/io.js?v=202611031004"></script>
+<script src="js/excel.js?v=202611031004"></script>
+<script src="js/materials-engine.js?v=202611031004"></script>
+<script src="js/inventory.js?v=202611031004"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -352,7 +352,9 @@ function vForecast(fc) {
     '<select id="rL"><option value="both">Both lines</option><option value="SEC-1">Line 1</option><option value="SEC-2">Line 2</option></select>' +
     '<select id="rS"><option value="same">Saturday: same line(s)</option><option value="both">Saturday: both lines</option><option value="SEC-1">Saturday: Line 1 only</option><option value="SEC-2">Saturday: Line 2 only</option><option value="none">Saturday: no work</option></select>' +
     '<input type="number" id="rB" min="0" step="1" placeholder="Batches/day (≈ est.)" title="Leave empty to use the estimate from the Line Planner" style="width:170px">' +
-    '<input type="number" id="rC" min="0" step="1" placeholder="Cartons (optional)" title="A carton order: the app works out the batches and ends the run when they are done" style="width:160px"><span class="small muted" id="rCx"></span>' +
+    '<input type="number" id="rC" min="0" step="1" placeholder="Cartons (optional)" title="A carton order: the app works out the batches" style="width:160px">' +
+    '<select id="rCM" title="What the cartons mean"><option value="total">whole order · next starts when done</option><option value="spread">whole order · spread over the dates</option><option value="day">cartons each day</option></select>' +
+    '<span class="small muted" id="rCx" style="flex-basis:100%;margin-top:-4px"></span>' +
     '<button class="btn" id="rAdd">Add run</button><button class="btn primary" id="rSave">Save plan</button>' + (runs.length ? '<button class="btn ghost" id="rClear" style="color:var(--red)">Clear plan</button>' : '') + '</div>' +
     '<div class="row" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);align-items:center"><b class="small">⇄ Switch a line on a day</b>' +
     '<select id="swL"><option value="SEC-1">Line 1</option><option value="SEC-2">Line 2</option></select>' +
@@ -431,8 +433,22 @@ after.forecast = function (fc) {
   document.querySelectorAll('.ctn').forEach(function (el) { el.onchange = function () { var v = Math.round(Number(el.value) || 0); runs[+el.dataset.ri].cartons = v > 0 ? v : null; stage(runs, src0()); toast(v > 0 ? 'Cartons set: the batches follow. Press Save plan to keep it.' : 'Cartons cleared.'); }; });
   document.querySelectorAll('.ctd').forEach(function (el) { el.onchange = function () { var r = runs[+el.dataset.ri], v = Math.round(Number(el.value) || 0); r.dayCartons = Object.assign({}, r.dayCartons); if (v > 0) r.dayCartons[el.dataset.d] = v; else delete r.dayCartons[el.dataset.d]; if (!Object.keys(r.dayCartons).length) r.dayCartons = null; stage(runs, src0()); toast('Cartons for ' + U.nice(el.dataset.d) + ' set. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.ctm').forEach(function (el) { el.onchange = function () { runs[+el.dataset.ri].cartonsMode = el.value; stage(runs, src0()); }; });
-  var cx = function () { var c = Math.round(Number($('#rC').value) || 0), r0 = { product: $('#rP').value, size: $('#rZ').value, cartons: c }; $('#rCx').textContent = c > 0 ? '= ' + cartonBatches(r0) + ' batches' : ''; };
-  $('#rC').oninput = cx; $('#rZ').addEventListener('change', cx); $('#rP').addEventListener('change', cx);
+  /* forecast of the run being added: batches, days it takes at the line's pace, and when it finishes */
+  var cx = function () {
+    var c = Math.round(Number($('#rC').value) || 0), mode = $('#rCM').value, L = $('#rL').value, s0 = L === 'both' ? 'SEC-1' : L, nl = L === 'both' ? 2 : 1;
+    var r0 = { product: $('#rP').value, size: $('#rZ').value, cartons: c, lines: L, sat: $('#rS').value, from: $('#rF').value, to: $('#rT').value };
+    var own = Math.round(Number($('#rB').value) || 0), rate = own > 0 ? own : estBatches(r0.product, r0.size, s0).b, bpb = bpbOf(r0.product, r0.size);
+    var wd = 0; if (r0.from && r0.to) for (var d = r0.from; d <= r0.to; d = U.addDays(d, 1)) { var w = new Date(d + 'T00:00:00Z').getUTCDay(); if (w !== 5 && (w !== 6 || r0.sat !== 'none')) wd++; }
+    var t;
+    if (c > 0 && mode === 'day') t = '= ' + Math.ceil(c / (bpb || 1)) + ' batches a day × ' + wd + ' day' + (wd === 1 ? '' : 's') + (nl > 1 ? ' × 2 lines' : '') + ' = ' + Math.ceil(c / (bpb || 1)) * wd * nl + ' batches ≈ ' + fmtN(c * wd * nl) + ' cartons';
+    else if (c > 0) {
+      var n = cartonBatches(r0), perDay = rate * nl, days = n / perDay, end = r0.from, left = days;
+      while (left > 1 && end) { end = U.addDays(end, 1); var w2 = new Date(end + 'T00:00:00Z').getUTCDay(); if (w2 === 5 || (w2 === 6 && r0.sat === 'none')) continue; left -= 1; }
+      t = '= ' + n + ' batches · at ≈ ' + rate + ' a day' + (nl > 1 ? ' on each line' : '') + ' that is ≈ ' + fmtN(Math.round(days * 10) / 10) + ' working days' + (mode === 'total' ? ' → done on ' + (end ? U.nice(end) : '–') + (days % 1 ? ', then the next run starts that day' : '') : ' spread over ' + wd + ' days = ' + fmtN(Math.round(n / Math.max(1, wd * nl) * 10) / 10) + ' a day');
+    } else t = wd ? '≈ ' + rate + ' batches a day' + (nl > 1 ? ' on each line' : '') + ' × ' + wd + ' days = ' + rate * wd * nl + ' batches' + (bpb ? ' ≈ ' + fmtN(Math.round(rate * wd * nl * bpb)) + ' cartons' : '') : '';
+    $('#rCx').textContent = t;
+  };
+  ['#rC', '#rB'].forEach(function (q) { $(q).oninput = cx; }); ['#rCM', '#rZ', '#rP', '#rL', '#rS', '#rF', '#rT'].forEach(function (q) { $(q).addEventListener('change', cx); }); cx();
   document.querySelectorAll('.rrec').forEach(function (el) { el.onchange = function () { runs[+el.dataset.ri].recipe = el.value || ''; stage(runs, src0()); toast('Recipe changed. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.bpd').forEach(function (el) { el.onchange = function () { var v = Math.round(Number(el.value) || 0); runs[+el.dataset.ri].batches = v > 0 ? v : null; stage(runs, src0()); toast('Changed. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.cob').forEach(function (el) { el.onchange = function () {
@@ -444,7 +460,7 @@ after.forecast = function (fc) {
     sp[k] = list; stage(runs, src0(), sp); toast('Changeover set. Press Save plan to keep it.'); }; });
   document.querySelectorAll('[data-cox]').forEach(function (b) { b.onclick = function () { var sp = Object.assign({}, (S.saved.plan && S.saved.plan.split) || {}); delete sp[b.dataset.cox]; S.saved.plan.split = sp; stage(runs, src0(), sp); }; });
   $('#rAdd').onclick = function () {
-    var r = { product: $('#rP').value, size: $('#rZ').value || '', recipe: ($('#rR') && !$('#rR').hidden && $('#rR').value) || '', cartons: Math.round(Number($('#rC').value) || 0) || null, from: $('#rF').value, to: $('#rT').value, lines: $('#rL').value, sat: $('#rS').value, batches: Math.round(Number($('#rB').value) || 0) || null };
+    var r = { product: $('#rP').value, size: $('#rZ').value || '', recipe: ($('#rR') && !$('#rR').hidden && $('#rR').value) || '', cartons: Math.round(Number($('#rC').value) || 0) || null, cartonsMode: $('#rCM').value, from: $('#rF').value, to: $('#rT').value, lines: $('#rL').value, sat: $('#rS').value, batches: Math.round(Number($('#rB').value) || 0) || null };
     if (!r.from || !r.to || r.to < r.from) { toast('Pick a start date and an end date after it.'); return; }
     runs.push(r); stage(runs, (S.saved.plan && S.saved.plan.source) || 'Entered in app'); toast('Run added. Press Save plan to keep it.');
   };
@@ -725,6 +741,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611030959"></script>
-<script src="js/recipe-variants.js?v=202611030959"></script>
+<script src="js/materials-page.js?v=202611031004"></script>
+<script src="js/recipe-variants.js?v=202611031004"></script>
 </body></html>
