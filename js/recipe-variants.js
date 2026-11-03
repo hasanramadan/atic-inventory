@@ -94,3 +94,13 @@
     };
   };
 })();
+
+/* an opening stock (set as "Opening <day>") is saved as the count at the end of the day before: show it as the opening */
+(function () {
+  var _c = card;
+  card = function (r) {
+    var h = _c(r), st = (S.saved.stock && S.saved.stock.items && S.saved.stock.items[r.id]) || null;
+    if (st && /^Opening/i.test(st.source || '') && st.asOf) h = h.replace('>Counted ' + U.nice(st.asOf) + '<', '>Opening ' + U.nice(U.addDays(st.asOf, 1)) + '<').replace('Inventory ' + U.nice(st.asOf) + ':', 'Opening ' + U.nice(U.addDays(st.asOf, 1)) + ':');
+    return h;
+  };
+})();
