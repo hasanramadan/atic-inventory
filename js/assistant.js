@@ -13,8 +13,8 @@
     if (ctxCache && Date.now() - ctxAt < 60000) return ctxCache;
     if (!window.ATICEngine) await loadScript('js/materials-engine.js');
     var E = window.ATICEngine, today = iso(Date.now()), fc, docs, acts = [];
-    var r0 = await Promise.all([A.docs.loadAll(), A.planner.list('actuals').catch(function () { return []; })]);
-    docs = r0[0].data; acts = r0[1].map(function (x) { return x.data; }).filter(Boolean);
+    var r0 = await Promise.all([A.docs.loadAll(), A.planner.list('actuals').catch(function () { return []; }), A.planner.list('plans').catch(function () { return []; })]);
+    docs = r0[0].data; acts = r0[1].map(function (x) { return x.data; }).filter(Boolean); var plans = r0[2].map(function (x) { return x.data; }).filter(Boolean);
     if (typeof window.run === 'function' && window.run.cache) fc = window.run(); /* on Raw Materials: exactly what the page shows */
     else {
       var days = {}, secs = {};
@@ -43,7 +43,7 @@
     if (recent.length) { L.push('\nLINE PLANNER ACTUALS (last 3 weeks: date · line · runs product size batches boxes):'); recent.forEach(function (a) { L.push('- ' + a.date + ' ' + a.sec + ': ' + ((a.runs && a.runs.length) ? a.runs : [a]).map(function (q) { return q.product + ' ' + (q.size || '') + ' ×' + (q.batches == null ? '?' : q.batches) + (q.boxes ? ' (' + q.boxes + ' boxes)' : ''); }).join(' + ') + (a.lot ? ' · lot ' + a.lot : '')); }); }
     var ord = ((docs.orders && docs.orders.items) || []).filter(function (o) { return o.status === 'open' || o.status === 'partial'; });
     if (ord.length) { L.push('\nOPEN PURCHASE ORDERS:'); ord.forEach(function (o) { L.push('- ' + o.material + ' ' + n(o.qty) + ' ' + (o.unit || '') + ' due ' + o.eta + ' · ' + (o.ref || '') + ((o.receipts || []).length ? ' · received ' + n(o.receipts.reduce(function (s, x) { return s + (+x.qty || 0); }, 0)) : '')); }); }
-    ctxCache = L.join('\n'); ctxAt = Date.now(); DATA = { fc: fc, docs: docs, acts: acts, today: today }; return ctxCache;
+    ctxCache = L.join('\n'); ctxAt = Date.now(); DATA = { fc: fc, docs: docs, acts: acts, plans: plans, today: today }; return ctxCache;
   }
 
   /* ---------- the free assistant: answers from the website's own numbers, no outside service ---------- */
@@ -72,6 +72,35 @@
     var q = q0.toLowerCase(), fc = DATA.fc, m = fc.model, mats = findMats(q), ar = /[؀-ۿ]/.test(q0), out = [];
     var has = function (re) { return re.test(q); };
     if (has(/\blot\b|لوت|رقم التشغيل/)) { var d0 = dayOf(q); return 'Lot for ' + nice(d0) + ': ' + (A.lot ? A.lot(d0) : '–'); }
+    if (has(/produc(ed|tion)|made|carton|ctn|boxes|box\b|stop|stoppage|downtime|filled|yesterday.*(line|section)|what happened|انتجنا|أنتجنا|كراتين|كرتون|توقف|توقفات|عملنا/) && !has(/plan|will|next|tomorrow|خطة|بكرا|غدا/)) {
+      var week = has(/week|اسبوع|أسبوع/), L3 = lineOf(q), byDay = {};
+      DATA.acts.forEach(function (a) { if (a && a.date) (byDay[a.date] = byDay[a.date] || []).push(a); });
+      var dates = Object.keys(byDay).sort(), dd;
+      if (week) { var ws = has(/last week|الاسبوع الماضي|الأسبوع الماضي/) ? addD(DATA.today, -7 - new Date(DATA.today + 'T00:00:00Z').getUTCDay()) : addD(DATA.today, -new Date(DATA.today + 'T00:00:00Z').getUTCDay()); var we = addD(ws, 6), tot = {}, nd = 0, st = 0;
+        dates.filter(function (d) { return d >= ws && d <= we; }).forEach(function (d) { nd++; byDay[d].forEach(function (a) { if (L3 && (a.sec === 'S1' ? 'SEC-1' : 'SEC-2') !== L3) return; st += Number(a.stopMin) || 0; ((a.runs && a.runs.length) ? a.runs : [a]).forEach(function (r) { var k = r.product + ' ' + (r.size || ''); tot[k] = tot[k] || { b: 0, c: 0 }; tot[k].b += Number(r.batches) || 0; tot[k].c += Number(r.boxes) || 0; }); }); });
+        if (!nd) return 'No actuals saved in the Line Planner for the week of ' + nice(ws) + '.';
+        return 'Produced ' + nice(ws) + ' – ' + nice(we) + ' (' + nd + ' day' + (nd === 1 ? '' : 's') + ' entered' + (L3 ? ', ' + (L3 === 'SEC-1' ? 'Line 1' : 'Line 2') : '') + '):\n' + Object.keys(tot).map(function (k) { return '• ' + k + ': ' + n(tot[k].c) + ' cartons · ' + n(tot[k].b) + ' batches'; }).join('\n') + '\n• Stops: ' + n(st) + ' min in total';
+      }
+      if (has(/yesterday|امس|أمس|today|اليوم|\d{1,2}\s*[\/.-]\s*\d{1,2}|\d{1,2}\s*(nov|dec|jan|feb|mar|apr|may|jun|jul|aug|sep|oct)|sun|mon|tue|wed|thu|sat/)) dd = dayOf(q);
+      else dd = dates.filter(function (d) { return d <= DATA.today; }).pop();
+      var list = (byDay[dd] || []).filter(function (a) { return !L3 || (a.sec === 'S1' ? 'SEC-1' : 'SEC-2') === L3; }).sort(function (a, b) { return a.sec < b.sec ? -1 : 1; });
+      if (!list.length) return 'No actual saved in the Line Planner for ' + nice(dd) + (L3 ? ' on ' + (L3 === 'SEC-1' ? 'Line 1' : 'Line 2') : '') + '. ' + (dates.length ? 'Last day entered: ' + nice(dates[dates.length - 1]) + '.' : '');
+      var res = ['Produced on ' + nice(dd) + (list[0].lot ? ' · lot ' + list[0].lot : '') + ':'];
+      list.forEach(function (a) {
+        var pl = (DATA.plans || []).filter(function (x) { return x.date === dd && x.sec === a.sec; })[0], po = pl && pl.out;
+        var runs = (a.runs && a.runs.length) ? a.runs : [a], c = a.changeover || {};
+        res.push('\n' + (a.sec === 'S1' ? 'LINE 1' : 'LINE 2'));
+        runs.forEach(function (r) { res.push('• ' + r.product + ' ' + (r.size || '') + ': ' + n(r.boxes) + ' cartons · ' + n(r.batches) + ' batches' + (r.opening != null || r.closing != null ? ' · tank ' + n(r.opening) + ' → ' + n(r.closing) + ' bt' : '') + (r.prepOnly ? ' (prepared only)' : '')); });
+        if (runs.length > 1) res.push('• Total: ' + n(a.boxes) + ' cartons');
+        if (po) res.push('• Forecast was ≈ ' + n(Math.round(po.boxesP50)) + ' cartons (range ' + n(Math.round(po.boxesP10)) + '–' + n(Math.round(po.boxesP90)) + ') → ' + (a.boxes >= po.boxesP50 ? '+' : '') + n(Math.round(a.boxes - po.boxesP50)) + ' vs forecast');
+        res.push('• Time: worked ' + n(a.workMin) + ' min · filling ' + n(a.fillMin) + ' min · stops ' + n(a.stopMin) + ' min' + (a.workMin ? ' (' + Math.round(a.stopMin / a.workMin * 1000) / 10 + '%)' : '') + (po ? ' (forecast ' + n(Math.round(po.stopMin)) + ' min)' : ''));
+        var parts = [a.startMin ? 'start-up ' + a.startMin + ' min' : '', a.cleanRoutineMin ? 'cleaning ' + a.cleanRoutineMin + ' min' : '', a.cleanDeepMin ? 'CIP ' + a.cleanDeepMin + ' min' : '', c.done || c.min ? 'changeover ' + (c.type || '') + ' ' + (c.min || 0) + ' min' : 'no changeover', a.prepMin ? 'batch prep ' + a.prepMin + ' min' : ''].filter(Boolean);
+        res.push('• ' + parts.join(' · ') + (a.lastBox ? ' · last carton ' + a.lastBox : ''));
+        if (a.reasons) res.push('• Stop reasons: ' + a.reasons);
+        if (a.notes) res.push('• Notes: ' + a.notes);
+      });
+      return res.join('\n');
+    }
     if (has(/recipe|وصفة|وصفه/)) {
       var ps = Object.keys(PNAME).filter(function (p) { return q.indexOf(p.toLowerCase()) >= 0 || q.indexOf(PNAME[p].toLowerCase()) >= 0 || (p === 'GM' && /grenadine|دبس/.test(q)) || (p === 'LS' && /lemon sub|بديل الليمون/.test(q)); });
       (ps.length ? ps : ['GM', 'LS']).forEach(function (p) { var r = m.recipes[p] || {}; var ks = {}; ['SEC-1', 'SEC-2'].forEach(function (s) { Object.keys(r[s] || {}).forEach(function (k) { if (r[s][k] > 0) ks[k] = 1; }); });
@@ -122,7 +151,7 @@
     '.asst .sug{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px}.asst .sug button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 10px;font-size:12.5px;cursor:pointer;color:var(--ink)}' +
     '.asst form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}.asst input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:15px var(--f-body)}.asst form button{border:0;border-radius:12px;padding:0 16px;background:var(--brand);color:var(--brand-ink);font-weight:600;cursor:pointer}' +
     '@media print{.asst,.asst-btn{display:none!important}}';
-  var SUG = ['What should I order now?', 'When does salt run out?', 'How much sugar do we have now?', 'What runs on Line 2 next week?', 'Raw materials for tomorrow?'];
+  var SUG = ['What did we produce yesterday?', 'What should I order now?', 'When does salt run out?', 'How much sugar do we have now?', 'What runs on Line 2 next week?', 'Raw materials for tomorrow?'];
   function mount() {
     if (document.querySelector('.asst-btn')) return;
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -150,7 +179,7 @@
           var ctx = await context(), loc = localAnswer(q);
           if (loc && !(window.ATIC_CONFIG && window.ATIC_CONFIG.aiFirst)) { var w0 = w.querySelector('#asWait'); if (w0) w0.remove(); H.push({ role: 'user', content: q }, { role: 'assistant', content: loc }); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(loc) + '</div>'); busy = false; log.scrollTop = 1e9; return; }
           var r = await A.sb.functions.invoke('ask', { body: { question: q, context: ctx, history: H.slice(-6) } });
-          if (r.error || (r.data && r.data.error)) { var wx = w.querySelector('#asWait'); if (wx) wx.remove(); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(loc || 'I can answer questions about: a material (stock now, use per day, run-out, deliveries, order by), what to order, deliveries coming, the plan for a day or a line, raw materials for a day, recipes and lot numbers. Try: "When does salt run out?", "What should I order?", "Line 2 tomorrow", "Raw materials for tomorrow", "GM recipe".') + '</div>'); busy = false; log.scrollTop = 1e9; return; }
+          if (r.error || (r.data && r.data.error)) { var wx = w.querySelector('#asWait'); if (wx) wx.remove(); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(loc || 'I can answer questions about: a material (stock now, use per day, run-out, deliveries, order by), what to order, deliveries coming, the plan for a day or a line, raw materials for a day, recipes and lot numbers. Try: "What did we produce yesterday?", "Stoppages on Line 2 yesterday", "Cartons this week", "When does salt run out?", "What should I order?", "Line 2 tomorrow", "Raw materials for tomorrow", "GM recipe".') + '</div>'); busy = false; log.scrollTop = 1e9; return; }
           var wt = w.querySelector('#asWait'); if (wt) wt.remove();
           var err = r.error ? ((r.error.context && r.error.context.status === 404) || /Failed to send/i.test(r.error.message || '') ? 'The assistant is not switched on yet (the "ask" function is not set up in Supabase).' : (r.data && r.data.error) || r.error.message) : (r.data && r.data.error);
           if (err) { log.insertAdjacentHTML('beforeend', '<div class="m e">' + esc(err) + '</div>'); }
