@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611030948">
+<link rel="stylesheet" href="css/app.css?v=202611030959">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611030948"></script>
-<script src="js/shell.js?v=202611030948"></script>
-<script src="js/io.js?v=202611030948"></script>
-<script src="js/excel.js?v=202611030948"></script>
-<script src="js/materials-engine.js?v=202611030948"></script>
-<script src="js/inventory.js?v=202611030948"></script>
+<script src="config.js?v=202611030959"></script>
+<script src="js/shell.js?v=202611030959"></script>
+<script src="js/io.js?v=202611030959"></script>
+<script src="js/excel.js?v=202611030959"></script>
+<script src="js/materials-engine.js?v=202611030959"></script>
+<script src="js/inventory.js?v=202611030959"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -297,7 +297,7 @@ function deriveDays(runs, split) {
       L.sort(function (a, b) { var pa = prev && a.product === prev.product && a.size === prev.size ? 0 : 1, pb = prev && b.product === prev.product && b.size === prev.size ? 0 : 1; return pa - pb || a.run - b.run; });
       var chain = (prev ? [prev] : []).concat(L);
       for (var c = 1; c < chain.length; c++) { var kd = coKind(chain[c - 1], chain[c]); if (kd) { lost += COL[kd]; kinds.push(kd); } }
-      var free = Math.max(0, 1 - lost / (COL.shift || 600));
+      var free = 1; /* no time is taken off a changeover day: the batches decide */
       if (split[k] && split[k].length) out = split[k].map(function (x) { var src = L.filter(function (y) { return y.product === x.product && y.size === (x.size || ''); })[0]; return { product: x.product, size: x.size || '', recipe: x.recipe || (src && src.recipe) || '', batches: Math.max(0, Number(x.batches) || 0), set: true }; });
       else out = L.map(function (x) {
         if (x.fixed != null) return { product: x.product, size: x.size, recipe: x.recipe, batches: x.fixed, est: false, run: x.run };
@@ -341,7 +341,7 @@ function vForecast(fc) {
     var rl = recipeList(r.product);
     return '<tr><td><b>' + PN[r.product] + '</b>' + (rl.length > 1 ? '<br><select class="rrec" data-ri="' + i + '" aria-label="Recipe" style="margin-top:4px;font-size:13px">' + rl.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === (r.recipe || '') ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select>' : '') + '</td><td>' + (r.size ? esc(r.size) : '<span class="muted">–</span>') + '</td><td>' + U.nice(r.from) + '</td><td>' + U.nice(r.to) + (function () { var b = 0; Object.keys(dv.lineDays).forEach(function (d) { ['SEC-1', 'SEC-2'].forEach(function (s2) { ((dv.lineDays[d] || {})[s2] || []).forEach(function (x) { if (x.run === i) b += x.batches; }); }); }); var c = bpbOf(r.product, r.size); return b ? '<div class="small muted" style="white-space:nowrap">≈ ' + b + ' batches' + (c ? ' ≈ ' + fmtN(b * c) + ' ctn' : '') + '</div>' : ''; })() + '</td><td>' + (r.lines === 'both' ? 'Both lines' : LINES[r.lines]) + '</td><td>' + ({ none: 'No work', same: 'Same line' + (r.lines === 'both' ? 's' : ''), both: 'Both lines', 'SEC-1': 'Line 1 only', 'SEC-2': 'Line 2 only' }[r.sat || 'none']) + '</td>' +
       '<td class="n"><input type="number" min="0" step="1" class="bpd" data-ri="' + i + '" value="' + (r.batches > 0 ? r.batches : '') + '" placeholder="≈ ' + e.b + '" style="width:72px;text-align:right" title="Leave empty to use the estimate"><div class="small muted" style="white-space:nowrap">' + (r.batches > 0 ? 'Set by you' : estTxt) + '</div></td>' +
-      '<td class="n"><input type="number" min="0" step="1" class="ctn" data-ri="' + i + '" value="' + (r.cartons > 0 ? r.cartons : '') + '" placeholder="–" style="width:86px;text-align:right" title="Cartons to make: the batches follow from it"><div class="small muted" style="white-space:nowrap">' + (r.dayCartons ? 'per day from the file' : r.cartons > 0 ? '= ' + (r.cartonsMode === 'day' ? Math.ceil(r.cartons / bpbOf(r.product, r.size)) + ' batches a day' : cartonBatches(r) + ' batches in all' + (r.cartonsMode === 'spread' ? '' : ', then the next run starts')) + ' (' + Math.round(bpbOf(r.product, r.size)) + ' ctn/batch)' : 'any amount') + '</div>' +
+      '<td class="n">' + (r.dayCartons ? '<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">' + Object.keys(r.dayCartons).sort().map(function (dk) { var b2 = bpbOf(r.product, r.size); return '<label class="small" style="white-space:nowrap">' + U.nice(dk) + ' <input type="number" min="0" step="1" class="ctd" data-ri="' + i + '" data-d="' + dk + '" value="' + r.dayCartons[dk] + '" style="width:80px;text-align:right"> ctn' + (b2 ? ' = ' + Math.ceil(r.dayCartons[dk] / b2) + ' bt' : '') + '</label>'; }).join('') + '</div>' : '<input type="number" min="0" step="1" class="ctn" data-ri="' + i + '" value="' + (r.cartons > 0 ? r.cartons : '') + '" placeholder="–" style="width:86px;text-align:right" title="Cartons to make: the batches follow from it">') + '<div class="small muted" style="white-space:nowrap">' + (r.dayCartons ? 'cartons each day, from the file' : r.cartons > 0 ? '= ' + (r.cartonsMode === 'day' ? Math.ceil(r.cartons / bpbOf(r.product, r.size)) + ' batches a day' : cartonBatches(r) + ' batches in all' + (r.cartonsMode === 'spread' ? '' : ', then the next run starts')) + ' (' + Math.round(bpbOf(r.product, r.size)) + ' ctn/batch)' : 'any amount') + '</div>' +
       (r.cartons > 0 ? '<select class="ctm" data-ri="' + i + '" style="font-size:12px;margin-top:2px"><option value="total"' + (!r.cartonsMode || r.cartonsMode === 'total' ? ' selected' : '') + '>whole order · next starts when done</option><option value="spread"' + (r.cartonsMode === 'spread' ? ' selected' : '') + '>whole order · spread over its days</option><option value="day"' + (r.cartonsMode === 'day' ? ' selected' : '') + '>each day</option></select>' : '') + '</td><td><button class="btn ghost" data-rr="' + i + '">Remove</button></td></tr>';
   }).join('') + '</tbody></table></div>';
   h += '<div class="row" style="margin-top:12px">' +
@@ -367,10 +367,10 @@ function vForecast(fc) {
   // changeovers
   if (dv.changeovers.length) {
     var spl = (S.saved.plan && S.saved.plan.split) || {};
-    h += '<div class="panel"><h3 style="font-size:17px;margin-bottom:4px">Changeover days</h3><p class="small muted" style="margin:0 0 10px">The day a line switches product or size, the changeover time is taken off that day automatically (learned from the Line Planner: size ≈ ' + Math.round(COL.size) + ' min, product ≈ ' + Math.round(COL.product) + ' min, both ≈ ' + Math.round(COL.both) + ' min). If the old run still has batches to finish that day, enter them here; the new run starts after.</p><div class="tablewrap"><table><thead><tr><th>Day</th><th>Line</th><th>Batches that day</th><th></th></tr></thead><tbody>' +
+    h += '<div class="panel"><h3 style="font-size:17px;margin-bottom:4px">Changeover days</h3><p class="small muted" style="margin:0 0 10px">These are the days a line switches product or size. To switch <b>during</b> the day: type how many batches the old product still makes that day — the new product starts when it finishes and gets the rest of the day by itself. Leave the old one at 0 if the new product takes the whole day.</p><div class="tablewrap"><table><thead><tr><th>Day</th><th>Line</th><th>Batches that day</th><th></th></tr></thead><tbody>' +
       dv.changeovers.filter(function (c) { return c.date >= U.addDays(TODAY, -1); }).slice(0, 30).map(function (c) {
         var list = spl[c.key] ? spl[c.key] : (c.shared ? c.list : [{ product: c.from.product, size: c.from.size, batches: 0 }].concat(c.list));
-        return '<tr><td>' + DAYS[new Date(c.date + 'T00:00:00Z').getUTCDay()] + ' ' + U.nice(c.date) + '</td><td>' + LINES[c.sec] + (c.co ? '<div class="small muted">⇄ ' + c.co.kinds.map(function (k) { return { size: 'size', product: 'product', both: 'product + size' }[k]; }).join(', ') + ' change · ≈ ' + c.co.minutes + ' min lost</div>' : '') + '</td><td><div class="row" style="gap:12px">' + list.map(function (x, k) {
+        return '<tr><td>' + DAYS[new Date(c.date + 'T00:00:00Z').getUTCDay()] + ' ' + U.nice(c.date) + '</td><td>' + LINES[c.sec] + (c.co ? '<div class="small muted">⇄ ' + c.co.kinds.map(function (k) { return { size: 'size', product: 'product', both: 'product + size' }[k]; }).join(', ') + ' change</div>' : '') + '</td><td><div class="row" style="gap:12px">' + list.map(function (x, k) {
           return '<label class="small" style="display:inline-flex;align-items:center;gap:6px">' + (k ? '<span class="muted">then</span> ' : (c.shared || spl[c.key] ? '' : '<span class="muted">finish</span> ')) + '<span class="pc pc-' + x.product + '">' + x.product + '</span> ' + esc(x.size || '') + ' <input type="number" min="0" step="1" class="cob" data-k="' + c.key + '" data-j="' + k + '" data-p="' + x.product + '" data-z="' + esc(x.size || '') + '" value="' + Math.round(x.batches || 0) + '" style="width:64px;text-align:right"></label>';
         }).join('') + '</div></td><td>' + (spl[c.key] ? '<button class="btn ghost" data-cox="' + c.key + '">Reset</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div></div>';
@@ -429,6 +429,7 @@ after.forecast = function (fc) {
   var src0 = function () { return (S.saved.plan && S.saved.plan.source) || 'Entered in app'; };
   $('#rP').onchange = function () { $('#rZ').innerHTML = (SIZES[this.value] || []).map(function (z) { return '<option>' + z + '</option>'; }).join(''); var rl = recipeList(this.value); $('#rR').innerHTML = rl.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>'; }).join(''); $('#rR').hidden = rl.length < 2; };
   document.querySelectorAll('.ctn').forEach(function (el) { el.onchange = function () { var v = Math.round(Number(el.value) || 0); runs[+el.dataset.ri].cartons = v > 0 ? v : null; stage(runs, src0()); toast(v > 0 ? 'Cartons set: the batches follow. Press Save plan to keep it.' : 'Cartons cleared.'); }; });
+  document.querySelectorAll('.ctd').forEach(function (el) { el.onchange = function () { var r = runs[+el.dataset.ri], v = Math.round(Number(el.value) || 0); r.dayCartons = Object.assign({}, r.dayCartons); if (v > 0) r.dayCartons[el.dataset.d] = v; else delete r.dayCartons[el.dataset.d]; if (!Object.keys(r.dayCartons).length) r.dayCartons = null; stage(runs, src0()); toast('Cartons for ' + U.nice(el.dataset.d) + ' set. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.ctm').forEach(function (el) { el.onchange = function () { runs[+el.dataset.ri].cartonsMode = el.value; stage(runs, src0()); }; });
   var cx = function () { var c = Math.round(Number($('#rC').value) || 0), r0 = { product: $('#rP').value, size: $('#rZ').value, cartons: c }; $('#rCx').textContent = c > 0 ? '= ' + cartonBatches(r0) + ' batches' : ''; };
   $('#rC').oninput = cx; $('#rZ').addEventListener('change', cx); $('#rP').addEventListener('change', cx);
@@ -436,6 +437,9 @@ after.forecast = function (fc) {
   document.querySelectorAll('.bpd').forEach(function (el) { el.onchange = function () { var v = Math.round(Number(el.value) || 0); runs[+el.dataset.ri].batches = v > 0 ? v : null; stage(runs, src0()); toast('Changed. Press Save plan to keep it.'); }; });
   document.querySelectorAll('.cob').forEach(function (el) { el.onchange = function () {
     var k = el.dataset.k, sp = Object.assign({}, (S.saved.plan && S.saved.plan.split) || {});
+    var all = document.querySelectorAll('.cob[data-k="' + k + '"]'), line = k.split('|')[1];
+    /* the old product finishes after its batches; the next one gets what is left of the day */
+    if (+el.dataset.j < all.length - 1) { var used = 0; for (var q = 0; q < all.length - 1; q++) { var oe = estBatches(all[q].dataset.p, all[q].dataset.z, line).b || 1; used += (Number(all[q].value) || 0) / oe; } var nx = all[all.length - 1], ne = estBatches(nx.dataset.p, nx.dataset.z, line).b; nx.value = Math.max(0, Math.round(ne * Math.max(0, 1 - used))); }
     var list = Array.prototype.map.call(document.querySelectorAll('.cob[data-k="' + k + '"]'), function (x) { return { product: x.dataset.p, size: x.dataset.z, batches: Math.max(0, Math.round(Number(x.value) || 0)) }; });
     sp[k] = list; stage(runs, src0(), sp); toast('Changeover set. Press Save plan to keep it.'); }; });
   document.querySelectorAll('[data-cox]').forEach(function (b) { b.onclick = function () { var sp = Object.assign({}, (S.saved.plan && S.saved.plan.split) || {}); delete sp[b.dataset.cox]; S.saved.plan.split = sp; stage(runs, src0(), sp); }; });
@@ -721,6 +725,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611030948"></script>
-<script src="js/recipe-variants.js?v=202611030948"></script>
+<script src="js/materials-page.js?v=202611030959"></script>
+<script src="js/recipe-variants.js?v=202611030959"></script>
 </body></html>
