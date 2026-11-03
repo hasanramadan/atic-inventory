@@ -27,15 +27,31 @@ function buildLP(acts) {
 }
 
 /* ---------- factory plan import (calendar layout or a plain table) ---------- */
-function importPlan(file, stage) {
+/* A workbook with many sheets (one per month, trucks, pending orders…): read ONE sheet. The default is the sheet named
+   for this month (or the next one), visible sheets first; the import window lets you pick another. */
+var MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function sheetMonth(n) { n = String(n || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' '); for (var i = 0; i < 12; i++) if (new RegExp('\\b' + MONTHS[i]).test(n)) { var y = /\b(20)?(\d{2})\b/.exec(n.replace(/\b\d{1,2}\s*(st|nd|rd|th)?\b(?=\s*[a-z])/, '')); return { m: i + 1, y: y ? 2000 + +y[2] : null }; } return null; }
+function bestSheet(book) {
+  if (book.sheets.length < 2) return null;
+  var y = +TODAY.slice(0, 4), m = +TODAY.slice(5, 7), best = null, score = -1e9;
+  book.sheets.forEach(function (sh, i) {
+    var sm = sheetMonth(sh.name); if (!sm) return;
+    var yy = sm.y || y, diff = (yy - y) * 12 + (sm.m - m), sc = (diff === 0 ? 100 : diff === 1 ? 80 : diff > 0 ? 60 - diff : 40 + diff * 5) + (sh.hidden ? -60 : 0) + (sm.y ? 10 : 0);
+    if (sc > score) { score = sc; best = i; }
+  });
+  return best;
+}
+function importPlan(file, stage, pick) {
   X.readFile(file).then(function (book) {
-    var g = X.planGrid(book, { ref: TODAY });
+    var idx = pick != null ? pick : bestSheet(book);
+    var one = idx == null ? book : { name: book.name, sheets: [Object.assign({}, book.sheets[idx], { hidden: false })] };
+    var g = X.planGrid(one, { ref: TODAY });
     var from = U.weekStart(TODAY);
     var days = g.days.filter(function (d) { return d.date >= from && d.date <= U.addDays(TODAY, 120); });
-    planDialog(book, g, days, stage);
+    planDialog(book, g, days, stage, { file: file, idx: idx });
   }).catch(function (e) { toast(e.message || String(e)); });
 }
-function planDialog(book, g, days, stage) {
+function planDialog(book, g, days, stage, ctx) {
   var back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
   var dates = []; days.forEach(function (d) { if (dates.indexOf(d.date) < 0) dates.push(d.date); }); dates.sort();
   var cell = function (date, sec) { return days.filter(function (d) { return d.date === date && d.sec === sec; }).map(function (d) { return '<span class="pc pc-' + d.product + '">' + d.product + '</span>' + (d.size ? ' <span class="small">' + esc(d.size) + '</span>' : '') + (d.batches ? ' <span class="small muted">' + fmtN(d.batches) + ' bt</span>' : ''); }).join('<br>') || '<span class="muted">·</span>'; };
@@ -48,7 +64,9 @@ function planDialog(book, g, days, stage) {
   }
   if (g.notes.length) h += '<ul class="skips">' + g.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>';
   h += '</div><footer><button class="btn ghost" data-x="table" style="margin-right:auto">Read as a table instead</button><button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="apply"' + (days.length ? '' : ' disabled') + '>Use this plan</button></footer></div>';
+  if (ctx && book.sheets.length > 1) h = h.replace('<div class="body">', '<div class="body"><label class="small" style="display:flex;gap:8px;align-items:center">Sheet <select id="pgSheet">' + book.sheets.map(function (sh, i) { return '<option value="' + i + '"' + (i === ctx.idx ? ' selected' : '') + '>' + esc(sh.name) + (sh.hidden ? ' (hidden)' : '') + '</option>'; }).join('') + '<option value="all"' + (ctx.idx == null ? ' selected' : '') + '>All sheets</option></select><span class="muted">' + book.sheets.length + ' sheets in this file</span></label>');
   back.innerHTML = h;
+  var pgs = back.querySelector('#pgSheet'); if (pgs) pgs.onchange = function () { back.remove(); importPlan(ctx.file, stage, pgs.value === 'all' ? null : +pgs.value); };
   back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
   back.querySelector('[data-x="table"]').onclick = function () { back.remove(); planAsTable(book, stage); };
   var ap = back.querySelector('[data-x="apply"]'); if (ap) ap.onclick = function () { back.remove(); stage(daysToRuns(days), book.name); toast('Read ' + days.length + ' line-days from ' + book.name + '. Check them, then press Save plan.'); };
