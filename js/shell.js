@@ -59,7 +59,7 @@
       h += '</div>';
     });
     if (A.area !== 'production') h += '<div class="part"><a class="p" aria-current="page" href="' + location.pathname.split('/').pop() + '">' + esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '') + '</a></div>';
-    h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + (p.is_owner ? 'Owner' : ROLE[p.role]) + '</span>' + (areasOf(p).length > 1 ? '<a class="switch" href="start.html">⇄ Switch area</a>' : '') + '<button id="signOut" type="button">Sign out</button></div>';
+    h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + (p.is_owner ? 'Creator' : ROLE[p.role]) + '</span>' + (areasOf(p).length > 1 ? '<a class="switch" href="start.html">⇄ Switch area</a>' : '') + '<button id="signOut" type="button">Sign out</button></div>';
     return h;
   }
   function subbarHTML() {

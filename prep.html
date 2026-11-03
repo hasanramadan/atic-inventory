@@ -3,7 +3,7 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611031011">
+<link rel="stylesheet" href="css/app.css?v=202611031224">
 <style>
 .pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 /* ---------- hero ---------- */
@@ -93,7 +93,8 @@
   #sheet th,#sheet td{border:1px solid #000;padding:6px 8px;text-align:left}
   #sheet td.n,#sheet th.n{text-align:right}
   #sheet h2{font:600 13pt var(--f-display);margin:12px 0 4px}
-  #sheet .sign{display:flex;gap:30px;margin-top:26px}#sheet .sign div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10pt}
+  #sheet .sign{display:flex;gap:30px;margin-top:34px}#sheet .sign div{flex:1;border-top:1.5px solid #000;padding-top:6px;font-size:11pt}
+  #sheet table.big th{font-size:11pt;background:#eee}#sheet table.big td{font-size:14pt;padding:12px 10px;height:16mm;vertical-align:middle}#sheet table.big td b{font-size:16pt}#sheet .sm{font-size:9.5pt;color:#333;font-weight:400}
 }
 @media (max-width:900px){.hero{grid-template-columns:1fr}.scene{padding:0 10px 18px}.floor{height:262px}.grid2{grid-template-columns:1fr}.pp{padding:16px 14px 50px}}
 @media (prefers-reduced-motion:reduce){.wv,.mixr,.bb,.mc{animation:none}.floor,.ticket .t,.mc{transition:none}}
@@ -105,9 +106,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js?v=202611031011"></script>
-<script src="js/shell.js?v=202611031011"></script>
-<script src="js/materials-engine.js?v=202611031011"></script>
+<script src="config.js?v=202611031224"></script>
+<script src="js/shell.js?v=202611031224"></script>
+<script src="js/materials-engine.js?v=202611031224"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
@@ -156,6 +157,12 @@
     if (uw(x.unit) === 'kg') return app;
     return null;
   }
+  /* whole packs + loose kg, the way the store hands it out: "12 bags of 25 kg + 9.5 kg" */
+  function splitPacks(x, kg) {
+    if (kg == null) return null; var P = (PACKS[x.id] || []).filter(function (k) { return k.of === 'kg' && k.size > 0; })[0]; if (!P) return null;
+    var whole = Math.floor(kg / P.size + 1e-9), loose = Math.round((kg - whole * P.size) * 1000) / 1000;
+    return { whole: whole, per: P.per, size: P.size, loose: loose, txt: (whole ? whole + ' ' + pl(P.per, whole) + ' of ' + fq(P.size) + ' kg' : '') + (whole && loose ? ' + ' : '') + (loose || !whole ? fq(loose) + ' kg' + (!whole ? ' (less than one ' + P.per + ')' : '') : '') };
+  }
   function packsTxt(x, kg) { if (kg == null) return ''; return (PACKS[x.id] || []).filter(function (k) { return k.of === 'kg' && k.size > 0; }).map(function (k) { var n = kg / k.size; return fq(n) + ' ' + pl(k.per, n) + ' of ' + fq(k.size) + ' kg'; }).join(' or '); }
   function recList(p) { var V = (model.variants || {})[p] || {}; return [{ id: '', name: (docs.recipes && docs.recipes.names && docs.recipes.names[p]) || 'Standard' }].concat(Object.keys(V).map(function (k) { return { id: k, name: V[k].name || k }; })); }
   function recOf(p, v, sec) { var V = v && model.variants && model.variants[p] && model.variants[p][v]; return (V ? V[sec] : (model.recipes[p] || {})[sec]) || {}; }
@@ -192,9 +199,9 @@
   var _load = load; load = function () { _load(); fixSizes(); };
 
   /* ---------- the maths: batches × recipe ---------- */
-  function need() {
+  function need(only) {
     var out = {};
-    Object.keys(S.rows).forEach(function (sec) {
+    Object.keys(S.rows).filter(function (sec) { return !only || sec === only; }).forEach(function (sec) {
       S.rows[sec].forEach(function (row) {
         if (!row.p || !(row.b > 0)) return;
         var rec = recOf(row.p, row.v, sec); row.z = row.z || '';
@@ -263,7 +270,7 @@
         st = '<div class="bar"><b style="width:' + Math.max(3, pct).toFixed(0) + '%"></b></div><div class="st">' + (o.app > have ? 'Not enough: about ' + fq(Math.max(0, have)) + ' ' + pl(x.unit, have) + ' left in stock' : 'Uses ' + Math.round(pct) + '% of the ≈ ' + fq(have) + ' ' + pl(x.unit, have) + ' in stock') + '</div>';
       }
       return '<div class="mc ' + cls + '" style="animation-delay:' + (k * 40) + 'ms"><div class="nm">' + esc(x.name) + '</div><div class="q">' + (kg != null ? fq(kg) + '<small>kg</small>' : fq(u.main) + '<small>' + esc(pl(u.mu, u.main)) + '</small>') + '</div>' +
-        (pk ? '<div class="alt">= ' + esc(pk) + '</div>' : u.alt != null ? '<div class="alt">≈ ' + fq(u.alt) + ' ' + esc(pl(u.au, u.alt)) + '</div>' : '') +
+        (splitPacks(x, kg) ? '<div class="alt" style="font-weight:600;color:var(--ink)">= ' + esc(splitPacks(x, kg).txt) + '</div>' : pk ? '<div class="alt">= ' + esc(pk) + '</div>' : u.alt != null ? '<div class="alt">≈ ' + fq(u.alt) + ' ' + esc(pl(u.au, u.alt)) + '</div>' : '') +
         '<div class="by">' + o.by.map(function (b) { var c = COL[b.p] || ['#aaa']; return '<span><i style="background:' + c[0] + '"></i>' + b.p + (b.z ? ' ' + b.z : '') + (b.v ? ' (' + esc((recList(b.p).filter(function (q) { return q.id === b.v; })[0] || {}).name || '') + ')' : '') + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' · ' + b.b + ' bt → ' + (kg != null ? fq(inKg(x, b.app)) + ' kg' : fq(b.app * (x.recipeFactor || 1))) + '</span>'; }).join('') + '</div>' + st + '</div>';
     }).join('') + '</div>';
   }
@@ -278,9 +285,12 @@
       '<div class="scene" id="scene"><div class="floor" id="floor"><div class="pad"></div><div class="tanks">' + heroScene() + '</div></div></div></section>' +
       '<p class="src" style="margin:12px 4px 0">' + SRC[S.src || ''] + '</p>' +
       '<div class="grid2">' + secHtml('SEC-1') + secHtml('SEC-2') + '</div>' +
-      '<div class="mhead"><div><h2>Raw materials to prepare</h2><p>Batches × the saved recipe of each section · Lot ' + lot + '</p></div><div class="exp">' +
-      '<button class="btn primary" id="xPrint" type="button">🖨 Sheet for the workers</button><button class="btn" id="xXls" type="button">⬇ Excel</button><button class="btn" id="xCopy" type="button">⧉ Copy</button></div></div>' +
-      matsHtml(list) +
+      ['SEC-1', 'SEC-2'].map(function (sc) {
+        var L = need(sc), pr = S.rows[sc].filter(function (r) { return r.p && r.b > 0; });
+        return '<div class="mhead"><div><h2>' + SEC[sc] + ' · raw materials to prepare</h2><p>' + (pr.length ? pr.map(function (r) { return r.p + (r.z ? ' ' + r.z : '') + ' × ' + r.b; }).join(' · ') : 'Nothing on this section') + ' · Lot ' + lot + '</p></div>' +
+          (pr.length ? '<div class="exp"><button class="btn primary" data-print="' + sc + '" type="button">🖨 ' + SEC[sc] + ' sheet</button></div>' : '') + '</div>' + (pr.length ? matsHtml(L) : '');
+      }).join('') +
+      '<div class="mhead"><div><h2>Both sections</h2><p>Everything for the day, for the store</p></div><div class="exp"><button class="btn" id="xPrint" type="button">🖨 Both sections</button><button class="btn" id="xXls" type="button">⬇ Excel</button><button class="btn" id="xCopy" type="button">⧉ Copy</button></div></div>' +
       '<p class="note2">Amounts come from <a href="materials.html#recipes">Recipes per batch</a>; packs from the Inventory. "In stock" is the counted stock minus what the Line Planner batches used since the count.</p></div>';
     wire(); tilt();
   }
@@ -295,7 +305,8 @@
     document.querySelectorAll('.step button').forEach(function (el) { el.onclick = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.b = Math.max(0, (r.b || 0) + Number(el.dataset.d)); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('[data-rm]').forEach(function (el) { el.onclick = function () { S.rows[el.dataset.s].splice(+el.dataset.rm, 1); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('[data-add]').forEach(function (el) { el.onclick = function () { var used = S.rows[el.dataset.add].map(function (r) { return r.p; }); var np = PRODS.filter(function (p) { return used.indexOf(p) < 0; })[0] || ''; S.rows[el.dataset.add].push({ p: np, z: (SIZES[np] || [''])[(SIZES[np] || ['']).length - 1], b: 1 }); S.src = 'mine'; store(); render(); }; });
-    $('#xPrint').onclick = printSheet; $('#xXls').onclick = excel; $('#xCopy').onclick = copyTxt;
+    $('#xPrint').onclick = function () { printSheet(null); }; $('#xXls').onclick = excel; $('#xCopy').onclick = copyTxt;
+    document.querySelectorAll('[data-print]').forEach(function (b) { b.onclick = function () { printSheet(b.dataset.print); }; });
   }
   function tilt() {
     var sc = $('#scene'), fl = $('#floor'); if (!sc || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -308,28 +319,36 @@
   }
 
   /* ---------- exports ---------- */
-  function prodRows() { var o = []; ['SEC-1', 'SEC-2'].forEach(function (s) { S.rows[s].forEach(function (r) { if (r.p && r.b > 0) o.push({ sec: SEC[s], p: PN[r.p] + (r.v ? ' · ' + ((recList(r.p).filter(function (q) { return q.id === r.v; })[0] || {}).name || '') : ''), z: r.z || '', b: r.b }); }); }); return o; }
-  function matRows() { return need().map(function (o) { var x = MATS[o.id], u = unitTxt(x, o.app), kg = inKg(x, o.app); return { name: x.name, q: kg != null ? kg : u.main, u: kg != null ? 'kg' : u.mu, packs: packsTxt(x, kg) || (u.alt != null ? fq(u.alt) + ' ' + pl(u.au, u.alt) : ''), by: o.by.map(function (b) { return b.p + (b.z ? ' ' + b.z : '') + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' ' + fq(kg != null ? inKg(x, b.app) : b.app * (x.recipeFactor || 1)); }).join(' · ') }; }); }
-  function printSheet() {
-    var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
-    if (!pr.length) { toast('Add at least one product first'); return; }
-    $('#sheet').innerHTML = '<div class="meta"><div><div style="font:600 10pt var(--f-mono);letter-spacing:.1em">ATIC OMAN · PREPARATION SHEET</div><h1>' + nice(S.date) + '</h1></div><div class="lotp">LOT ' + lot + '</div></div>' +
-      '<h2>Products and batches</h2><table><thead><tr><th>Section</th><th>Product</th><th>Size</th><th class="n">Batches</th><th>Done ✓</th></tr></thead><tbody>' + pr.map(function (r) { return '<tr><td>' + r.sec + '</td><td>' + esc(r.p) + '</td><td>' + esc(r.z) + '</td><td class="n"><b>' + r.b + '</b></td><td></td></tr>'; }).join('') + '</tbody></table>' +
-      '<h2>Raw materials to weigh</h2><table><thead><tr><th>Material</th><th class="n">Quantity</th><th>In store packs</th><th>For</th><th>Weighed ✓</th></tr></thead><tbody>' + mr.map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td class="n"><b>' + fq(r.q) + ' ' + esc(pl(r.u, r.q)) + '</b></td><td>' + esc(r.packs) + '</td><td><small>' + esc(r.by) + '</small></td><td></td></tr>'; }).join('') + '</tbody></table>' +
-      '<div class="sign"><div>Prepared by</div><div>Checked by</div><div>Time</div></div>';
-    window.print();
+  function prodRows(only) { var o = []; ['SEC-1', 'SEC-2'].filter(function (s) { return !only || s === only; }).forEach(function (s) { S.rows[s].forEach(function (r) { if (r.p && r.b > 0) o.push({ sec: SEC[s], p: PN[r.p] + (r.v ? ' · ' + ((recList(r.p).filter(function (q) { return q.id === r.v; })[0] || {}).name || '') : ''), z: r.z || '', b: r.b }); }); }); return o; }
+  function matRows(only) { return need(only).map(function (o) { var x = MATS[o.id], u = unitTxt(x, o.app), kg = inKg(x, o.app), sp = splitPacks(x, kg); return { sp: sp, name: x.name, q: kg != null ? kg : u.main, u: kg != null ? 'kg' : u.mu, packs: packsTxt(x, kg) || (u.alt != null ? fq(u.alt) + ' ' + pl(u.au, u.alt) : ''), by: o.by.map(function (b) { return b.p + (b.z ? ' ' + b.z : '') + ' ' + (b.sec === 'SEC-1' ? 'S1' : 'S2') + ' ' + fq(kg != null ? inKg(x, b.app) : b.app * (x.recipeFactor || 1)); }).join(' · ') }; }); }
+  function printSheet(only) {
+    var lot = A.lot(S.date), secs = only ? [only] : ['SEC-1', 'SEC-2'], html = '';
+    if (!prodRows(only).length) { toast('Add at least one product first'); return; }
+    secs.forEach(function (sc, n) {
+      var pr = prodRows(sc), mr = matRows(sc); if (!pr.length) return;
+      html += '<div class="pg"' + (html ? ' style="page-break-before:always"' : '') + '><div class="meta"><div><div style="font:600 11pt var(--f-mono);letter-spacing:.1em">ATIC OMAN · PREPARATION · ' + SEC[sc].toUpperCase() + '</div><h1>' + nice(S.date) + '</h1></div><div class="lotp">LOT ' + lot + '</div></div>' +
+        '<h2>Products</h2><table class="big"><thead><tr><th>Product</th><th>Size</th><th class="n">Batches</th><th style="width:22%">Done ✓</th></tr></thead><tbody>' + pr.map(function (r) { return '<tr><td><b>' + esc(r.p) + '</b></td><td>' + esc(r.z) + '</td><td class="n"><b>' + r.b + '</b></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+        '<h2>Raw materials to weigh</h2><table class="big"><thead><tr><th>Material</th><th class="n">Bags / packs</th><th class="n">+ kg</th><th class="n">Total kg</th><th style="width:16%">Weighed ✓</th><th style="width:16%">By</th></tr></thead><tbody>' +
+        mr.map(function (r) { var sp = r.sp; return '<tr><td><b>' + esc(r.name) + '</b><div class="sm">' + esc(r.by) + '</div></td><td class="n">' + (sp && sp.whole ? '<b>' + sp.whole + '</b> ' + esc(pl(sp.per, sp.whole)) + '<div class="sm">of ' + fq(sp.size) + ' kg</div>' : '–') + '</td><td class="n"><b>' + (sp ? fq(sp.loose) : '–') + '</b>' + (sp ? ' kg' : '') + '</td><td class="n">' + fq(r.q) + ' ' + esc(pl(r.u, r.q)) + '</td><td></td><td></td></tr>'; }).join('') + '</tbody></table>' +
+        '<div class="sign"><div>Prepared by</div><div>Checked by</div><div>Time</div></div></div>';
+    });
+    $('#sheet').innerHTML = html;
+    var t0 = document.title; document.title = 'Preparation ' + S.date + ' lot ' + lot + (only ? ' ' + SEC[only] : ''); window.print(); setTimeout(function () { document.title = t0; }, 1500);
   }
   function excel() {
-    var lot = A.lot(S.date), pr = prodRows(), mr = matRows();
-    if (!pr.length) { toast('Add at least one product first'); return; }
-    var aoa = [['ATIC Oman · Preparation sheet'], ['Date', S.date], ['Lot', lot], [], ['Section', 'Product', 'Size', 'Batches']].concat(pr.map(function (r) { return [r.sec, r.p, r.z, r.b]; }))
-      .concat([[], ['Raw material', 'Quantity', 'Unit', 'In store packs', 'For']]).concat(mr.map(function (r) { return [r.name, Math.round(r.q * 100) / 100, r.u, r.packs, r.by]; }));
-    if (window.XLSX) { var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 40 }]; var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Preparation'); XLSX.writeFile(wb, 'Preparation ' + S.date + ' lot ' + lot + '.xlsx'); }
-    else A.download('Preparation ' + S.date + ' lot ' + lot + '.csv', aoa.map(function (r) { return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'));
+    var lot = A.lot(S.date); if (!prodRows().length) { toast('Add at least one product first'); return; }
+    var sheets = ['SEC-1', 'SEC-2'].filter(function (sc) { return prodRows(sc).length; }).map(function (sc) {
+      var pr = prodRows(sc), mr = matRows(sc);
+      return { name: SEC[sc], aoa: [['ATIC Oman · Preparation · ' + SEC[sc]], ['Date', S.date], ['Lot', lot], [], ['Product', 'Size', 'Batches']].concat(pr.map(function (r) { return [r.p, r.z, r.b]; }))
+        .concat([[], ['Raw material', 'Bags / packs', 'Pack', '+ kg', 'Total kg', 'For']]).concat(mr.map(function (r) { var sp = r.sp; return [r.name, sp ? sp.whole : '', sp ? sp.per + ' of ' + sp.size + ' kg' : '', sp ? sp.loose : '', Math.round(r.q * 1000) / 1000, r.by]; })) };
+    });
+    if (window.XLSX) { var wb = XLSX.utils.book_new(); sheets.forEach(function (sh) { var ws = XLSX.utils.aoa_to_sheet(sh.aoa); ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 40 }]; XLSX.utils.book_append_sheet(wb, ws, sh.name); }); XLSX.writeFile(wb, 'Preparation ' + S.date + ' lot ' + lot + '.xlsx'); }
+    else A.download('Preparation ' + S.date + ' lot ' + lot + '.csv', sheets.map(function (sh) { return sh.aoa.map(function (r) { return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n'); }).join('\n\n'));
   }
   function copyTxt() {
-    var pr = prodRows(), mr = matRows(); if (!pr.length) { toast('Add at least one product first'); return; }
-    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date) + '\n\n' + pr.map(function (r) { return r.sec + ': ' + r.p + (r.z ? ' ' + r.z : '') + ' × ' + r.b + ' batches'; }).join('\n') + '\n\nRaw materials:\n' + mr.map(function (r) { return '• ' + r.name + ': ' + fq(r.q) + ' ' + pl(r.u, r.q) + (r.packs ? ' (= ' + r.packs + ')' : ''); }).join('\n');
+    if (!prodRows().length) { toast('Add at least one product first'); return; }
+    var t = 'Preparation ' + nice(S.date) + ' · Lot ' + A.lot(S.date);
+    ['SEC-1', 'SEC-2'].forEach(function (sc) { var pr = prodRows(sc); if (!pr.length) return; t += '\n\n*' + SEC[sc] + '*: ' + pr.map(function (r) { return r.p + (r.z ? ' ' + r.z : '') + ' × ' + r.b; }).join(', ') + '\n' + matRows(sc).map(function (r) { return '• ' + r.name + ': ' + (r.sp ? r.sp.txt + ' (= ' + fq(r.q) + ' kg)' : fq(r.q) + ' ' + pl(r.u, r.q)); }).join('\n'); });
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('Copied: paste it in WhatsApp or anywhere'); }, function () { toast('Could not copy'); });
   }
 

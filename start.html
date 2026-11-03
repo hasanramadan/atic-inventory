@@ -3,7 +3,7 @@
 <title>ATIC · Choose where to go</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611031011">
+<link rel="stylesheet" href="css/app.css?v=202611031224">
 <style>
 html,body{height:100%}
 body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d2e22 55%,#081d16 100%);color:#eef5f1;overflow:hidden;font-family:var(--f-body,'IBM Plex Sans',sans-serif)}
@@ -53,8 +53,8 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611031011"></script>
-<script src="js/shell.js?v=202611031011"></script>
+<script src="config.js?v=202611031224"></script>
+<script src="js/shell.js?v=202611031224"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'start', area: 'start' }); if (!A) return;
@@ -71,7 +71,7 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
     preparation: { c: '#d4a017', h: 'Preparation', p: 'Products, sizes and batches per section → the raw materials to prepare, with the lot number.', tag: 'Open', href: 'prep.html' }
   };
   document.getElementById('hello').textContent = 'Welcome, ' + String(p.full_name || p.username).split(' ')[0];
-  document.getElementById('who').textContent = (p.full_name || p.username) + (p.is_owner ? ' · Owner' : '');
+  document.getElementById('who').textContent = (p.full_name || p.username) + (p.is_owner ? ' · Creator' : '');
   document.getElementById('out').onclick = ATIC.signOut;
   var stage = document.getElementById('stage');
   stage.innerHTML = areas.map(function (k) { var x = INFO[k]; return '<button class="door" data-href="' + x.href + '" style="--c:' + x.c + '" aria-label="' + x.h + (x.tag === 'Coming soon' ? ' (coming soon)' : '') + '"><span class="glow"></span><span class="face"></span><span class="scene">' + SCENE[k] + '</span><span class="txt"><span class="tag' + (x.tag === 'Coming soon' ? ' soon' : '') + '">' + x.tag + '</span><h2>' + x.h + '</h2><p>' + x.p + '</p><span class="go">Enter →</span></span></button>'; }).join('');

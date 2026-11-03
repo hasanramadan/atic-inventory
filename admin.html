@@ -3,7 +3,7 @@
 <title>ATIC Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611031011">
+<link rel="stylesheet" href="css/app.css?v=202611031224">
 <style>
 .people{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
 .person{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow)}
@@ -27,9 +27,9 @@
 <main id="main"><div class="boot"><div><i></i>Loading…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611031011"></script>
-<script src="js/shell.js?v=202611031011"></script>
-<script src="js/io.js?v=202611031011"></script>
+<script src="config.js?v=202611031224"></script>
+<script src="js/shell.js?v=202611031224"></script>
+<script src="js/io.js?v=202611031224"></script>
 <script>
 (function () {
 var A, USERS = [], DRAFT = {};
@@ -46,8 +46,8 @@ function label(k) { return A.PAGES.filter(function (p) { return p.key === k; })[
 var AREA_DESC = { production: 'This website', lab: 'Quality per lot (coming soon)', preparation: 'Raw materials to prepare (coming soon)' };
 function areasHTML(u) {
   var on = A.areasOf(u), owner = !!A.profile.is_owner, setUp = A.profile.areas !== undefined;
-  if (u.is_owner) return '<div class="small muted">The owner opens every area and is hidden from everyone else.</div>';
-  return '<div><div class="small muted" style="margin-bottom:6px">Areas' + (on.length > 1 ? ' · sees the start screen' : '') + (owner ? '' : ' · only the owner can change them') + '</div><div class="acts">' +
+  if (u.is_owner) return '<div class="small muted">The creator opens every area and is hidden from everyone else.</div>';
+  return '<div><div class="small muted" style="margin-bottom:6px">Areas' + (on.length > 1 ? ' · sees the start screen' : '') + (owner ? '' : ' · only the creator can change them') + '</div><div class="acts">' +
     A.AREAS.map(function (a) { return '<label class="dd" style="display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 12px"><input type="checkbox" data-area="' + u.id + '|' + a.key + '"' + (on.indexOf(a.key) >= 0 ? ' checked' : '') + (owner && setUp ? '' : ' disabled') + '><b>' + a.label + '</b><span class="small muted">' + AREA_DESC[a.key] + '</span></label>'; }).join('') +
     (owner && setUp ? '<button class="btn" data-areasave="' + u.id + '">Save areas</button>' : '') + '</div>' + (!setUp ? '<div class="small" style="color:var(--amber);margin-top:4px">Run the setup script in Supabase to switch areas on.</div>' : '') + '</div>';
 }
@@ -56,7 +56,7 @@ function render() {
   h += '<div class="panel"><h3 style="font-size:16px;margin-bottom:10px">New account</h3><form class="form5" id="nu"><label class="field">Full name<input id="nuName" required placeholder="e.g. Yasser Mansour"></label><label class="field">Username<input id="nuUser" required autocapitalize="none" placeholder="e.g. yasser"></label><label class="field">Password<input id="nuPass" required minlength="6" placeholder="at least 6 characters"></label><label class="field">Access<select id="nuRole"><option value="viewer">View only</option><option value="editor">Can edit</option><option value="admin">Admin</option></select></label><button class="btn primary" style="padding:10px 16px">Create</button></form><p class="hint" style="margin:10px 0 0">Send the person the website link with their username and password. New accounts see every page until you choose below.</p></div>';
   h += '<div class="people">' + USERS.map(function (u) {
     var me = u.id === A.profile.id, d = DRAFT[u.id] || (DRAFT[u.id] = pagesOf(u)), adm = u.role === 'admin';
-    return '<div class="person"><div class="h"><div><h3>' + esc(u.full_name || u.username) + (me ? ' <span class="chip info">you</span>' : '') + (u.is_owner ? ' <span class="chip" style="background:var(--gold);color:#1b1306">Owner</span>' : '') + '</h3><span class="u">' + esc(u.username) + '</span></div>' +
+    return '<div class="person"><div class="h"><div><h3>' + esc(u.full_name || u.username) + (me ? ' <span class="chip info">you</span>' : '') + (u.is_owner ? ' <span class="chip" style="background:var(--gold);color:#1b1306">Creator</span>' : '') + '</h3><span class="u">' + esc(u.username) + '</span></div>' +
       '<select data-role="' + u.id + '"' + (me ? ' disabled' : '') + ' style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">' + [['viewer', 'View only'], ['editor', 'Can edit'], ['admin', 'Admin']].map(function (o) { return '<option value="' + o[0] + '"' + (u.role === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<div><div class="small muted" style="margin-bottom:6px">' + (adm ? 'Admins open every page. Ticks and arrows set the menu order.' : 'Pages this person sees, top to bottom as in their menu') + '</div><div class="pages">' + d.map(function (p, i) {
         return '<div class="pg' + (p.on ? '' : ' off') + '"><input type="checkbox" data-pg="' + u.id + '|' + i + '"' + (p.on ? ' checked' : '') + ' aria-label="Show ' + esc(label(p.key)) + '"><span><b>' + esc(label(p.key)) + '</b><small>' + DESC[p.key] + '</small></span><button class="mv" data-up="' + u.id + '|' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="mv" data-dn="' + u.id + '|' + i + '"' + (i === d.length - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button></div>';

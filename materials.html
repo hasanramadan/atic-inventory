@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611031011">
+<link rel="stylesheet" href="css/app.css?v=202611031224">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611031011"></script>
-<script src="js/shell.js?v=202611031011"></script>
-<script src="js/io.js?v=202611031011"></script>
-<script src="js/excel.js?v=202611031011"></script>
-<script src="js/materials-engine.js?v=202611031011"></script>
-<script src="js/inventory.js?v=202611031011"></script>
+<script src="config.js?v=202611031224"></script>
+<script src="js/shell.js?v=202611031224"></script>
+<script src="js/io.js?v=202611031224"></script>
+<script src="js/excel.js?v=202611031224"></script>
+<script src="js/materials-engine.js?v=202611031224"></script>
+<script src="js/inventory.js?v=202611031224"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -383,7 +383,7 @@ function vForecast(fc) {
   // calendar
   var days = []; for (var d = U.weekStart(TODAY); d <= U.addDays(U.weekStart(TODAY), 34); d = U.addDays(d, 1)) days.push(d);
   h += '<div class="tablewrap"><table class="cal"><thead><tr><th>Line</th>' + days.map(function (d) { var w = new Date(d + 'T00:00:00Z').getUTCDay(); return '<th class="' + (w === 5 ? 'off' : w === 6 ? 'ot' : '') + (d === TODAY ? ' today' : '') + '">' + DAYS[w].charAt(0) + '<br>' + d.slice(8) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-    ['SEC-1', 'SEC-2'].map(function (s) { return '<tr><td><b>' + LINES[s] + '</b></td>' + days.map(function (d) { var w = new Date(d + 'T00:00:00Z').getUTCDay(), p = dv.slots[d + '|' + s]; return '<td class="' + (w === 5 ? 'off' : '') + (d < TODAY ? ' past' : '') + '">' + (p && p.length > 1 ? '<span title="Changeover day">⇄</span>' : '') + (p ? p.map(function (x) { return '<span class="pc pc-' + x + '">' + x + '</span>'; }).join('') : (w === 5 ? '' : '<span class="muted">·</span>')) + '</td>'; }).join('') + '</tr>'; }).join('') +
+    ['SEC-1', 'SEC-2'].map(function (s) { return '<tr><td><b>' + LINES[s] + '</b></td>' + days.map(function (d) { var w = new Date(d + 'T00:00:00Z').getUTCDay(), p = dv.slots[d + '|' + s]; return '<td class="' + (w === 5 ? 'off' : '') + (d < TODAY ? ' past' : '') + '">' + (p && p.length > 1 ? '<span title="Changeover day">⇄</span>' : '') + (p ? ((dv.lineDays[d] || {})[s] || p.map(function (x) { return { product: x }; })).map(function (y) { var x = y.product, z = String(y.size || '').replace(/ml$/i, ''); return '<span class="pc pc-' + x + '" title="' + esc(PN[x] + (y.size ? ' ' + y.size : '') + (y.batches != null ? ' · ' + y.batches + ' batches' : '')) + '">' + x + (z ? '<br><b>' + esc(z) + '</b>' : '') + '</span>'; }).join('') : (w === 5 ? '' : '<span class="muted">·</span>')) + '</td>'; }).join('') + '</tr>'; }).join('') +
     '</tbody></table></div><div class="legend">' + BASE.products.map(function (p) { return '<span><span class="pc pc-' + p.id + '">' + p.id + '</span> ' + PN[p.id] + '</span>'; }).join('') + '<span>Days after the last run use the recent average pace.</span></div>';
   // 2. horizon
   var rows = fc.results.filter(function (r) { return r.active; }).map(function (r) {
@@ -396,7 +396,7 @@ function vForecast(fc) {
     [['End of week', U.addDays(U.weekStart(TODAY), 6)], ['+30 days', U.addDays(TODAY, 30)], ['+60 days', U.addDays(TODAY, 60)], ['+90 days', U.addDays(TODAY, 90)]].map(function (o) { return '<button class="btn' + (o[1] === until ? ' primary' : '') + '" data-until="' + o[1] + '">' + o[0] + '</button>'; }).join('') + '</div></div>' +
     '<p class="small muted" style="margin:6px 0 12px">From today ' + U.nice(TODAY) + ' to ' + U.nice(until) + ' (' + U.diffDays(TODAY, until) + ' days). Click a material to see it day by day.</p>' +
     '<div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Stock today</th><th class="n">Will use</th><th class="n">Arriving</th><th class="n">Stock on ' + U.nice(until) + '</th><th>Runs out</th><th>Order by</th><th>Status</th></tr></thead><tbody>' +
-    rows.map(function (x) { var r = x.r; return '<tr class="pick' + (x.end < 0 ? ' neg' : '') + (S.fmat === r.id ? ' sel' : '') + '" data-fm="' + r.id + '"><td><b>' + esc(r.name) + '</b> <span class="small muted">' + r.unit + '</span></td><td class="n">' + fmtN(Math.max(0, x.start)) + '</td><td class="n">' + fmtN(x.use) + '</td><td class="n">' + (x.rec ? '+' + fmtN(x.rec) : '') + '</td><td class="n"><b>' + fmtN(x.end) + '</b></td><td>' + (r.runOut ? U.nice(r.runOut) : '–') + '</td><td>' + (r.status === 'order' ? '<b style="color:var(--red)">Now</b>' : r.orderBy ? U.nice(r.orderBy) : '–') + '</td><td><span class="chip ' + r.status + '"><span class="dot"></span>' + STATUS[r.status] + '</span></td></tr>'; }).join('') +
+    rows.map(function (x) { var r = x.r; return '<tr class="pick' + (x.end < 0 ? ' neg' : '') + (S.fmat === r.id ? ' sel' : '') + '" data-fm="' + r.id + '"><td><b>' + esc(r.name) + '</b> <span class="small muted">' + r.unit + '</span></td><td class="n">' + fmtN(Math.max(0, x.start)) + '</td><td class="n">' + fmtN(x.use) + '</td><td class="n">' + (x.rec ? '+' + fmtN(x.rec) : '') + '</td><td class="n"><b>' + fmtN(x.end) + '</b></td><td>' + ((typeof runOutHTML === 'function' ? runOutHTML(r) : (r.runOut ? U.nice(r.runOut) : '–'))) + '</td><td>' + (r.status === 'order' ? '<b style="color:var(--red)">Now</b>' : r.orderBy ? U.nice(r.orderBy) : '–') + '</td><td><span class="chip ' + r.status + '"><span class="dot"></span>' + STATUS[r.status] + '</span></td></tr>'; }).join('') +
     '</tbody></table></div><p class="hint">A negative stock on the date means the plan cannot be produced without new stock arriving first.</p></div>';
   // 3. day by day
   var act = fc.results.filter(function (r) { return r.active; });
@@ -745,6 +745,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611031011"></script>
-<script src="js/recipe-variants.js?v=202611031011"></script>
+<script src="js/materials-page.js?v=202611031224"></script>
+<script src="js/recipe-variants.js?v=202611031224"></script>
 </body></html>

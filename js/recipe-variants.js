@@ -104,3 +104,32 @@
     return h;
   };
 })();
+
+/* ---------- run-out: the ACTUAL date (no deliveries counted) and, in brackets, the EXPECTED date with the deliveries still to come ---------- */
+function runOutBoth(r) {
+  var cum = 0, act = null;
+  (r.daily || []).forEach(function (x) { if (x.date < TODAY) return; cum += Number(x.received) || 0; if (act === null && r.weekly > 0 && x.closing - cum <= 0) act = x.date; });
+  var due = (r.openOrders || []).filter(function (o) { return o.eta >= TODAY && o.qty > 0; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
+  return { actual: act, expected: r.runOut, orders: due };
+}
+function runOutHTML(r, long) {
+  var b = runOutBoth(r), unit = r.unit || '';
+  var a = b.actual ? U.nice(b.actual) : 'not in 26 wk', e = b.expected ? U.nice(b.expected) : 'not in 26 wk';
+  var h = '<b>' + a + '</b>' + (b.orders.length && a !== e ? ' <span class="small muted">(' + e + ' with deliveries)</span>' : '');
+  if (b.orders.length && (long || a !== e)) h += '<div class="small muted" style="line-height:1.35;margin-top:2px">' + b.orders.map(function (o) { return '+' + fmtN(o.qty) + ' ' + esc(unit) + ' on ' + U.nice(o.eta) + (o.ref ? ' · ' + esc(String(o.ref).split('·')[0].trim()) : ''); }).join('<br>') + '</div>';
+  return h;
+}
+(function () {
+  var _c = card;
+  card = function (r) {
+    var h = _c(r);
+    return h.replace(/<dt>Runs out<\/dt><dd>[^<]*<\/dd>/, '<dt title="Without deliveries; in brackets: with the deliveries still to come">Runs out</dt><dd>' + runOutHTML(r) + '</dd>');
+  };
+  if (typeof vMaterial === 'function') {
+    var _vm = vMaterial;
+    vMaterial = function (fc) {
+      var h = _vm(fc), r = fc.results.filter(function (x) { return x.id === S.mat; })[0]; if (!r) return h;
+      return h.replace(/(<span class="l">Runs out<\/span><span class="v" style="font-size:22px">)[^<]*(<\/span>)/, '$1' + (runOutBoth(r).actual ? U.nice(runOutBoth(r).actual) : 'Not in 26 wk') + '$2<span class="small" style="display:block">' + (runOutBoth(r).orders.length ? '(' + (r.runOut ? U.nice(r.runOut) : 'not in 26 wk') + ' with deliveries)' : '') + '</span>' + (runOutBoth(r).orders.length ? '<span class="small muted" style="display:block">' + runOutBoth(r).orders.map(function (o) { return '+' + fmtN(o.qty) + ' ' + esc(r.unit) + ' on ' + U.nice(o.eta); }).join(' · ') + '</span>' : ''));
+    };
+  }
+})();
