@@ -111,7 +111,7 @@ function daysToRuns(days) {
   var by = {}; days.forEach(function (d) { var k = d.product + '|' + (d.sec === 'S1' ? 'SEC-1' : 'SEC-2') + '|' + (d.batches || '') + '|' + (d.size || ''); (by[k] = by[k] || []).push(d.date); });
   var runs = [];
   Object.keys(by).forEach(function (k) {
-    var p = k.split('|'), ds = by[k].filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(), start = ds[0], prev = ds[0], sat = 'none';
+    var p = k.split('|'), ds = by[k].filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(), start = ds[0], prev = ds[0], sat = p[1]; /* Saturday: the same line, as in the file */
     function close(end) {
       var cs = days.filter(function (x) { return x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end && x.cartons > 0; }).map(function (x) { return x.cartons; });
       /* a carton number written on each day of the run = cartons for THAT day (e.g. 1,680 on 7 Nov and 1,680 on 8 Nov = 1,680 a day);
@@ -121,7 +121,7 @@ function daysToRuns(days) {
       if (cs.length && !same) { dcm = {}; days.forEach(function (x) { if (x.product === p[0] && (x.sec === 'S1' ? 'SEC-1' : 'SEC-2') === p[1] && (x.size || '') === (p[3] || '') && x.date >= start && x.date <= end && x.cartons > 0) dcm[x.date] = x.cartons; }); }
       runs.push({ product: p[0], size: p[3] || '', from: start, to: end, lines: p[1], sat: sat, batches: p[2] ? +p[2] : null, cartons: same ? cs[0] : null, dayCartons: dcm }); }
     ds.forEach(function (d, i) {
-      if (i && U.diffDays(prev, d) > 2) { close(prev); start = d; sat = 'none'; }
+      if (i && U.diffDays(prev, d) > 2) { close(prev); start = d; sat = p[1]; }
       if (new Date(d + 'T00:00:00Z').getUTCDay() === 6) sat = p[1];
       prev = d;
     });
