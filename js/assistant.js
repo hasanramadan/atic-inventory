@@ -72,7 +72,7 @@
     var q = q0.toLowerCase(), fc = DATA.fc, m = fc.model, mats = findMats(q), ar = /[؀-ۿ]/.test(q0), out = [];
     var has = function (re) { return re.test(q); };
     if (has(/\blot\b|لوت|رقم التشغيل/)) { var d0 = dayOf(q); return 'Lot for ' + nice(d0) + ': ' + (A.lot ? A.lot(d0) : '–'); }
-    if (has(/produc(ed|tion)|made|carton|ctn|boxes|box\b|stop|stoppage|downtime|filled|yesterday.*(line|section)|what happened|انتجنا|أنتجنا|كراتين|كرتون|توقف|توقفات|عملنا/) && !has(/plan|will|next|tomorrow|خطة|بكرا|غدا/)) {
+    if (has(/produc|made|carton|ctn|boxes|box\b|stop|stoppage|downtime|filled|yesterday.*(line|section)|what happened|انتجنا|أنتجنا|كراتين|كرتون|توقف|توقفات|عملنا/) && !has(/plan|will|next|tomorrow|going to|خطة|بكرا|غدا|رح ن/)) {
       var week = has(/week|اسبوع|أسبوع/), L3 = lineOf(q), byDay = {};
       DATA.acts.forEach(function (a) { if (a && a.date) (byDay[a.date] = byDay[a.date] || []).push(a); });
       var dates = Object.keys(byDay).sort(), dd;
