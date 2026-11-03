@@ -45,14 +45,25 @@ function bestSheet(book) {
   });
   return best != null ? best : late;
 }
-function importPlan(file, stage, pick) {
+/* Read a plan file: ANY dates (any month, any year). A workbook is read sheet by sheet; you tick the sheets to use
+   (by default every sheet that looks like a month plan, or the one with the coming days). */
+function importPlan(file, stage, picks) {
   X.readFile(file).then(function (book) {
-    var idx = pick != null ? pick : bestSheet(book);
-    var one = idx == null ? book : { name: book.name, sheets: [Object.assign({}, book.sheets[idx], { hidden: false })] };
-    var g = X.planGrid(one, { ref: TODAY });
-    var from = U.weekStart(TODAY);
-    var days = g.days.filter(function (d) { return d.date >= from && d.date <= U.addDays(TODAY, 120); });
-    planDialog(book, g, days, stage, { file: file, idx: idx });
+    var per = book.sheets.map(function (sh, i) {
+      var g; try { g = X.planGrid({ name: book.name, sheets: [Object.assign({}, sh, { hidden: false })] }, { ref: TODAY }); } catch (e) { g = { days: [], notes: [], datesSeen: 0, productsSeen: 0 }; }
+      var ds = g.days.map(function (d) { return d.date; }).sort();
+      return { i: i, name: sh.name, hidden: !!sh.hidden, g: g, n: g.days.length, from: ds[0], to: ds[ds.length - 1], month: !!sheetMonth(sh.name) };
+    });
+    if (!picks) {
+      if (book.sheets.length === 1) picks = [0];
+      else { picks = per.filter(function (p) { return p.month && p.n > 0; }).map(function (p) { return p.i; }); if (!picks.length) { var b = bestSheet(book); picks = b != null ? [b] : per.filter(function (p) { return p.n > 0; }).map(function (p) { return p.i; }); } }
+    }
+    var seen = {}, days = [], notes = [], g = { days: [], notes: notes, datesSeen: 0, productsSeen: 0 };
+    picks.forEach(function (i) { var p = per[i]; if (!p) return; g.datesSeen += p.g.datesSeen; g.productsSeen += p.g.productsSeen; p.g.notes.forEach(function (n) { notes.push(n); });
+      p.g.days.forEach(function (d) { var k = d.product + '|' + (d.size || '') + '|' + d.sec + '|' + d.date; if (seen[k]) return; seen[k] = 1; days.push(d); }); });
+    days.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.sec < b.sec ? -1 : 1; });
+    g.days = days;
+    planDialog(book, g, days, stage, { file: file, picks: picks, per: per });
   }).catch(function (e) { toast(e.message || String(e)); });
 }
 function planDialog(book, g, days, stage, ctx) {
@@ -61,7 +72,7 @@ function planDialog(book, g, days, stage, ctx) {
   var cell = function (date, sec) { return days.filter(function (d) { return d.date === date && d.sec === sec; }).map(function (d) { return '<span class="pc pc-' + d.product + '">' + d.product + '</span>' + (d.size ? ' <span class="small">' + esc(d.size) + '</span>' : '') + (d.batches ? ' <span class="small muted">' + fmtN(d.batches) + ' bt</span>' : ''); }).join('<br>') || '<span class="muted">·</span>'; };
   var h = '<div class="xd" role="dialog" aria-modal="true" aria-label="Factory plan"><header><div><h2>Factory plan from Excel</h2><p class="small muted" style="margin:4px 0 0">' + esc(book.name) + ' · ' + book.sheets.length + ' sheet' + (book.sheets.length === 1 ? '' : 's') + '</p></div><button class="btn ghost" data-x="close" aria-label="Close">✕</button></header><div class="body">';
   if (days.length) {
-    h += '<p class="sum" style="margin:0">Found <b>' + days.length + '</b> line-days from <b>' + U.nice(dates[0]) + '</b> to <b>' + U.nice(dates[dates.length - 1]) + '</b>. Check them, then use them. Days before this week are left out.</p>';
+    h += '<p class="sum" style="margin:0">Found <b>' + days.length + '</b> line-days from <b>' + U.nice(dates[0]) + '</b> to <b>' + U.nice(dates[dates.length - 1]) + '</b>. Check them, then use them.</p>';
     h += '<div class="tablewrap" style="max-height:380px"><table><thead><tr><th>Day</th><th>Section 1</th><th>Section 2</th></tr></thead><tbody>' + dates.map(function (d) { return '<tr><td>' + DAYS[new Date(d + 'T00:00:00Z').getUTCDay()] + ' ' + U.nice(d) + '</td><td>' + cell(d, 'S1') + '</td><td>' + cell(d, 'S2') + '</td></tr>'; }).join('') + '</tbody></table></div>';
   } else {
     var all = g.days.map(function (d) { return d.date; }).sort(), sh = ctx && ctx.idx != null ? book.sheets[ctx.idx].name : null;
@@ -71,9 +82,12 @@ function planDialog(book, g, days, stage, ctx) {
   }
   if (g.notes.length) h += '<ul class="skips">' + g.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>';
   h += '</div><footer><button class="btn ghost" data-x="table" style="margin-right:auto">Read as a table instead</button><button class="btn" data-x="close">Cancel</button><button class="btn primary" data-x="apply"' + (days.length ? '' : ' disabled') + '>Use this plan</button></footer></div>';
-  if (ctx && book.sheets.length > 1) h = h.replace('<div class="body">', '<div class="body"><label class="small" style="display:flex;gap:8px;align-items:center">Sheet <select id="pgSheet">' + book.sheets.map(function (sh, i) { return '<option value="' + i + '"' + (i === ctx.idx ? ' selected' : '') + '>' + esc(sh.name) + (sh.hidden ? ' (hidden)' : '') + '</option>'; }).join('') + '<option value="all"' + (ctx.idx == null ? ' selected' : '') + '>All sheets</option></select><span class="muted">' + book.sheets.length + ' sheets in this file</span></label>');
+  if (ctx && ctx.per && book.sheets.length > 1) h = h.replace('<div class="body">', '<div class="body"><details' + (days.length ? '' : ' open') + '><summary class="small"><b>Sheets used: ' + ctx.picks.length + ' of ' + book.sheets.length + '</b> · tick any sheets (any month or year)</summary><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 14px;margin-top:8px;max-height:220px;overflow:auto">' + ctx.per.map(function (p) { return '<label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="pgS" value="' + p.i + '"' + (ctx.picks.indexOf(p.i) >= 0 ? ' checked' : '') + (p.n ? '' : ' disabled') + '> <span><b>' + esc(p.name) + '</b>' + (p.hidden ? ' <span class="muted">(hidden)</span>' : '') + '<br><span class="muted">' + (p.n ? p.n + ' line-days · ' + U.nice(p.from) + ' ' + p.from.slice(0, 4) + ' – ' + U.nice(p.to) + ' ' + p.to.slice(0, 4) : 'no plan found') + '</span></span></label>'; }).join('') + '</div><div class="row" style="margin-top:6px"><button type="button" class="btn ghost" id="pgAll" style="padding:4px 10px;font-size:12px">All sheets</button><button type="button" class="btn ghost" id="pgNone" style="padding:4px 10px;font-size:12px">None</button></div></details>');
   back.innerHTML = h;
-  var pgs = back.querySelector('#pgSheet'); if (pgs) pgs.onchange = function () { back.remove(); importPlan(ctx.file, stage, pgs.value === 'all' ? null : +pgs.value); };
+  var rerun = function (list) { back.remove(); importPlan(ctx.file, stage, list); };
+  back.querySelectorAll('.pgS').forEach(function (c) { c.onchange = function () { rerun([].slice.call(back.querySelectorAll('.pgS:checked')).map(function (x) { return +x.value; })); }; });
+  var pa = back.querySelector('#pgAll'); if (pa) pa.onclick = function () { rerun(ctx.per.filter(function (p) { return p.n > 0; }).map(function (p) { return p.i; })); };
+  var pn = back.querySelector('#pgNone'); if (pn) pn.onclick = function () { rerun([]); };
   back.querySelectorAll('[data-x="close"]').forEach(function (b) { b.onclick = function () { back.remove(); }; });
   back.querySelector('[data-x="table"]').onclick = function () { back.remove(); planAsTable(book, stage); };
   var ap = back.querySelector('[data-x="apply"]'); if (ap) ap.onclick = function () { back.remove(); stage(daysToRuns(days), book.name, {}); toast('Read ' + days.length + ' line-days from ' + book.name + '. Check them, then press Save plan.'); };
