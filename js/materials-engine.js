@@ -19,7 +19,7 @@
     (list || []).forEach(function (o) {
       if (!o || !o.material || o.status === 'cancelled') return;
       var f = Number(o.toApp) > 0 ? Number(o.toApp) : 1, got = 0;
-      (o.receipts || []).forEach(function (r) { var q = Number(r.qty) || 0; got += q; if (q && r.date) out.push({ material: o.material, eta: r.date, qty: q * f, received: true, ref: o.ref }); });
+      (o.receipts || []).forEach(function (r) { var q = Number(r.qty) || 0; got += q; if (q && r.date && !r.inCount) out.push({ material: o.material, eta: r.date, qty: q * f, received: true, ref: o.ref }); });
       if (o.status === 'received' || o.status === 'closed') return;
       var rest = (Number(o.qty) || 0) - got;
       if (rest > 0 && o.eta) out.push({ material: o.material, eta: o.eta, qty: rest * f, received: false, ref: o.ref });

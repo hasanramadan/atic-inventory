@@ -560,6 +560,7 @@ function invImportDialog(book, p) {
 function orderGot(o) { return (o.receipts || []).reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0); }
 function orderItem(o) {
   if (o.inv) { var it = invById(o.inv); if (it) return { name: it.name + (it.packTxt ? ' (' + it.packTxt + ')' : ''), unit: o.unit || it.unit }; }
+  if (o.material && typeof invItems === 'function') { var li = invItems().filter(function (i) { return i.mat === o.material && !i.missing && i.toApp > 0; })[0]; if (li) { var m0 = (run.cache ? run.cache.model.materials : BASE.materials).filter(function (x) { return x.id === o.material; })[0]; return { name: (m0 ? m0.name : li.name), unit: o.unit || (m0 ? m0.unit : li.unit), linked: li }; } }
   var m = (run.cache ? run.cache.model.materials : BASE.materials).filter(function (x) { return x.id === o.material; })[0];
   return { name: m ? m.name : (o.material || '?'), unit: o.unit || (m ? m.unit : '') };
 }
@@ -602,7 +603,7 @@ vOrders = function (fc) {
     return '<div class="tablewrap"><table><thead><tr><th>Item</th><th class="n">Ordered</th><th class="n">Received</th><th class="n">Still to come</th><th>Expected</th><th>Reference</th><th>Status</th><th></th></tr></thead><tbody>' + list.map(function (x) {
       var o = x.o, it = orderItem(o), got = orderGot(o), st = orderStatus(o), rest = Math.max(0, (Number(o.qty) || 0) - got);
       var rc = (o.receipts || []).map(function (r) { return U.nice(r.date) + ': ' + fmtN(r.qty) + (r.note ? ' (' + esc(r.note) + ')' : ''); }).join('<br>');
-      return '<tr><td><b>' + esc(it.name) + '</b>' + (o.inv ? '' : '<br><span class="small muted">forecast only, no inventory line</span>') + '</td><td class="n">' + fmtN(o.qty) + ' <span class="small muted">' + esc(it.unit) + '</span></td><td class="n">' + (got ? fmtN(got) : '') + (rc ? '<br><span class="small muted">' + rc + '</span>' : '') + '</td><td class="n">' + (isOpen && rest ? fmtN(rest) : '') + '</td><td>' + (o.eta ? U.nice(o.eta) : '') + '</td><td class="small">' + esc(o.ref || '') + '</td>' +
+      return '<tr><td><b>' + esc(it.name) + '</b>' + (o.inv ? '' : it.linked ? '<br><span class="small muted">received into: ' + esc(it.linked.name) + '</span>' : '<br><span class="small muted">no inventory line: receiving adds to the forecast stock</span>') + '</td><td class="n">' + fmtN(o.qty) + ' <span class="small muted">' + esc(it.unit) + '</span></td><td class="n">' + (got ? fmtN(got) : '') + (rc ? '<br><span class="small muted">' + rc + '</span>' : '') + '</td><td class="n">' + (isOpen && rest ? fmtN(rest) : '') + '</td><td>' + (o.eta ? U.nice(o.eta) : '') + '</td><td class="small">' + esc(o.ref || '') + '</td>' +
         '<td><span class="chip ' + st.k + '">' + esc(st.t) + '</span></td><td style="white-space:nowrap">' + (S.canWrite ? (isOpen ? '<button class="btn primary" data-recv="' + x.i + '">Mark received</button> ' : '') + '<button class="btn ghost" data-del="' + x.i + '">Remove</button>' : '') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   }
@@ -628,6 +629,8 @@ function receiveDialog(items, idx) {
   X.ensureCss();
   var o = JSON.parse(JSON.stringify(items[idx])), it = orderItem(o), got = orderGot(o), q = Number(o.qty) || 0, rest = Math.max(0, q - got);
   var inv = o.inv ? invById(o.inv) : null;
+  /* orders made on a forecast material (e.g. imported from Odoo) go to that material's inventory line too */
+  if (!inv && o.material) { var cand = invItems().filter(function (i) { return i.mat === o.material && !i.missing && i.toApp > 0; }); if (cand.length) { inv = cand[0]; o.toInv = (Number(o.toApp) || 1) / inv.toApp; } }
   var back = document.createElement('div'); back.className = 'xd-back'; document.body.appendChild(back);
   var st = { full: true, qty: rest, date: TODAY, keep: true, eta: o.eta && o.eta > TODAY ? o.eta : U.addDays(TODAY, 7), note: '' };
   function draw() {
@@ -655,7 +658,8 @@ function receiveDialog(items, idx) {
     back.querySelector('#rNote').oninput = function () { st.note = this.value; };
     back.querySelector('[data-x="ok"]').onclick = function () {
       var recv2 = st.full ? rest : (+back.querySelector('#rQty').value || 0); if (!(recv2 > 0)) return;
-      o.receipts = (o.receipts || []).concat([{ date: st.date, qty: recv2, note: st.note, at: new Date().toISOString(), full: !!st.full }]);
+      /* inCount: this receipt is added straight to the count (inventory line and forecast stock), so the forecast does not add it again */
+      o.receipts = (o.receipts || []).concat([{ date: st.date, qty: recv2, note: st.note, at: new Date().toISOString(), full: !!st.full, inCount: true }]);
       var left2 = Math.max(0, rest - recv2);
       if (st.full || left2 <= 1e-9) o.status = 'received';
       else if (st.keep) { o.status = 'partial'; if (st.eta) o.eta = st.eta; }
@@ -667,7 +671,12 @@ function receiveDialog(items, idx) {
         var d = JSON.parse(JSON.stringify(invDoc())), x = d.items.filter(function (i) { return i.id === inv.id; })[0];
         x.qty = Math.round(((Number(x.qty) || 0) + recv2 * o.toInv) * 1000) / 1000; x.source = 'Received ' + U.nice(st.date) + (o.ref ? ' · ' + o.ref : '');
         d.moves = (d.moves || []).concat([{ at: new Date().toISOString(), date: st.date, id: x.id, qty: recv2 * o.toInv, kind: 'receipt', ref: [o.ref, st.note, st.full ? 'full quantity' : 'part: ' + fmtN(recv2) + ' of ' + fmtN(q)].filter(Boolean).join(' · '), by: by }]).slice(-300);
-        p = Promise.resolve(saveDoc('inventory', d));
+        p = Promise.resolve(saveDoc('inventory', d)).then(function () { return syncForecastFromInventory(d.items, 'Received ' + it.name); });
+      }
+      if (!(inv && o.toInv) && o.material) { /* no inventory line: the forecast stock goes up directly */
+        var stk = JSON.parse(JSON.stringify((S.saved.stock && S.saved.stock.items) || {})), cur = stk[o.material] || BASE.stock[o.material] || { qty: 0, asOf: TODAY };
+        stk[o.material] = { qty: Math.round(((Number(cur.qty) || 0) + recv2 * (Number(o.toApp) || 1)) * 1000) / 1000, asOf: cur.asOf || TODAY, source: 'Received ' + U.nice(st.date) + (o.ref ? ' · ' + o.ref : '') + ' (on top of the count of ' + (cur.asOf ? U.nice(cur.asOf) : '–') + ')' };
+        p = Promise.resolve(saveDoc('stock', Object.assign({}, S.saved.stock || {}, { items: stk, updatedAt: new Date().toISOString() })));
       }
       p.then(function () { return saveDoc('orders', { items: list }); }).then(function () {
         if (ATIC.teamPost) ATIC.teamPost('🚚', 'Received ' + (st.full || left2 <= 1e-9 ? 'in full: ' : 'part: ') + fmtN(recv2) + ' ' + it.unit + ' ' + it.name + (o.ref ? ' (' + o.ref + ')' : '') + (o.status === 'partial' ? '; ' + fmtN(left2) + ' still to come' : o.status === 'closed' ? '; order closed short' : '') + '.', { href: 'materials.html#orders', title: 'Orders & receiving' });
