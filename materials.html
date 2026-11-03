@@ -3,7 +3,7 @@
 <title>ATIC Raw Materials</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611030838">
+<link rel="stylesheet" href="css/app.css?v=202611030847">
 <style>td input[data-q]{width:110px}.imp-g td.n input{width:96px}.rec td.bad{color:var(--red);font-weight:600}.rec td.warn{color:var(--amber);font-weight:600}.rec td.good{color:var(--green)}.dd{display:inline-flex;align-items:center;gap:6px}table.inv tr.grp td{background:var(--surface-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}table.inv tr.crit td:first-child{box-shadow:inset 3px 0 0 var(--red)}table.inv tr.gone{opacity:.6}table.inv tr[hidden]{display:none}table.dc .bt{display:inline-flex;gap:4px;align-items:baseline;background:var(--surface-2);border-radius:999px;padding:2px 9px;font-size:12.5px;margin:1px 2px 1px 0}table.dc .bt small{color:var(--muted)}table.dc tr.off td{color:var(--muted);background:var(--surface-2)}table.dc tr[data-dc]{cursor:default}table.dc tfoot td{border-top:2px solid var(--line)}table.dc .sp{display:block;}.bysplit{display:block;margin-top:2px}.bysplit span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:400;font-family:var(--f-body)}.kpi .bysplit span{display:inline;margin-right:8px}table.dc .sp{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}.mono{font-family:var(--f-mono)}table.inv td input[data-invq]{width:110px}
 .oftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ofwrap{position:relative}
 .ofbtn{display:inline-flex;align-items:center;gap:7px;font-weight:600}.ofbtn.on{border-color:var(--brand);color:var(--brand)}
@@ -27,12 +27,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611030838"></script>
-<script src="js/shell.js?v=202611030838"></script>
-<script src="js/io.js?v=202611030838"></script>
-<script src="js/excel.js?v=202611030838"></script>
-<script src="js/materials-engine.js?v=202611030838"></script>
-<script src="js/inventory.js?v=202611030838"></script>
+<script src="config.js?v=202611030847"></script>
+<script src="js/shell.js?v=202611030847"></script>
+<script src="js/io.js?v=202611030847"></script>
+<script src="js/excel.js?v=202611030847"></script>
+<script src="js/materials-engine.js?v=202611030847"></script>
+<script src="js/inventory.js?v=202611030847"></script>
 <script>
 var BASE = null; /* company data loads from the database after sign-in */
 var E = window.ATICEngine, U = E.util;
@@ -225,10 +225,15 @@ function satLines(r) { return r.sat === 'same' ? (r.lines === 'both' ? ['SEC-1',
 function deriveDays(runs, split) {
   split = split || (S.saved.plan && S.saved.plan.split) || {};
   var days = {}, from = null, to = null, slots = {}, lineDays = {}, raw = {}, recipeOf = {};
+  /* A carton order ("whole order", the default) runs at the line's normal pace until its cartons are done; the NEXT run
+     on that line starts the same day on what is left of it (a same-day changeover, found from the cartons alone).
+     "Spread over its days" keeps the old way: the batches are shared evenly over the run's dates. */
+  var flow = [];
   runs.forEach(function (r, ri) {
-    /* a carton order: its batches are spread evenly over the run's days (e.g. 11 batches over 2 days = 6 + 5) */
+    if (r.cartons > 0 && !r.dayCartons && (r.cartonsMode || 'total') === 'total' && bpbOf(r.product, r.size)) { flow.push(ri); if (!from || r.from < from) from = r.from; if (!to || r.to > to) to = r.to; return; }
+    /* "spread": the batches are spread evenly over the run's days (e.g. 11 batches over 2 days = 6 + 5) */
     var perDayC = r.cartonsMode === 'day' && r.cartons > 0 ? Math.ceil(r.cartons / (bpbOf(r.product, r.size) || 1)) : null;
-    var left = perDayC == null && !r.dayCartons ? cartonBatches(r) : null, nld = 0;
+    var left = perDayC == null && !r.dayCartons && r.cartonsMode === 'spread' ? cartonBatches(r) : null, nld = 0;
     if (left != null) for (var d0 = r.from; d0 <= r.to; d0 = U.addDays(d0, 1)) { var w0 = new Date(d0 + 'T00:00:00Z').getUTCDay(); if (w0 !== 5) nld += (w0 === 6 ? satLines(r) : (r.lines === 'both' ? ['SEC-1', 'SEC-2'] : [r.lines])).length; }
     for (var d = r.from; d <= r.to; d = U.addDays(d, 1)) {
       var w = new Date(d + 'T00:00:00Z').getUTCDay(); if (w === 5) continue;
@@ -240,6 +245,46 @@ function deriveDays(runs, split) {
         (raw[d + '|' + s] = raw[d + '|' + s] || []).push({ product: r.product, size: r.size || '', recipe: r.recipe || '', fixed: fx, run: ri }); });
     }
     if (!from || r.from < from) from = r.from; if (!to || r.to > to) to = r.to;
+  });
+  var used = {}; /* share of a line-day already taken by carton orders */
+  var lineOf = function (r) { return r.lines === 'both' ? ['SEC-1', 'SEC-2'] : [r.lines]; };
+  var isWork = function (r, d, s) { var w = new Date(d + 'T00:00:00Z').getUTCDay(); if (w === 5) return false; return (w === 6 ? satLines(r) : lineOf(r)).indexOf(s) >= 0; };
+  flow.sort(function (a, b) { return runs[a].from < runs[b].from ? -1 : runs[a].from > runs[b].from ? 1 : a - b; });
+  var lastEnd = {}; /* line → { d, part }: where the previous carton order on it finished */
+  flow.forEach(function (ri) {
+    var r = runs[ri], L = lineOf(r), total = cartonBatches(r);
+    L.forEach(function (s, li) {
+      var left = li < L.length - 1 ? Math.ceil(total / L.length) : total - Math.ceil(total / L.length) * (L.length - 1);
+      var rate = r.batches > 0 ? Number(r.batches) : estBatches(r.product, r.size, s).b, d = r.from, guard = 0, end = null;
+      if (lastEnd[s] && lastEnd[s].d > d) d = lastEnd[s].d; /* starts when the order before it on this line is done */
+      while (left > 0 && guard++ < 120) {
+        /* inside its dates it follows its own Saturday rule; running late it keeps working the line's normal days */
+        var ok = d <= r.to ? isWork(r, d, s) : new Date(d + 'T00:00:00Z').getUTCDay() !== 5;
+        if (ok) {
+          var k = d + '|' + s, av = Math.max(0, 1 - (used[k] || 0));
+          if (av > 0.02) {
+            if (d > r.to && raw[k]) raw[k] = raw[k].filter(function (x) { return x.flow; }); /* running late: it keeps the line */
+            var take = Math.min(left, Math.max(1, Math.round(rate * av)));
+            (raw[k] = raw[k] || []).push({ product: r.product, size: r.size || '', recipe: r.recipe || '', fixed: take, run: ri, flow: true });
+            used[k] = (used[k] || 0) + take / rate; left -= take; end = { d: d, part: used[k] };
+          }
+        }
+        if (left > 0) d = U.addDays(d, 1);
+      }
+      if (!end) return;
+      lastEnd[s] = end; if (!to || end.d > to) to = end.d;
+      /* the rest of that day, and any planned days of this order it no longer needs, go to the next run on this line */
+      var nx = runs.map(function (x, i) { return { x: x, i: i }; }).filter(function (o) { return o.i !== ri && lineOf(o.x).indexOf(s) >= 0 && o.x.from > r.from && o.x.from <= U.addDays(r.to, 3); }).sort(function (a, b) { return a.x.from < b.x.from ? -1 : 1; })[0];
+      if (!nx || flow.indexOf(nx.i) >= 0) return; /* a following carton order simply starts where this one ended */
+      var n = nx.x, nrate = n.batches > 0 ? Number(n.batches) : estBatches(n.product, n.size, s).b, rest = 1 - end.part;
+      var k2 = end.d + '|' + s;
+      if (rest > 0.1 && !(raw[k2] || []).some(function (x) { return x.run === nx.i; })) (raw[k2] = raw[k2] || []).push({ product: n.product, size: n.size || '', recipe: n.recipe || '', fixed: Math.round(nrate * rest), run: nx.i, flow: true, early: true });
+      for (var g = U.addDays(end.d, 1); g < n.from; g = U.addDays(g, 1)) {
+        if (new Date(g + 'T00:00:00Z').getUTCDay() === 5) continue; var k3 = g + '|' + s; if (raw[k3] && raw[k3].length) continue;
+        if (g > r.to) break;
+        raw[k3] = [{ product: n.product, size: n.size || '', recipe: n.recipe || '', fixed: nrate, run: nx.i, flow: true, early: true }];
+      }
+    });
   });
   /* Build each line day by day. A CHANGEOVER happens when the line switches product or size: from the last run of the
      working day before, or between two runs sharing a day. The time lost (learned by the Line Planner: size ≈ 18 min,
@@ -296,8 +341,8 @@ function vForecast(fc) {
     var rl = recipeList(r.product);
     return '<tr><td><b>' + PN[r.product] + '</b>' + (rl.length > 1 ? '<br><select class="rrec" data-ri="' + i + '" aria-label="Recipe" style="margin-top:4px;font-size:13px">' + rl.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === (r.recipe || '') ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select>' : '') + '</td><td>' + (r.size ? esc(r.size) : '<span class="muted">–</span>') + '</td><td>' + U.nice(r.from) + '</td><td>' + U.nice(r.to) + '</td><td>' + (r.lines === 'both' ? 'Both lines' : LINES[r.lines]) + '</td><td>' + ({ none: 'No work', same: 'Same line' + (r.lines === 'both' ? 's' : ''), both: 'Both lines', 'SEC-1': 'Line 1 only', 'SEC-2': 'Line 2 only' }[r.sat || 'none']) + '</td>' +
       '<td class="n"><input type="number" min="0" step="1" class="bpd" data-ri="' + i + '" value="' + (r.batches > 0 ? r.batches : '') + '" placeholder="≈ ' + e.b + '" style="width:72px;text-align:right" title="Leave empty to use the estimate"><div class="small muted" style="white-space:nowrap">' + (r.batches > 0 ? 'Set by you' : estTxt) + '</div></td>' +
-      '<td class="n"><input type="number" min="0" step="1" class="ctn" data-ri="' + i + '" value="' + (r.cartons > 0 ? r.cartons : '') + '" placeholder="–" style="width:86px;text-align:right" title="Cartons to make: the batches follow from it"><div class="small muted" style="white-space:nowrap">' + (r.dayCartons ? 'per day from the file' : r.cartons > 0 ? '= ' + (r.cartonsMode === 'day' ? Math.ceil(r.cartons / bpbOf(r.product, r.size)) + ' batches a day' : cartonBatches(r) + ' batches in all') + ' (' + Math.round(bpbOf(r.product, r.size)) + ' ctn/batch)' : 'any amount') + '</div>' +
-      (r.cartons > 0 ? '<select class="ctm" data-ri="' + i + '" style="font-size:12px;margin-top:2px"><option value="total"' + (r.cartonsMode !== 'day' ? ' selected' : '') + '>whole order</option><option value="day"' + (r.cartonsMode === 'day' ? ' selected' : '') + '>each day</option></select>' : '') + '</td><td><button class="btn ghost" data-rr="' + i + '">Remove</button></td></tr>';
+      '<td class="n"><input type="number" min="0" step="1" class="ctn" data-ri="' + i + '" value="' + (r.cartons > 0 ? r.cartons : '') + '" placeholder="–" style="width:86px;text-align:right" title="Cartons to make: the batches follow from it"><div class="small muted" style="white-space:nowrap">' + (r.dayCartons ? 'per day from the file' : r.cartons > 0 ? '= ' + (r.cartonsMode === 'day' ? Math.ceil(r.cartons / bpbOf(r.product, r.size)) + ' batches a day' : cartonBatches(r) + ' batches in all' + (r.cartonsMode === 'spread' ? '' : ', then the next run starts')) + ' (' + Math.round(bpbOf(r.product, r.size)) + ' ctn/batch)' : 'any amount') + '</div>' +
+      (r.cartons > 0 ? '<select class="ctm" data-ri="' + i + '" style="font-size:12px;margin-top:2px"><option value="total"' + (!r.cartonsMode || r.cartonsMode === 'total' ? ' selected' : '') + '>whole order · next starts when done</option><option value="spread"' + (r.cartonsMode === 'spread' ? ' selected' : '') + '>whole order · spread over its days</option><option value="day"' + (r.cartonsMode === 'day' ? ' selected' : '') + '>each day</option></select>' : '') + '</td><td><button class="btn ghost" data-rr="' + i + '">Remove</button></td></tr>';
   }).join('') + '</tbody></table></div>';
   h += '<div class="row" style="margin-top:12px">' +
     '<select id="rP">' + BASE.products.map(function (p) { return '<option value="' + p.id + '">' + PN[p.id] + '</option>'; }).join('') + '</select>' +
@@ -643,6 +688,6 @@ after.history = function () {
 function go(v) { S.view = v; if (v !== 'material') { try { history.replaceState(null, '', '#' + v); } catch (e) {} } render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== S.view) { S.view = h; render(); } });
 </script>
-<script src="js/materials-page.js?v=202611030838"></script>
-<script src="js/recipe-variants.js?v=202611030838"></script>
+<script src="js/materials-page.js?v=202611030847"></script>
+<script src="js/recipe-variants.js?v=202611030847"></script>
 </body></html>
