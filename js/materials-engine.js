@@ -77,6 +77,7 @@
     m.settings = Object.assign({ basisWeeks: 8 }, saved.settings || {});
     m.actualDays = saved.actualDays || {};
     m.dailyAdj = saved.dailyAdj || {};
+    m.useFactor = saved.useFactor || {}; /* learned from the inventory counts: real use ÷ what the recipes say, per material */
     m.recentPace = saved.recentPace || null; /* hand corrections from Daily consumption: { date: { materialId: extra (+/-) } } */
     m.actualSections = saved.actualSections || {}; /* sections with an actual entered that day (even 0 batches) */ /* batches really prepared, from the Line Planner actuals: { date: { 'GM|SEC-2': 13 } } */
     return m;
@@ -165,7 +166,7 @@
       var r = (vr ? vr[it.section] : (m.recipes[it.product] || {})[it.section]) || {};
       var q = Number(r[matId]) || 0;
       if (!q) return;
-      var u = q * it.batches;
+      var u = q * it.batches * ((m.useFactor && m.useFactor[matId]) || 1);
       total += u; by[it.product] = (by[it.product] || 0) + u;
     });
     return { total: total, by: by };

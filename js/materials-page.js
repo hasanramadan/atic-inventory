@@ -976,11 +976,42 @@ function usToMat(snap) {
   });
   return { qty: out, miss: miss };
 }
-function usReceived(from, to) { // receipts after `from`, up to and including `to`
+function usReceived(from, to) { // receipts after `from`, up to and including `to` (also those added straight to the count)
   var out = {};
-  E.orderEvents((S.saved.orders && S.saved.orders.items) || []).forEach(function (o) { if (o.received && o.eta > from && o.eta <= to) out[o.material] = (out[o.material] || 0) + (Number(o.qty) || 0); });
+  ((S.saved.orders && S.saved.orders.items) || []).forEach(function (o) { if (!o || !o.material || o.status === 'cancelled') return; var f = Number(o.toApp) > 0 ? Number(o.toApp) : 1;
+    (o.receipts || []).forEach(function (r) { if (r.date && r.date > from && r.date <= to) out[o.material] = (out[o.material] || 0) + (Number(r.qty) || 0) * f; }); });
   return out;
 }
+/* ---------- the forecast LEARNS from every new inventory count ----------
+   Between two counts: really used = count before + received − count after; the batches made (Line Planner) × recipe
+   say what should have been used. real ÷ recipe, per material, averaged over the periods (newest weighs most),
+   is applied to every future estimate of that material. A period is used only when the Line Planner has most of its days. */
+function learnUse() {
+  if (!run.cache && !BASE) return {};
+  var counts = usCounts(), key = counts.map(function (c) { return c.date + c.at; }).join() + '|' + Object.keys(LP.days).length + '|' + ((S.saved.orders && S.saved.orders.items) || []).length;
+  if (learnUse.k === key) return learnUse.v;
+  var model = E.buildModel(BASE, { materials: S.saved.materials, recipes: S.saved.recipes }), per = [], out = {};
+  for (var i = 1; i < counts.length; i++) {
+    var a = counts[i - 1], b = counts[i]; if (!(b.date > a.date)) continue;
+    var p = usPeriod(model, a, b); if (p.days < 3 || p.missing.length > p.days * 0.3) continue; per.push(p);
+  }
+  var acc = {};
+  per.forEach(function (p, j) { var w0 = Math.pow(0.5, per.length - 1 - j); p.rows.forEach(function (r) { if (!(r.expected > 0) || r.used < 0) return; var a2 = acc[r.id] = acc[r.id] || { sw: 0, s: 0, n: 0, last: null }; var w = w0 * r.expected; a2.sw += w; a2.s += w * (r.used / r.expected); a2.n++; a2.last = { from: p.from, to: p.to, used: r.used, expected: r.expected }; }); });
+  Object.keys(acc).forEach(function (id) { var f = Math.max(0.5, Math.min(2, acc[id].s / acc[id].sw)); out[id] = { f: Math.abs(f - 1) < 0.03 ? 1 : Math.round(f * 1000) / 1000, raw: f, n: acc[id].n, last: acc[id].last }; });
+  learnUse.k = key; learnUse.v = out; return out;
+}
+(function () {
+  var _sfe = savedForEngine;
+  savedForEngine = function () { var s = _sfe(); if ((S.saved.settings || {}).learnUse !== false) { var L = {}; try { L = learnUse(); } catch (e) { L = {}; } s.useFactor = {}; Object.keys(L).forEach(function (k) { if (L[k].f !== 1) s.useFactor[k] = L[k].f; }); } return s; };
+  var _c = card;
+  card = function (r) {
+    var h = _c(r), L = {}; try { L = learnUse(); } catch (e) {}
+    var x = L[r.id]; if (!x) return h;
+    var pct = Math.round((x.f - 1) * 100), off = (S.saved.settings || {}).learnUse === false;
+    var t = '<dt title="Real use from your inventory counts compared with batches × recipe">Learned from counts</dt><dd>' + (x.f === 1 ? 'Recipes match the counts' : (pct > 0 ? '+' : '') + pct + '% vs recipes') + ' <span class="small muted">(' + x.n + ' period' + (x.n === 1 ? '' : 's') + ', last ' + U.nice(x.last.from) + '–' + U.nice(x.last.to) + ': used ' + fmtN(x.last.used) + ', recipes ' + fmtN(x.last.expected) + ')' + (off ? ' · not applied' : '') + '</span></dd>';
+    return h.indexOf('</dl>') >= 0 ? h.replace('</dl>', t + '</dl>') : h;
+  };
+})();
 function usExpected(model, from, to) { // days after `from` up to `to`: batches prepared × recipe
   var out = {}, days = 0, missing = [];
   for (var d = U.addDays(from, 1); d <= to; d = U.addDays(d, 1)) {
