@@ -246,7 +246,7 @@
   var SEC_RX = /(?:sec(?:tion)?|line|خط)\s*[-#:]?\s*([12])\b/i;
   function planGrid(book, opts) {
     opts = opts || {}; var ref = opts.ref || new Date().toISOString().slice(0, 10), year = +ref.slice(0, 4);
-    var hits = {}, notes = [], datesSeen = 0, prodSeen = 0, wkChecked = 0, wkWrong = 0;
+    var hits = {}, notes = [], datesSeen = 0, prodSeen = 0, wkChecked = 0, wkWrong = 0, wkFixed = 0;
     book.sheets.forEach(function (sh) {
       if (sh.hidden) return;
       var rows = sh.rows, blocks = [];
@@ -271,7 +271,9 @@
           if (b.qcol != null) { var qv = toNumber(row[b.qcol]); if (qv != null && qv > 0 && !(row[b.qcol] instanceof Date)) cartons = qv; }
           for (var c = b.start; c < Math.min(row.length, b.end); c++) {
             var v = row[c]; if (v === '' || v == null) continue;
-            if (!d) { var dd = cellDate(v, year, ref); if (dd) { d = dd; var wn = /(sun|mon|tue|wed|thu|fri|sat)/i.exec(toText(v)); if (wn) { wkChecked++; if (['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(wn[1].toLowerCase()) !== new Date(dd + 'T00:00:00Z').getUTCDay()) wkWrong++; } continue; } }
+            if (!d) { var dd = cellDate(v, year, ref); if (dd) { d = dd; var wn = /(sun|mon|tue|wed|thu|fri|sat)/i.exec(toText(v)); if (wn) { wkChecked++; var wi = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(wn[1].toLowerCase()); if (wi !== new Date(dd + 'T00:00:00Z').getUTCDay()) { wkWrong++;
+              /* the weekday decides the year: "Saturday 1/11" is 1 Nov 2025, not 2026 */
+              [-1, 1, -2].some(function (k) { var alt = (+dd.slice(0, 4) + k) + dd.slice(4); if (new Date(alt + 'T00:00:00Z').getUTCDay() === wi) { d = alt; wkFixed++; return true; } return false; }); } } continue; } }
             if (!p) { var pp = productOf(v); if (pp) { p = pp; size = sizeOf(v); continue; } }
             if (p && !size) { var ss = sizeOf(v); if (ss) { size = ss; continue; } }
             if (p && batches == null && c !== b.qcol && (b.bcol == null || c === b.bcol) && !(v instanceof Date) && !/\d\s*[\/.-]\s*\d/.test(toText(v))) { var n = toNumber(v); if (n != null && n > 0 && n <= 40 && typeof v !== 'object') batches = n; }
@@ -293,7 +295,7 @@
       if (mo !== nm.m && dd === nm.m && mo <= 31) { h.date = (nm.y || y) + '-' + String(nm.m).padStart(2, '0') + '-' + String(mo).padStart(2, '0'); h.swapped = true; }
       else if (mo === nm.m && nm.y && y !== nm.y) h.date = nm.y + h.date.slice(4);
     });
-    if (wkChecked >= 3 && wkWrong / wkChecked > 0.5) notes.push('The weekday names do not match these dates in ' + year + ' (e.g. "Saturday 1/11" was in 2025): this sheet is probably from another year. Pick the right sheet above.');
+    if (wkChecked >= 3 && wkWrong / wkChecked > 0.5 && wkFixed < wkWrong * 0.8) notes.push('The weekday names do not match these dates in ' + year + ' (e.g. "Saturday 1/11" was in 2025): this sheet is probably from another year. Pick the right sheet above.');
     var list = Object.keys(hits).map(function (k) { return hits[k]; }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.sec < b.sec ? -1 : a.sec > b.sec ? 1 : String(a.size) < String(b.size) ? -1 : 1; });
     return { days: list, notes: notes, datesSeen: datesSeen, productsSeen: prodSeen };
   }

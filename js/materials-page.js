@@ -31,15 +31,19 @@ function buildLP(acts) {
    for this month (or the next one), visible sheets first; the import window lets you pick another. */
 var MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 function sheetMonth(n) { n = String(n || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' '); for (var i = 0; i < 12; i++) if (new RegExp('\\b' + MONTHS[i]).test(n)) { var y = /\b(20)?(\d{2})\b/.exec(n.replace(/\b\d{1,2}\s*(st|nd|rd|th)?\b(?=\s*[a-z])/, '')); return { m: i + 1, y: y ? 2000 + +y[2] : null }; } return null; }
+/* the sheet to read: the one with the most plan days from this week on (any name, visible or hidden);
+   when no sheet has future days, the one whose days are the most recent */
 function bestSheet(book) {
   if (book.sheets.length < 2) return null;
-  var y = +TODAY.slice(0, 4), m = +TODAY.slice(5, 7), best = null, score = -1e9;
+  var from = U.weekStart(TODAY), to = U.addDays(TODAY, 120), best = null, bs = -1, late = null, ls = '';
   book.sheets.forEach(function (sh, i) {
-    var sm = sheetMonth(sh.name); if (!sm) return;
-    var yy = sm.y || y, diff = (yy - y) * 12 + (sm.m - m), sc = (diff === 0 ? 100 : diff === 1 ? 80 : diff > 0 ? 60 - diff : 40 + diff * 5) + (sh.hidden ? -60 : 0) + (sm.y ? 10 : 0);
-    if (sc > score) { score = sc; best = i; }
+    var g; try { g = X.planGrid({ name: book.name, sheets: [Object.assign({}, sh, { hidden: false })] }, { ref: TODAY }); } catch (e) { return; }
+    var fut = g.days.filter(function (d) { return d.date >= from && d.date <= to; }).length, sc = fut * 10 + (sh.hidden ? 0 : 1);
+    if (fut && sc > bs) { bs = sc; best = i; }
+    var last = g.days.map(function (d) { return d.date; }).filter(function (d) { return d <= to; }).sort().pop() || '';
+    if (g.days.length >= 5 && last > ls) { ls = last; late = i; }
   });
-  return best;
+  return best != null ? best : late;
 }
 function importPlan(file, stage, pick) {
   X.readFile(file).then(function (book) {
