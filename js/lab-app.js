@@ -540,17 +540,17 @@ function bindMicro(){bindCommon()}
 
 /* ---------- TASKS ---------- */
 function tasksView(){
-  const ts=Object.values(S.tasks).sort((a,b)=>(a.done-b.done)||(b.at-a.at));
+  const ts=Object.values(S.tasks).sort((a,b)=>b.at-a.at);
   const mine=isDoctor()?ts:ts.filter(t=>!t.to||t.to===S.me.id);
-  let h='<div class="stack"><h1>Tasks</h1>';
-  if(isDoctor()){
-    const todaySess=Object.values(S.sessions).filter(s=>s.date>=addDays(today(),-3));
-    h+='<div class="card stack"><h3>Send a task to the lab</h3><form id="tf" class="stack"><textarea id="tf-t" required placeholder="e.g. Repeat Brix on GM tank 4 before 11:00"></textarea><div class="row"><label class="field" style="flex:1"><span>For</span><select id="tf-to"><option value="">Whole lab</option>'+Object.values(S.people).filter(p=>p.active!==false&&p.role==='lab').map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select></label><label class="field" style="flex:1"><span>About (optional)</span><select id="tf-s"><option value="">–</option>'+todaySess.map(s=>'<option value="'+s.id+'">'+esc(s.date+' · '+sessLabel(s))+'</option>').join('')+'</select></label></div><div class="row" style="justify-content:flex-end"><button class="primary">Send task</button></div></form></div>';
-  }
-  h+=mine.length?'<div class="card tablewrap"><table><tr><th>Task</th><th>For</th><th>From</th><th>Sent</th><th>Status</th></tr>'+mine.map(t=>'<tr><td>'+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?'<br><button class="ghost small" data-open-session="'+t.sessionId+'">'+esc(sessLabel(S.sessions[t.sessionId]))+'</button>':'')+'</td><td>'+esc(t.to?person(t.to).name:'Whole lab')+'</td><td>'+esc(person(t.from).name)+'</td><td class="small num">'+esc(new Date(t.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(t.at)+'</td><td>'+(t.done?'<span class="pill ok">Done · '+esc(person(t.doneBy).name.split(' ')[0])+'</span>':'<button data-taskdone="'+t.id+'">Mark done</button>')+'</td></tr>').join('')+'</table></div>':'<div class="card muted">No tasks.</div>';
+  const open=mine.filter(t=>!t.done),done=mine.filter(t=>t.done).slice(0,20);
+  const techs=Object.values(S.people).filter(p=>p.active!==false&&p.role==='lab');
+  let h='<div class="stack" style="max-width:760px"><h1>Tasks</h1>';
+  if(isDoctor())h+='<form id="tf" class="taskadd"><input id="tf-t" required placeholder="Write a task for the lab…" autocomplete="off">'+(techs.length?'<select id="tf-to" aria-label="For"><option value="">Everyone</option>'+techs.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select>':'')+'<button class="primary">Send</button></form>';
+  h+=open.length?'<div class="tasklist">'+open.map(t=>'<div class="task"><button class="tick" data-taskdone="'+t.id+'" aria-label="Mark done"></button><span class="tt">'+esc(t.text)+'</span><span class="small muted">'+(t.to?esc(person(t.to).name.split(' ')[0])+' · ':'')+hhmm(t.at)+'</span></div>').join('')+'</div>':'<div class="card muted">Nothing to do.</div>';
+  if(done.length)h+='<details><summary class="small muted">Done ('+done.length+')</summary><div class="tasklist">'+done.map(t=>'<div class="task done"><span class="tick on" aria-hidden="true"></span><span class="tt">'+esc(t.text)+'</span><span class="small muted">'+esc(person(t.doneBy).name.split(' ')[0])+'</span></div>').join('')+'</div></details>';
   return h+'</div>';
 }
-function bindTasks(){const f=$('#tf');f&&(f.onsubmit=e=>{e.preventDefault();const text=$('#tf-t').value.trim();if(!text)return;const t={id:uid('t'),text,to:$('#tf-to').value,sessionId:$('#tf-s').value,from:S.me.id,at:Date.now(),done:false};S.tasks[t.id]=t;queueWrite('tasks/'+t.id,strip(t));S.dirty=false;render();toast('Task sent')});bindCommon()}
+function bindTasks(){const f=$('#tf');f&&(f.onsubmit=e=>{e.preventDefault();const text=$('#tf-t').value.trim();if(!text)return;const to=$('#tf-to');const t={id:uid('t'),text,to:to?to.value:'',sessionId:'',from:S.me.id,at:Date.now(),done:false};S.tasks[t.id]=t;queueWrite('tasks/'+t.id,strip(t));S.dirty=false;render();toast('Task sent')});bindCommon()}
 
 /* ---------- SETUP: products, tests, formulas, limits ---------- */
 function draft(){if(!S.cfgDraft)S.cfgDraft=JSON.parse(JSON.stringify(S.cfg));return S.cfgDraft}

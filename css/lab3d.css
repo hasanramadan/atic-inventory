@@ -133,3 +133,13 @@ span.chip{cursor:default}
 .tk-in{background:#e7f1ff;color:#1d4f91}.tk-sol{background:#e3f6ee;color:#16704a}.tk-res{background:#f6ecff;color:#6a2a99}.tk-num{background:#fff3d6;color:#7a5200}.tk-op{background:#eef1f3;color:#223}.tk-raw{background:#fde2e2;color:#8a1010}
 .tk-op.big{min-width:22px;text-align:center;font-size:18px}
 .rule .tok:hover{text-decoration:line-through}
+.taskadd{display:flex;gap:8px;padding:8px;border-radius:16px;background:#fff;box-shadow:0 14px 26px -20px rgba(10,40,60,.8),inset 0 0 0 1px #d6e7ee}
+.taskadd input{flex:1;border:0;font-size:17px;padding:10px;background:transparent;min-width:0}
+.taskadd input:focus{outline:none}
+.tasklist{display:flex;flex-direction:column;gap:8px}
+.task{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:linear-gradient(160deg,#fff,#f1f7fa);box-shadow:0 10px 20px -18px rgba(10,40,60,.9)}
+.task .tt{flex:1;font-size:16px}
+.task.done .tt{text-decoration:line-through;color:#7a8b93}
+.tick{all:unset;cursor:pointer;flex:none;width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 2px #0f6e8c;transition:background .15s}
+.tick:hover{background:#dcf0f7}.tick:focus-visible{outline:2px solid #0f6e8c;outline-offset:2px}
+.tick.on{background:#0f6e8c;box-shadow:none;cursor:default}
