@@ -143,3 +143,8 @@ span.chip{cursor:default}
 .tick{all:unset;cursor:pointer;flex:none;width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 2px #0f6e8c;transition:background .15s}
 .tick:hover{background:#dcf0f7}.tick:focus-visible{outline:2px solid #0f6e8c;outline-offset:2px}
 .tick.on{background:#0f6e8c;box-shadow:none;cursor:default}
+.trow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:14px;background:linear-gradient(160deg,#fff,#f3f8fa);box-shadow:0 8px 16px -14px rgba(10,40,60,.9)}
+.trow .tname{flex:1;min-width:160px;font-weight:700;font-size:15px}
+.trow input.num{width:70px}
+.tkind{font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;width:92px;text-align:center}
+.k-chem{background:#e7f1ff;color:#1d4f91}.k-micro{background:#e3f6ee;color:#16704a}.k-org{background:#fff3d6;color:#7a5200}
