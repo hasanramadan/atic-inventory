@@ -148,6 +148,8 @@ function render(){
     '<div class="me"><div><div class="label">Signed in</div><b>'+esc(S.me.name)+'</b> <span class="muted small">'+esc(roleName(S.me.role))+'</span></div></div></nav><main id="main">'+viewHTML()+'</main></div>';
   root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
   bindView();
+  root.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;lsSet('lab.cat',S.cat);histFilter.product='';render()});
+  root.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{S.kind=b.dataset.kind;lsSet('lab.kind',S.kind);render()});
 }
 function roleName(r){return r==='admin'?'Admin':r==='doctor'?'Lab manager':'Lab technician'}
 function viewHTML(){
@@ -200,17 +202,18 @@ function filesHTML(fs){if(!fs||!fs.length)return'';return '<div class="thumbs">'
 function todayView(){
   const d=today();const note=S.daynotes[d];
   const plan=planFor(d);
-  const sess=Object.values(S.sessions).filter(s=>s.date===d).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  const sess=Object.values(S.sessions).filter(s=>s.date===d&&inCat(s)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const started=new Set(sess.map(s=>s.productId+'|'+s.section));
-  const planned=Object.keys(plan).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);return{key:k,p,sec,batches:plan[k]}}).filter(x=>x.p);
+  const planned=Object.keys(plan).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);return{key:k,p,sec,batches:plan[k]}}).filter(x=>x.p&&(catSel()==='all'||catOfP(x.p)===catSel()));
   const tasks=myTasks();
-  const assigned=Object.values(S.samples).filter(s=>s.assignedTo===S.me.id&&!sampleChemDone(s,product(s.productId)));
-  let h='<div class="stack"><div class="row between"><h1>Today · '+niceDate(d)+'</h1><button class="primary" id="newSess">Start testing</button></div>';
+  const assigned=Object.values(S.samples).filter(s=>inCat(s)&&s.assignedTo===S.me.id&&!sampleChemDone(s,product(s.productId)));
+  let h='<div class="stack">'+catBar()+'<div class="row between"><h1>'+esc(catLabel(catSel()))+' · '+niceDate(d)+'</h1><button class="primary" id="newSess">Start testing</button></div>';
   if(note&&note.text)h+='<div class="note-banner"><div class="label">Note from '+esc(person(note.by).name)+' · '+hhmm(note.at)+'</div>'+esc(note.text).replace(/\n/g,'<br>')+'</div>';
   if(tasks.length||assigned.length){h+='<div class="card stack"><h3>For you</h3>'+tasks.map(t=>'<div class="row between"><span>'+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
     assigned.map(s=>'<div class="row between"><span>Sample <b class="mono">'+esc(s.code)+'</b> assigned to you</span><button class="ghost" data-open-sample="'+s.id+'">Open</button></div>').join('')+'</div>'}
   const todo=planned.filter(x=>!started.has(x.p.id+'|'+x.sec));
   if(todo.length)h+='<div class="card stack"><div class="row between"><h3>Production plan for today</h3><span class="muted small">From the factory plan</span></div>'+todo.map(x=>'<div class="row between"><span><b>'+esc(x.p.name)+'</b> · '+esc(x.sec)+' · <span class="num">'+x.batches+'</span> batches</span><button data-start="'+x.key+'">Start</button></div>').join('')+'</div>';
+  if(catSel()!=='product'){const ps=(S.cfg.products||[]).filter(p=>catSel()==='all'?catOfP(p)!=='product':catOfP(p)===catSel());if(ps.length)h+='<div class="card stack"><h3>Start a test</h3><div class="quick">'+ps.map(p=>'<button class="qbtn" data-startp="'+p.id+'"><b>'+esc(p.name)+'</b><span class="small muted">'+testsOf(p).filter(t=>t.kind!=='micro').length+' chemical · '+testsOf(p,'micro').length+' micro</span></button>').join('')+'</div></div>'}
   h+='<h2>Open today</h2>';
   if(!sess.length)h+='<div class="card muted">Nothing started yet. Press <b>Start testing</b> or start one of the planned products above.</div>';
   else h+='<div class="grid">'+sess.map(sessCard).join('')+'</div>';
@@ -223,7 +226,8 @@ function sessCard(s){const p=product(s.productId);const pr=sessionProgress(s);co
   '<div class="bar"><i style="width:'+pct+'%"></i></div><div class="row small"><span class="num">'+pr.done+' / '+pr.target+'</span> samples tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+(pr.micro?'<span class="pill warn">'+pr.micro+' micro pending</span>':'')+'</div></button>'}
 function statusPill(s){if(s.validated)return'<span class="pill ok">Validated</span>';if(s.tested&&s.tested.length)return'<span class="pill acc">Tested</span>';return'<span class="pill">In progress</span>'}
 function bindToday(){
-  const n=$('#newSess');n&&(n.onclick=()=>newSessionModal());
+  const n=$('#newSess');n&&(n.onclick=()=>{const p=(S.cfg.products||[]).find(p=>catSel()==='all'||catOfP(p)===catSel());newSessionModal(p?{productId:p.id,section:catSel()==='product'||catSel()==='all'?'':'Lab'}:{})});
+  document.querySelectorAll('[data-startp]').forEach(b=>b.onclick=()=>newSessionModal({productId:b.dataset.startp,section:'Lab'}));
   document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{const[pc,sec]=b.dataset.start.split('|');const p=S.cfg.products.find(x=>x.code===pc);newSessionModal({productId:p.id,section:sec,batches:planFor(today())[b.dataset.start]})});
   bindCommon();
 }
@@ -275,6 +279,17 @@ function sessionView(){
   return h+'</div>';
 }
 function catName(p){return ({product:'Product',water:'Water',swab:'Swab',raw:'Raw material'})[(p&&p.category)||'product']}
+const CATS=[['product','Products from the line'],['water','Water'],['swab','Swabs'],['raw','Raw materials']];
+function catSel(){return S.cat||(S.cat=lsGet('lab.cat')||'product')}
+function kindSel(){return S.kind||(S.kind=lsGet('lab.kind')||'all')}
+function catOfP(p){return (p&&p.category)||'product'}
+function catOfS(x){return catOfP(product(x.productId))}
+function inCat(x){const c=catSel();return c==='all'||catOfS(x)===c}
+function catLabel(c){return c==='all'?'All':(CATS.find(x=>x[0]===c)||[,''])[1]}
+function kindOk(t){const k=kindSel();return !t||k==='all'||(k==='micro'?t.kind==='micro':t.kind!=='micro')}
+function catBar(){const d=today();const cnt=c=>Object.values(S.sessions).filter(x=>x.date===d&&(c==='all'||catOfS(x)===c)).length;
+  return '<div class="catbar" role="tablist" aria-label="Category">'+CATS.concat([['all','All']]).map(([k,n])=>'<button class="cat'+(catSel()===k?' on':'')+'" data-cat="'+k+'" role="tab" aria-selected="'+(catSel()===k)+'"><span class="ci ci-'+k+'" aria-hidden="true"></span>'+n+(cnt(k)?'<span class="badge">'+cnt(k)+'</span>':'')+'</button>').join('')+'</div>'}
+function kindBar(){return '<div class="kindbar" role="tablist" aria-label="Test type">'+[['all','Chemical + Micro'],['chem','Chemical'],['micro','Microbiology']].map(([k,n])=>'<button class="kind'+(kindSel()===k?' on':'')+'" data-kind="'+k+'">'+n+'</button>').join('')+'</div>'}
 function kv(k,v,cls){return '<div class="kv"><span class="label">'+k+'</span><b>'+esc(v)+'</b></div>'}
 function sampleForm(s,p,ss){
   let h='<div class="row between"><div><span class="label">Sample</span><h2 class="mono">'+esc(s.code)+'</h2></div><div class="row small">'+
@@ -283,7 +298,8 @@ function sampleForm(s,p,ss){
     '</div></div>';
   if(s.extra)h+='<p class="small"><span class="pill warn">Extra sample</span> '+esc(s.reason||'')+'</p>';
   const groups=[['chem','Chemical'],['org','Organoleptic'],['micro','Microbiology']];
-  groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length)return;
+  if(testsOf(p,'micro').length&&testsOf(p).some(t=>t.kind!=='micro'))h+=kindBar();
+  groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length||!kindOk({kind:k}))return;
     h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?'<span class="small muted">Fill in when the plates are read</span>':'')+'</div>';
     ts.forEach(t=>h+=testRow(s,t))});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
@@ -430,12 +446,14 @@ function stickersModal(ss){
 /* ---------- OVERVIEW (doctor) ---------- */
 function overviewView(){
   const d=today();const note=S.daynotes[d]||{};
-  const sess=Object.values(S.sessions).filter(s=>s.date===d);
+  const sessAll=Object.values(S.sessions).filter(s=>s.date===d);const sess=sessAll.filter(inCat);
   const all=sess.map(s=>({s,pr:sessionProgress(s)}));
   const tgt=all.reduce((a,x)=>a+x.pr.target,0),done=all.reduce((a,x)=>a+x.pr.done,0),bad=all.reduce((a,x)=>a+x.pr.bad,0);
-  const live=Object.values(S.samples).filter(s=>s.live&&Date.now()-s.live.at<120000).sort((a,b)=>b.live.at-a.live.at);
-  const recent=Object.values(S.samples).filter(s=>s.date===d).flatMap(s=>{const p=product(s.productId);return Object.entries(s.results||{}).map(([tid,r])=>({s,p,t:(p&&p.tests||[]).find(x=>x.id===tid),r}))}).filter(x=>x.t&&x.r.at).sort((a,b)=>b.r.at-a.r.at).slice(0,14);
-  let h='<div class="stack"><h1>Live overview · '+niceDate(d)+'</h1>';
+  const live=Object.values(S.samples).filter(s=>inCat(s)&&s.live&&Date.now()-s.live.at<120000).sort((a,b)=>b.live.at-a.live.at);
+  const recent=Object.values(S.samples).filter(s=>s.date===d&&inCat(s)).flatMap(s=>{const p=product(s.productId);return Object.entries(s.results||{}).map(([tid,r])=>({s,p,t:(p&&p.tests||[]).find(x=>x.id===tid),r}))}).filter(x=>x.t&&x.r.at&&kindOk(x.t)).sort((a,b)=>b.r.at-a.r.at).slice(0,14);
+  const tiles=CATS.map(([k,n])=>{const ss=sessAll.filter(x=>catOfS(x)===k);const pr=ss.map(sessionProgress);const t=pr.reduce((a,x)=>a+x.target,0),dn=pr.reduce((a,x)=>a+x.done,0),b=pr.reduce((a,x)=>a+x.bad,0),m=pr.reduce((a,x)=>a+x.micro,0);
+    return '<button class="ctile ct-'+k+(catSel()===k?' on':'')+'" data-cat="'+k+'"><span class="ci ci-'+k+'" aria-hidden="true"></span><b>'+n+'</b><span class="num big">'+dn+' / '+t+'</span><span class="small">'+(ss.length?ss.length+' running':'Nothing today')+'</span><span class="row small">'+(b?'<span class="pill bad">'+b+' out of limit</span>':'')+(m?'<span class="pill warn">'+m+' micro pending</span>':'')+'</span></button>'}).join('');
+  let h='<div class="stack"><h1>Live overview · '+niceDate(d)+'</h1><div class="ctiles">'+tiles+'</div>'+catBar()+kindBar()+'<h2>'+esc(catLabel(catSel()))+'</h2>';
   h+='<div class="card row between"><div class="row"><b class="num" style="font-size:22px">'+done+' / '+tgt+'</b><span>samples tested today</span>'+(bad?'<span class="pill bad">'+bad+' out of limit</span>':'<span class="pill ok">No results out of limit</span>')+'</div><div class="bar" style="flex:1;min-width:120px;max-width:360px"><i style="width:'+(tgt?Math.round(100*done/tgt):0)+'%"></i></div></div>';
   h+='<div class="card stack"><h3>Note for the lab today</h3><textarea id="dn" placeholder="Shown at the top of the lab’s Today page">'+esc(note.text||'')+'</textarea><div class="row between"><span class="small muted">'+(note.at?'Last saved '+hhmm(note.at):'')+'</span><button class="primary" id="dnSave">Save note</button></div></div>';
   h+='<div class="card stack"><div class="row between"><h3>Working right now</h3><span class="small muted">Updates as they type</span></div>'+(live.length?'<table><tr><th>Who</th><th>Sample</th><th>Test</th><th>Entry</th><th>When</th></tr>'+live.map(s=>{const p=product(s.productId);const t=(p&&p.tests||[]).find(x=>x.id===s.live.testId);const r=resultOf(s,t||{});const val=t&&t.kind==='org'?(r.value||''):(r.in?Object.entries(r.in).map(([k,v])=>k+'='+v).join(' '):'');
@@ -453,8 +471,8 @@ function bindOverview(){
 /* ---------- RECORDS ---------- */
 let histFilter={product:'',from:addDays(dubaiToday(),-30)};
 function historyView(){
-  const ss=Object.values(S.sessions).filter(s=>(!histFilter.product||s.productId===histFilter.product)&&s.date>=histFilter.from).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
-  let h='<div class="stack"><div class="row between"><h1>Records</h1><div class="row"><select id="hf-p"><option value="">All products</option>'+(S.cfg.products||[]).map(p=>'<option value="'+p.id+'"'+(histFilter.product===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select><label class="row small">From <input id="hf-f" type="date" value="'+histFilter.from+'"></label></div></div>';
+  const ss=Object.values(S.sessions).filter(s=>inCat(s)&&(!histFilter.product||s.productId===histFilter.product)&&s.date>=histFilter.from).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  let h='<div class="stack">'+catBar()+'<div class="row between"><h1>Records · '+esc(catLabel(catSel()))+'</h1><div class="row"><select id="hf-p"><option value="">All</option>'+(S.cfg.products||[]).filter(p=>catSel()==='all'||catOfP(p)===catSel()).map(p=>'<option value="'+p.id+'"'+(histFilter.product===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select><label class="row small">From <input id="hf-f" type="date" value="'+histFilter.from+'"></label></div></div>';
   if(!ss.length)return h+'<div class="card muted">No records in this period.</div></div>';
   h+='<div class="card tablewrap"><table><tr><th>Date</th><th>Product</th><th>Section</th><th>Lot</th><th>Samples</th><th>Out of limit</th><th>Micro</th><th>Status</th></tr>'+ss.map(s=>{const p=product(s.productId);const pr=sessionProgress(s);
     return '<tr><td class="num">'+esc(s.date)+'</td><td><button class="ghost" data-open-session="'+s.id+'">'+esc(p?p.name:'?')+'</button></td><td>'+esc(s.section)+'</td><td class="num">'+esc(s.lot||'–')+'</td><td class="num">'+pr.done+'/'+pr.target+'</td><td>'+(pr.bad?'<span class="pill bad">'+pr.bad+'</span>':'<span class="muted">0</span>')+'</td><td>'+(pr.micro?'<span class="pill warn">'+pr.micro+' pending</span>':'<span class="muted">–</span>')+'</td><td>'+statusPill(s)+'</td></tr>'}).join('')+'</table></div>';
@@ -466,8 +484,8 @@ function bindHistory(){$('#hf-p').onchange=e=>{histFilter.product=e.target.value
 function microList(){return Object.values(S.samples).flatMap(s=>{const p=product(s.productId);return sampleMicroPending(s,p).map(t=>({s,p,t,ready:addDays(s.date,Number(t.incubDays)||0)}))}).sort((a,b)=>a.ready.localeCompare(b.ready))}
 function microPendingCount(){const d=today();return microList().filter(x=>x.ready<=d).length}
 function microView(){
-  const L=microList();const d=today();
-  let h='<div class="stack"><div><h1>Microbiology pending</h1><p class="muted">Plates waiting to be read. Ready items are counted on the tab.</p></div>';
+  const L=microList().filter(x=>catSel()==='all'||catOfP(x.p)===catSel());const d=today();
+  let h='<div class="stack">'+catBar()+'<div><h1>Microbiology pending · '+esc(catLabel(catSel()))+'</h1><p class="muted">Plates waiting to be read. Ready items are counted on the tab.</p></div>';
   if(!L.length)return h+'<div class="card muted">No microbiology results are waiting.</div></div>';
   h+='<div class="card tablewrap"><table><tr><th>Read on</th><th>Sample</th><th>Product</th><th>Lot</th><th>Test</th><th></th></tr>'+L.map(x=>{const ss=S.sessions[x.s.sessionId]||{};
     return '<tr><td class="num">'+(x.ready<=d?'<span class="pill warn">'+niceDate(x.ready)+'</span>':niceDate(x.ready))+'</td><td class="mono"><b>'+esc(x.s.code)+'</b> <span class="small muted">'+esc(x.s.date)+'</span></td><td>'+esc(x.p?x.p.name:'')+'</td><td class="num">'+esc(ss.lot||'–')+'</td><td>'+esc(x.t.name)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'">Enter result</button></td></tr>'}).join('')+'</table></div>';
