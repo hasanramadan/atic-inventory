@@ -101,3 +101,4 @@ span.chip{cursor:default}
 .station main{margin:0 auto;max-width:1300px;padding-top:18px}
 .station .cat{font-size:16px;padding:12px 18px}
 @media (prefers-reduced-motion:reduce){.solcard,.chip,.sttab{transition:none}.solcard:hover{transform:none}}
+.test.off{opacity:.7;background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(15,110,140,.05) 8px 16px)}

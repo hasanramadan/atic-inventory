@@ -97,7 +97,7 @@ async function boot(){
   let got=0;const need=3;
   const done=()=>{got++;if(got>=need&&!S.ready){S.ready=true;clearTimeout(timer);restoreLogin();render()}};
   const err=e=>{clearTimeout(timer);S.error='Could not read the lab records ('+(e.code||e.message)+').';render()};
-  S.db.doc('config/main').onSnapshot(snap=>{S.cfg=snap.exists?snap.data():{products:[],sections:['SEC-1','SEC-2']};done.c1||(done.c1=1,done());changed('cfg')},err);
+  S.db.doc('config/main').onSnapshot(snap=>{S.cfg=snap.exists?snap.data():{products:[],sections:['SEC-1','SEC-2']};done.c1||(done.c1=1,done());if(snap.exists&&S.sol)migrateWaterWeekly();changed('cfg')},err);
   S.db.collection('people').onSnapshot(snap=>{S.people={};snap.docs.forEach(d=>S.people[d.id]=Object.assign({id:d.id},d.data()));done.c2||(done.c2=1,done());if(S.me&&S.people[S.me.id])S.me=S.people[S.me.id];changed('people')},err);
   S.db.collection('sessions').orderBy('date','desc').limit(300).onSnapshot(snap=>{S.sessions={};snap.docs.forEach(d=>S.sessions[d.id]=Object.assign({id:d.id},d.data()));done.c3||(done.c3=1,done());changed('sessions')},err);
   S.db.collection('samples').orderBy('date','desc').limit(1000).onSnapshot(snap=>{
@@ -105,7 +105,7 @@ async function boot(){
       if(local&&((q&&(q.busy||q.next))||typingTimers[d.id]))return; S.samples[d.id]=Object.assign({id:d.id},d.data())});
     const ids=new Set(snap.docs.map(d=>d.id));Object.keys(S.samples).forEach(k=>{if(!ids.has(k)&&!(Q['samples/'+k]&&(Q['samples/'+k].busy||Q['samples/'+k].next)))delete S.samples[k]});
     changed('samples')},err);
-  S.db.doc('config/solutions').onSnapshot(snap=>{const d=snap.exists?snap.data():null;S.sol=d&&d.list||null;if(!S.sol)seedSolutions();changed('sol')},()=>{});
+  S.db.doc('config/solutions').onSnapshot(snap=>{const d=snap.exists?snap.data():null;S.sol=d&&d.list||null;if(!S.sol)seedSolutions();else migrateWaterWeekly();changed('sol')},()=>{});
   S.db.collection('tasks').orderBy('at','desc').limit(300).onSnapshot(snap=>{S.tasks={};snap.docs.forEach(d=>S.tasks[d.id]=Object.assign({id:d.id},d.data()));changed('tasks')},()=>{});
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
@@ -117,6 +117,10 @@ const SOL_SEED=[
   {id:'koh001',name:'KOH 0.01 N',chem:'Potassium hydroxide',nominal:0.01,conc:'0.01',unit:'N'}];
 const SOL_LINKS={'t03|C':'naoh01','t05|C':'agno301','t15|C':'naoh05','t20|C':'koh001','t28|C':'koh001'};
 let seeding=false;
+let migW=false;
+async function migrateWaterWeekly(){if(migW||!S.cfg||S.cfg.mWaterWeekly||!(window.LAB_ME||{}).id)return;migW=true;
+  const c=JSON.parse(JSON.stringify(S.cfg));(c.products||[]).filter(p=>p.category==='water').forEach(p=>(p.tests||[]).forEach(t=>{if(t.kind==='micro'&&!t.everyDays)t.everyDays=7}));c.mWaterWeekly=1;
+  try{await S.db.doc('config/main').set(c)}catch(e){migW=false}}
 async function seedSolutions(){if(seeding||!S.cfg||!(window.LAB_ME||{}).id)return;seeding=true;
   try{await S.db.doc('config/solutions').set({list:SOL_SEED.map(x=>Object.assign({},x,{at:Date.now(),history:[]}))});
     const c=JSON.parse(JSON.stringify(S.cfg));let n=0;(c.products||[]).forEach(p=>(p.tests||[]).forEach(t=>(t.consts||[]).forEach(k=>{const id=SOL_LINKS[t.id+'|'+k.key];if(id&&!k.sol){k.sol=id;n++}})));
@@ -144,7 +148,11 @@ function resultOf(s,t){return (s.results||{})[t.id]||{}}
 function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=computeTest(t,r.in,r.k);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
 function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}computeTest(t,r.in,r.k).forEach(o=>{if(o.state==='bad')bad++})});return bad}
 function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional);return ts.length>0&&ts.every(t=>testDone(s,t))}
-function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>!testDone(s,t))}
+/* tests done every N days (water micro: weekly): only due when N days passed since the last time it was done */
+function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(x=>{if(x.productId!==pid||x.date>=date)return;const p=product(pid);const t=p&&p.tests.find(y=>y.id===tid);if(t&&testDone(x,t)&&x.date>L)L=x.date});return L}
+function nextDue(s,t){if(!t.everyDays)return s.date;const L=lastDoneBefore(s.productId,t.id,s.date);return L?addDays(L,Number(t.everyDays)):s.date}
+function testActive(s,t){if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
+function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>testActive(s,t)&&!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
 function myTasks(){return Object.values(S.tasks).filter(t=>!t.done&&(!t.to||t.to===S.me.id))}
 function planFor(date){const m=S.plans[date.slice(0,7)];return (m&&m.days&&m.days[date])||{}}
@@ -323,6 +331,7 @@ function kindOk(t){const k=kindSel();return !t||k==='all'||(k==='micro'?t.kind==
 function catBar(){const d=today();const cnt=c=>Object.values(S.sessions).filter(x=>x.date===d&&(c==='all'||catOfS(x)===c)).length;
   return '<div class="catbar" role="tablist" aria-label="Category">'+CATS.concat([['all','All']]).map(([k,n])=>'<button class="cat'+(catSel()===k?' on':'')+'" data-cat="'+k+'" role="tab" aria-selected="'+(catSel()===k)+'"><span class="ci ci-'+k+'" aria-hidden="true"></span>'+n+(cnt(k)?'<span class="badge">'+cnt(k)+'</span>':'')+'</button>').join('')+'</div>'}
 function kindBar(){return '<div class="kindbar" role="tablist" aria-label="Test type">'+[['all','Chemical + Micro'],['chem','Chemical'],['micro','Microbiology']].map(([k,n])=>'<button class="kind'+(kindSel()===k?' on':'')+'" data-kind="'+k+'">'+n+'</button>').join('')+'</div>'}
+function everyText(n){n=Number(n);return n===7?'week':n===14?'2 weeks':n===30||n===31?'month':n+' days'}
 function kv(k,v,cls){return '<div class="kv"><span class="label">'+k+'</span><b>'+esc(v)+'</b></div>'}
 function sampleForm(s,p,ss){
   let h='<div class="row between"><div><span class="label">Sample</span><h2 class="mono">'+esc(s.code)+'</h2></div><div class="row small">'+
@@ -342,6 +351,7 @@ function sampleForm(s,p,ss){
 }
 function testRow(s,t){
   const r=resultOf(s,t);
+  if(t.everyDays&&!testActive(s,t))return '<div class="test off" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b> <span class="pill">every '+esc(everyText(t.everyDays))+'</span><div class="small muted">Not due today · next on '+niceDate(nextDue(s,t))+'</div></div><div></div><div class="row"><button class="ghost" data-mon="'+t.id+'">Do it today</button></div></div>';
   let h='<div class="test" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b>'+(t.optional?' <span class="pill">'+esc(t.freq||'optional')+'</span>':'')+
     '<div class="small muted">'+esc([t.method,t.solution].filter(Boolean).join(' · '))+'</div>'+
     ((t.consts||[]).length?'<div class="small muted mono">'+t.consts.map(c=>{const x=c.sol&&solOf(c.sol);return x?'<span class="solchip">'+esc(x.name)+' '+esc(String(constVal(c,resultOf(s,t).k)))+' '+esc(x.unit||'N')+'</span>':esc(c.label||c.key)+' '+esc(c.value)}).join(' · ')+'</div>':'')+
@@ -355,7 +365,7 @@ function testRow(s,t){
     h+='<div class="ins">'+t.inputs.map(i=>{const st=single?outs[0].state:'';return '<label>'+esc(i.label)+(i.unit?' ('+esc(i.unit)+')':'')+'<input class="num'+(st==='bad'?' bad':'')+'" inputmode="decimal" data-in="'+t.id+'" data-key="'+esc(i.key)+'" value="'+esc(r.in&&r.in[i.key]!=null?r.in[i.key]:'')+'"></label>'}).join('')+'</div>';
     h+='<div class="outs">'+outs.map(o=>{if(single&&o.value==null)return'<span class="out muted small">Limit '+(limitText(t.outputs[0])||'none')+'</span>';const lt=limitText(t.outputs.find(x=>x.key===o.key)||{});return '<span class="out '+o.state+'" title="'+(lt?'Limit '+esc(lt):'No limit set')+'">'+esc(o.label)+': '+(o.value==null?'–':isNaN(o.value)?'check formula':fmt(o.value,o.dp))+(o.unit?' '+esc(o.unit):'')+(lt?' <span class="muted">('+esc(lt)+')</span>':'')+'</span>'}).join('')+'</div>';
   }
-  h+='</div><div class="row">'+(r.by?'<span class="small muted">'+esc(person(r.by).name.split(' ')[0])+' '+hhmm(r.at)+'</span>':'')+'<button class="ghost" data-retest="'+t.id+'" title="Retest">Retest</button></div></div>';
+  h+='</div><div class="row">'+(r.by?'<span class="small muted">'+esc(person(r.by).name.split(' ')[0])+' '+hhmm(r.at)+'</span>':'')+'<button class="ghost" data-retest="'+t.id+'" title="Retest">Retest</button>'+(t.everyDays&&!testDone(s,t)?'<button class="ghost" data-moff="'+t.id+'">Not today</button>':'')+'</div></div>';
   return h;
 }
 function notesPanel(s){
@@ -401,6 +411,8 @@ function bindSession(){
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
   const bt=$('#sm-batch');bt.addEventListener('input',()=>{s.batch=bt.value.trim();liveSave(s)});
   const as=$('#sm-assign');as&&(as.onchange=()=>{s.assignedTo=as.value;saveSample(s);toast(as.value?'Assigned to '+person(as.value).name:'Assignment cleared')});
+  document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{s.on=Object.assign({},s.on,{[b.dataset.mon]:true});if(s.off)delete s.off[b.dataset.mon];saveSample(s);render()});
+  document.querySelectorAll('[data-moff]').forEach(b=>b.onclick=()=>{s.off=Object.assign({},s.off,{[b.dataset.moff]:true});if(s.on)delete s.on[b.dataset.moff];saveSample(s);render()});
   document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>retestModal(s,p.tests.find(x=>x.id===b.dataset.retest)));
   /* notes */
   let chosen=[];const fi=$('#nt-files');fi.onchange=()=>{chosen=[...fi.files];$('#nt-chosen').textContent=chosen.map(f=>f.name).join(', ')};
@@ -561,7 +573,7 @@ function testEditor(t,ti){
   const outs=t.kind==='org'?[]:computeTest(t,ex);
   let h='<div class="testcard" data-ti="'+ti+'"><div class="row between"><div class="row"><span class="pill acc">'+({chem:'Chemical',micro:'Micro',org:'Organoleptic'})[t.kind]+'</span><input data-tf="name" value="'+esc(t.name)+'" style="font-weight:700;min-width:200px"></div><div class="row"><button class="ghost" data-mv="-1" title="Move up">↑</button><button class="ghost" data-mv="1" title="Move down">↓</button><button class="ghost danger" data-deltest>Remove</button></div></div>';
   h+='<div class="ed-row"><label class="field"><span>Method</span><input data-tf="method" value="'+esc(t.method||'')+'"></label><label class="field"><span>Solution / medium</span><input data-tf="solution" value="'+esc(t.solution||'')+'"></label>'+
-    (t.kind==='micro'?'<label class="field"><span>Read after (days)</span><input data-tf="incubDays" type="number" value="'+esc(t.incubDays||'')+'"></label>':'')+
+    (t.kind==='micro'?'<label class="field"><span>Read after (days)</span><input data-tf="incubDays" type="number" value="'+esc(t.incubDays||'')+'"></label><label class="field"><span>How often</span><select data-tf="everyDays">'+[['','Every sample'],['7','Once a week'],['14','Every 2 weeks'],['30','Once a month']].map(o=>'<option value="'+o[0]+'"'+(String(t.everyDays||'')===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label>':'')+
     '<label class="field"><span>Frequency</span><input data-tf="freq" value="'+esc(t.freq||'')+'" placeholder="every batch"></label><label class="row small"><input type="checkbox" data-tf="optional"'+(t.optional?' checked':'')+'> Not needed on every sample</label></div>';
   if(t.kind==='org')return h+'<p class="small muted">Technicians choose Acceptable or Not acceptable and can comment. Not acceptable shows red.</p></div>';
   h+='<div class="label">Readings the technician types</div>'+(t.inputs||[]).map((i,k)=>'<div class="ed-row" data-row="inputs" data-k="'+k+'"><label class="field"><span>Short name</span><input class="formula" data-rf="key" value="'+esc(i.key)+'"></label><label class="field"><span>Label</span><input data-rf="label" value="'+esc(i.label)+'"></label><label class="field"><span>Unit</span><input data-rf="unit" value="'+esc(i.unit||'')+'"></label><label class="field"><span>Example</span><input class="num" data-ex="'+esc(i.key)+'" value="'+esc(ex[i.key]||'')+'"></label><button class="ghost danger" data-delrow>Remove</button></div>').join('')+'<div><button class="ghost" data-addrow="inputs">+ Reading</button></div>';
@@ -582,7 +594,7 @@ function bindSetup(){
   document.querySelectorAll('[data-addtest]').forEach(b=>b.onclick=()=>{const k=b.dataset.addtest;p.tests=p.tests||[];
     p.tests.push(k==='org'?{id:uid('t'),kind:'org',name:'Taste, smell, appearance'}:k==='micro'?{id:uid('t'),kind:'micro',name:'New micro test',incubDays:2,inputs:[{key:'cfu',label:'Count',unit:'CFU/mL'}],consts:[],outputs:[{key:'count',label:'Count',formula:'cfu',unit:'CFU/mL',min:'',max:'',dp:0}]}:{id:uid('t'),kind:'chem',name:'New test',inputs:[{key:'x',label:'Reading',unit:''}],consts:[],outputs:[{key:'result',label:'Result',formula:'x',unit:'',min:'',max:'',dp:2}]});rerender()});
   document.querySelectorAll('.testcard').forEach(card=>{const t=p.tests[Number(card.dataset.ti)];
-    card.querySelectorAll('[data-tf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.tf;t[k]=i.type==='checkbox'?i.checked:k==='incubDays'?Number(i.value)||0:i.value;rerender()}));
+    card.querySelectorAll('[data-tf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.tf;t[k]=i.type==='checkbox'?i.checked:(k==='incubDays'||k==='everyDays')?Number(i.value)||0:i.value;rerender()}));
     card.querySelectorAll('[data-row]').forEach(row=>{const arr=t[row.dataset.row];const item=arr[Number(row.dataset.k)];
       row.querySelectorAll('[data-rf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.rf;let v=i.value.trim();if(k==='key')v=v.replace(/[^A-Za-z0-9_]/g,'_').replace(/^(\d)/,'_$1');if(k==='dp')v=Number(v);if(k==='value')v=v.replace(',','.');item[k]=v;rerender()}));
       const d=row.querySelector('[data-delrow]');d&&(d.onclick=()=>{arr.splice(Number(row.dataset.k),1);rerender()})});
