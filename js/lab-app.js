@@ -611,114 +611,90 @@ function keyOf(label,taken){let k=String(label||'v').replace(/[^A-Za-z0-9]/g,'')
 function fbKeys(t){return [].concat((t.inputs||[]).map(x=>x.key),(t.consts||[]).map(x=>x.key),(t.outputs||[]).map(x=>x.key)).filter(Boolean)}
 function chemView(){
   const sol=S.sol||[];const ed=canBuild();
-  let h='<div class="stack"><div><h1>Solutions &amp; formulas</h1><p class="muted">Change a concentration here after you standardise a solution: every test that uses it takes the new value. Results already entered keep the value they were made with.</p></div>';
-  h+='<h2>Solutions</h2><div class="solgrid">'+sol.map(x=>{const u=solUsedIn(x.id);const last=(x.history||[]).slice(-1)[0];
-    return '<div class="solcard" data-sol="'+x.id+'"><div class="soltop"><span class="flaskmini" aria-hidden="true"></span><div><b>'+esc(x.name)+'</b><div class="small muted">'+esc(x.chem||'')+'</div></div></div>'+
-    '<label class="field"><span>Concentration now ('+esc(x.unit||'N')+')</span><input class="num big" data-solf="conc" value="'+esc(x.conc)+'" inputmode="decimal"'+(ed?'':' disabled')+'></label>'+
-    '<div class="small muted">Nominal '+esc(x.nominal==null?'–':x.nominal)+' '+esc(x.unit||'N')+(last?' · was '+esc(last.conc)+' until '+niceDate(new Date(last.at+4*3600e3).toISOString().slice(0,10))+' ('+esc(person(last.by).name)+')':'')+'</div>'+
-    '<div class="small">'+(u.length?'Used in: '+u.map(esc).join(', '):'<span class="muted">Not used in a formula yet</span>')+'</div>'+
-    (ed?'<details class="small"><summary>Edit name</summary><div class="row"><input data-solf="name" value="'+esc(x.name)+'"><input data-solf="chem" value="'+esc(x.chem||'')+'" placeholder="Chemical"><input data-solf="nominal" class="num" value="'+esc(x.nominal==null?'':x.nominal)+'" style="width:80px" placeholder="Nominal"><input data-solf="unit" value="'+esc(x.unit||'N')+'" style="width:60px"></div></details>':'')+'</div>'}).join('')+'</div>';
-  if(ed)h+='<form id="solAdd" class="card row"><b>New solution</b><input id="sa-n" placeholder="Name, e.g. HCl 0.1 N" required style="flex:1"><input id="sa-c" placeholder="Chemical"><input id="sa-v" class="num" placeholder="Concentration" required inputmode="decimal" style="width:130px"><input id="sa-u" value="N" style="width:60px"><button class="primary">Add</button></form>';
-  if(ed)h+=builderHTML();
+  if(!S.chemTab)S.chemTab='sol';
+  let h='<div class="stack"><h1>Solutions &amp; formulas</h1><div class="kindbar"><button class="kind'+(S.chemTab==='sol'?' on':'')+'" data-ctab="sol">Solutions</button>'+(ed?'<button class="kind'+(S.chemTab==='fb'?' on':'')+'" data-ctab="fb">Make or change a test</button>':'')+'</div>';
+  if(S.chemTab==='sol'||!ed){
+    h+='<div class="card sollist">'+sol.map(x=>'<div class="solline" data-sol="'+x.id+'"><span class="flaskmini" aria-hidden="true"></span><b>'+esc(x.name)+'</b><input class="num big" data-solf="conc" value="'+esc(x.conc)+'" inputmode="decimal"'+(ed?'':' disabled')+' aria-label="Concentration of '+esc(x.name)+'"><span class="muted">'+esc(x.unit||'N')+'</span></div>').join('')+'</div>';
+    h+='<p class="small muted">After you standardise a solution, type the new concentration. Tests use it from now on; old results stay as they were.</p>';
+    if(ed)h+='<form id="solAdd" class="row"><input id="sa-n" placeholder="New solution, e.g. HCl 0.1 N" required style="flex:1;max-width:280px"><input id="sa-v" class="num" placeholder="Concentration" required inputmode="decimal" style="width:130px"><button>Add</button></form>';
+  } else h+=builderHTML();
   return h+'</div>';
 }
+/* ---------- simple rule builder: boxes the lab types + solutions + numbers + × ÷ + − ---------- */
+const OPV={'*':'×','/':'÷','+':'+','-':'−','(':'(',')':')'};
+function ruleOf(t,o,k){if(o.rule)return o.rule;const ins=(t.inputs||[]).map(x=>x.key),cs=t.consts||[],prev=(t.outputs||[]).slice(0,k).map(x=>x.key);
+  return (String(o.formula||'').match(/[A-Za-z_]\w*|\d*\.?\d+|[+\-*/()^]/g)||[]).map(x=>{
+    if(ins.includes(x))return{k:'in',key:x};const c=cs.find(y=>y.key===x);if(c)return c.sol?{k:'sol',id:c.sol,key:c.key}:{k:'num',v:String(c.value),label:c.label||''};
+    if(prev.includes(x))return{k:'res',key:x};if(/^[\d.]+$/.test(x))return{k:'num',v:x};if(OPV[x])return{k:'op',v:x};return{k:'raw',v:x}})}
+function tokHTML(t,x,i){const lab=x.k==='in'?((t.inputs||[]).find(y=>y.key===x.key)||{}).label||x.key:x.k==='sol'?(solOf(x.id)||{}).name||'solution':x.k==='res'?((t.outputs||[]).find(y=>y.key===x.key)||{}).label||x.key:x.k==='op'?OPV[x.v]:x.k==='num'?(x.label?x.label+' ':'')+x.v:x.v;
+  return '<button type="button" class="tok tk-'+x.k+'" data-tokdel="'+i+'" title="Tap to remove">'+esc(lab)+'</button>'}
+function compile(t){const used={};(t.outputs||[]).forEach(o=>(o.rule||[]).forEach(x=>{if(x.k==='sol'){x.key=x.key||('S_'+x.id).replace(/\W/g,'_');used[x.key]=x.id}}));
+  t.consts=Object.keys(used).map(k=>{const x=solOf(used[k])||{};return{key:k,label:x.name||'',sol:used[k],value:x.conc||'',unit:x.unit||''}});
+  (t.outputs||[]).forEach(o=>{if(o.rule)o.formula=o.rule.map(x=>x.k==='in'||x.k==='res'||x.k==='sol'?x.key:x.k==='num'?(Number(x.v)<0?'('+x.v+')':x.v):x.v).join('')});
+  const sols=Object.values(used).map(id=>(solOf(id)||{}).name).filter(Boolean);t.solution=sols.join(', ')}
 function builderHTML(){
   const prods=S.cfg.products||[];
   if(!S.fb||!prods.find(p=>p.id===S.fb.pid)){const p=prods[0];S.fb={pid:p&&p.id,tid:''}}
   const p=prods.find(x=>x.id===S.fb.pid);if(!p)return'';
   const chem=(p.tests||[]).filter(t=>t.kind==='chem');
   if(S.fb.tid===''&&chem[0])S.fb.tid=chem[0].id;
-  if(!S.fb.t||S.fb.t.id!==S.fb.tid){const src=(p.tests||[]).find(t=>t.id===S.fb.tid);S.fb.t=src?JSON.parse(JSON.stringify(src)):{id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume',unit:'mL'}],consts:[],outputs:[{key:'r',label:'Result',formula:'V',unit:'',min:'',max:'',dp:2}],_new:1};S.fb.tid=S.fb.t.id}
-  const t=S.fb.t;const sol=S.sol||[];const lim=isDoctor();
+  if(!S.fb.t||S.fb.t.id!==S.fb.tid){const src=(p.tests||[]).find(t=>t.id===S.fb.tid);S.fb.t=src?JSON.parse(JSON.stringify(src)):newTest();S.fb.tid=S.fb.t.id}
+  const t=S.fb.t;const lim=isDoctor();
+  (t.outputs||[]).forEach((o,k)=>{if(!o.rule)o.rule=ruleOf(t,o,k)});
   const opts=CATS.map(([c,n])=>{const ps=prods.filter(x=>catOfP(x)===c);return ps.length?'<optgroup label="'+n+'">'+ps.map(x=>'<option value="'+x.id+'"'+(x.id===p.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</optgroup>':''}).join('');
-  let h='<h2>Formula builder</h2><div class="card stack fb">';
-  h+='<div class="row"><label class="field"><span>Product or sample</span><select id="fb-p">'+opts+'</select></label><label class="field"><span>Test</span><select id="fb-t">'+chem.map(x=>'<option value="'+x.id+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+(t._new?'<option value="'+t.id+'" selected>'+esc(t.name)+' (new)</option>':'')+'<option value="__new">+ New test</option></select></label>'+
-    '<label class="field" style="flex:1"><span>Test name</span><input data-fbt="name" value="'+esc(t.name)+'"></label><label class="field" style="flex:1"><span>Method</span><input data-fbt="method" value="'+esc(t.method||'')+'" placeholder="e.g. Titration"></label></div>';
-  const mode=fbMode(t);
-  h+='<div class="label">What kind of test is it?</div><div class="tpls">'+TPLS.map(x=>'<button type="button" class="tpl'+(mode===x[0]?' on':'')+'" data-tpl="'+x[0]+'"><span class="tplic">'+x[3]+'</span><b>'+x[1]+'</b><span class="small">'+x[2]+'</span></button>').join('')+'</div>';
-  if(mode!=='adv')h+=simpleForm(t,mode,lim);
-  else h+='<div class="fbcols"><div class="stack"><div class="label">1 · What you read</div>'+(t.inputs||[]).map((x,k)=>'<div class="fbrow" data-fr="inputs" data-k="'+k+'"><span class="chip key">'+esc(x.key)+'</span><input data-ff="label" value="'+esc(x.label)+'" placeholder="e.g. V NaOH"><input data-ff="unit" value="'+esc(x.unit||'')+'" placeholder="unit" style="width:70px"><button class="ghost danger" data-fdel>×</button></div>').join('')+'<button class="ghost" data-fadd="inputs">+ Reading</button>'+
-    '<div class="label">2 · Solutions and fixed numbers</div>'+(t.consts||[]).map((x,k)=>'<div class="fbrow" data-fr="consts" data-k="'+k+'"><span class="chip key sol">'+esc(x.key)+'</span><select data-ff="sol"><option value="">Fixed number</option>'+sol.map(o=>'<option value="'+o.id+'"'+(x.sol===o.id?' selected':'')+'>'+esc(o.name)+'</option>').join('')+'</select>'+(x.sol?'<span class="small mono">'+esc((solOf(x.sol)||{}).conc||'')+' '+esc((solOf(x.sol)||{}).unit||'')+'</span>':'<input data-ff="label" value="'+esc(x.label||'')+'" placeholder="e.g. Sample volume"><input data-ff="value" class="num" value="'+esc(x.value||'')+'" style="width:90px" placeholder="value">')+'<button class="ghost danger" data-fdel>×</button></div>').join('')+
-    '<div class="row"><button class="ghost" data-fadd="sol">+ Solution</button><button class="ghost" data-fadd="consts">+ Fixed number</button></div></div>';
-  if(mode==='adv')h+='<div class="stack"><div class="label">3 · Results (tap the chips to build the formula)</div>'+(t.outputs||[]).map((o,k)=>{const before=(t.outputs||[]).slice(0,k).map(x=>x.key);
-    return '<div class="fbout" data-fr="outputs" data-k="'+k+'"><div class="row"><input data-ff="label" value="'+esc(o.label)+'" placeholder="Result name" style="flex:1"><input data-ff="unit" value="'+esc(o.unit||'')+'" placeholder="unit" style="width:70px"><label class="row small">Decimals <input data-ff="dp" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:60px"></label><button class="ghost danger" data-fdel>×</button></div>'+
-      '<input class="formula fbformula" data-ff="formula" data-k="'+k+'" value="'+esc(o.formula||'')+'" placeholder="tap chips below">'+
-      '<div class="chips">'+(t.inputs||[]).map(x=>'<button type="button" class="chip key" data-ins="'+esc(x.key)+'" title="'+esc(x.label)+'">'+esc(x.key)+'</button>').join('')+(t.consts||[]).map(x=>'<button type="button" class="chip key sol" data-ins="'+esc(x.key)+'" title="'+esc(x.sol?(solOf(x.sol)||{}).name:x.label)+'">'+esc(x.key)+'</button>').join('')+before.map(x=>'<button type="button" class="chip key res" data-ins="'+esc(x)+'">'+esc(x)+'</button>').join('')+
-      ['+','−','×','÷','(',')','100','1000','⌫'].map(x=>'<button type="button" class="chip op" data-op="'+x+'">'+x+'</button>').join('')+'</div>'+
-      '<div class="small">Limit: '+(lim?'min <input data-ff="min" class="num" value="'+esc(o.min==null?'':o.min)+'" style="width:70px"> max <input data-ff="max" class="num" value="'+esc(o.max==null?'':o.max)+'" style="width:70px">':(esc(limitText(o))||'none')+' <span class="muted">(the lab manager sets limits)</span>')+' · short name <span class="mono">'+esc(o.key)+'</span></div></div>'}).join('')+'<button class="ghost" data-fadd="outputs">+ Result</button></div></div>';
-  const ex=S.fb.ex||{};const outs=computeTest(t,ex);
-  h+='<div class="fbcheck"><b>Try it</b>'+(t.inputs||[]).map(x=>'<label class="row small">'+esc(x.label||x.key)+' <input class="num" data-fex="'+esc(x.key)+'" value="'+esc(ex[x.key]||'')+'" style="width:90px" inputmode="decimal"></label>').join('')+'<span id="fb-out">'+fbOuts(outs)+'</span></div>';
-  h+='<div class="row between"><span class="small muted" id="fb-msg"></span><div class="row"><button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save formula</button></div></div></div>';
+  let h='<h2>Make or change a test</h2><div class="card stack fb">';
+  h+='<div class="row"><label class="field"><span>Product</span><select id="fb-p">'+opts+'</select></label><label class="field"><span>Test</span><select id="fb-t">'+chem.map(x=>'<option value="'+x.id+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+(t._new?'<option value="'+t.id+'" selected>'+esc(t.name)+' (new)</option>':'')+'<option value="__new">+ New test</option></select></label>'+
+    '<label class="field" style="flex:1"><span>Test name</span><input data-fbt="name" value="'+esc(t.name)+'"></label></div>';
+  h+='<div class="step"><span class="stepn">1</span><div class="stack" style="flex:1"><b>What does the lab type?</b><div class="boxes">'+(t.inputs||[]).map((x,k)=>'<span class="boxed"><input data-inl="'+k+'" value="'+esc(x.label)+'"><button class="ghost danger" data-indel="'+k+'" title="Remove">×</button></span>').join('')+
+    '<form id="fb-newin" class="row"><input id="fb-inname" placeholder="e.g. Volume, Sample weight" style="width:200px"><button>+ Add box</button></form></div></div></div>';
+  (t.outputs||[]).forEach((o,k)=>{
+    h+='<div class="step"><span class="stepn">'+(k+2)+'</span><div class="stack" style="flex:1"><div class="row"><b>Rule for</b><input data-ol="'+k+'" value="'+esc(o.label)+'" style="width:200px">'+((t.outputs||[]).length>1?'<button class="ghost danger" data-odel="'+k+'">Remove this result</button>':'')+'</div>'+
+      '<div class="rule" data-rule="'+k+'"><span class="eq">=</span>'+(o.rule.length?o.rule.map((x,i)=>tokHTML(t,x,i)).join(''):'<span class="muted">Tap the buttons below</span>')+'</div>'+
+      '<div class="pad"><div class="padg"><span class="small muted">What the lab types</span>'+(t.inputs||[]).map(x=>'<button type="button" class="tok tk-in" data-add="'+k+'" data-t="in" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>'+
+      '<div class="padg"><span class="small muted">Solutions</span>'+(S.sol||[]).map(x=>'<button type="button" class="tok tk-sol" data-add="'+k+'" data-t="sol" data-v="'+x.id+'">'+esc(x.name)+'</button>').join('')+'</div>'+
+      ((t.outputs||[]).slice(0,k).length?'<div class="padg"><span class="small muted">Results above</span>'+t.outputs.slice(0,k).map(x=>'<button type="button" class="tok tk-res" data-add="'+k+'" data-t="res" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>':'')+
+      '<div class="padg">'+['*','/','+','-','(',')'].map(x=>'<button type="button" class="tok tk-op big" data-add="'+k+'" data-t="op" data-v="'+x+'">'+OPV[x]+'</button>').join('')+'<span class="row"><input class="num" data-numin="'+k+'" placeholder="number" style="width:100px" inputmode="decimal"><button type="button" data-numadd="'+k+'">Add number</button></span><button type="button" class="ghost" data-back="'+k+'">⌫ Undo</button></div></div>'+
+      '<details class="small"><summary>Limit and decimals</summary><div class="row">'+(lim?'Limit: min <input data-om="min" data-k="'+k+'" class="num" value="'+esc(o.min==null?'':o.min)+'" style="width:70px"> max <input data-om="max" data-k="'+k+'" class="num" value="'+esc(o.max==null?'':o.max)+'" style="width:70px">':'Limit: '+(esc(limitText(o))||'none'))+' · decimals <input data-om="dp" data-k="'+k+'" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:56px"></div></details></div></div>'});
+  h+='<div><button class="ghost small" id="fb-addout">+ Another result</button></div>';
+  const ex=S.fb.ex||{};
+  h+='<div class="fbcheck"><b>Try it</b>'+(t.inputs||[]).map(x=>'<label class="row small">'+esc(x.label)+' <input class="num" data-fex="'+esc(x.key)+'" value="'+esc(ex[x.key]||'')+'" style="width:90px" inputmode="decimal"></label>').join('')+'<span id="fb-out">'+fbOuts(computeTest(t,ex))+'</span></div>';
+  h+='<div class="row between"><span class="small" id="fb-msg" style="color:var(--bad)"></span><div class="row"><button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save test</button></div></div></div>';
   return h;
 }
-
-/* ready-made test types: the lab fills plain boxes, the formula is written for them */
-const TPLS=[['direct','Direct reading','pH, Brix, TDS, chlorine, hardness, a count','📟'],['titr','Titration','Acidity, salinity: you read the volume of solution used','🧪'],['dens','Weigh a volume','Density: weigh a known volume','⚖️'],['adv','Own formula','Build any formula with chips','✏️']];
-function fbMode(t){if(S.fb.mode)return S.fb.mode;if(t.tpl&&t.tpl.type)return t.tpl.type;const o=(t.outputs||[]);
-  if((t.inputs||[]).length===1&&o.length===1&&(!o[0].formula||o[0].formula===t.inputs[0].key))return 'direct';
-  if(o.length===1&&(t.inputs||[]).length===1&&/^C\*V\*F\/Vs$/.test(o[0].formula||''))return 'titr';
-  if(o.length===1&&/^m\/V[d]?$/.test(o[0].formula||''))return 'dens';return 'adv'}
-function tplOf(t,mode){const o=(t.outputs||[])[0]||{};const g=k=>((t.consts||[]).find(c=>c.key===k)||{});const T=Object.assign({},t.tpl||{});
-  if(mode==='direct'){T.rl=T.rl||((t.inputs||[])[0]||{}).label||t.name;T.unit=T.unit!=null?T.unit:(o.unit||((t.inputs||[])[0]||{}).unit||'')}
-  if(mode==='titr'){T.sol=T.sol||g('C').sol||((S.sol||[])[0]||{}).id;T.vs=T.vs||g('Vs').value||'';T.su=T.su||g('Vs').unit||'mL';T.f=T.f||g('F').value||g('MW').value||'';T.unit=T.unit!=null?T.unit:(o.unit||'%')}
-  if(mode==='dens'){T.vd=T.vd||(g('Vd').value||g('V').value)||'10';T.unit=T.unit||o.unit||'g/mL'}
-  T.type=mode;return T}
-function applyTpl(t,T){const o0=(t.outputs||[])[0]||{};const keep={min:o0.min==null?'':o0.min,max:o0.max==null?'':o0.max,dp:o0.dp==null?2:o0.dp};t.tpl=T;
-  if(T.type==='direct'){t.inputs=[{key:'x',label:T.rl||t.name,unit:T.unit||''}];t.consts=[];t.outputs=[Object.assign({key:'r',label:t.name,formula:'x',unit:T.unit||''},keep)]}
-  if(T.type==='titr'){const x=solOf(T.sol)||{};t.solution=(x.name||'').split(' ')[0];t.method=t.method||'Titration';t.inputs=[{key:'V',label:'V '+(x.name||'solution'),unit:'mL'}];
-    t.consts=[{key:'C',label:x.name||'Concentration',sol:T.sol,value:x.conc||'',unit:x.unit||'N'},{key:'Vs',label:'Sample',value:T.vs,unit:T.su||'mL'},{key:'F',label:'Factor',value:T.f}];
-    t.outputs=[Object.assign({key:'r',label:t.name,formula:'C*V*F/Vs',unit:T.unit||''},keep)]}
-  if(T.type==='dens'){t.method=t.method||'Weigh a known volume';t.inputs=[{key:'m',label:'Mass of '+(T.vd||'')+' mL',unit:'g'}];t.consts=[{key:'Vd',label:'Volume',value:T.vd,unit:'mL'}];t.outputs=[Object.assign({key:'r',label:t.name,formula:'m/Vd',unit:T.unit||'g/mL'},keep,{dp:o0.dp==null?3:o0.dp})]}}
-function simpleForm(t,mode,lim){const T=tplOf(t,mode);const o=(t.outputs||[])[0]||{};const sol=S.sol||[];const x=solOf(T.sol)||{};
-  const lab=(l,inner)=>'<label class="field"><span>'+l+'</span>'+inner+'</label>';
-  let h='<div class="simple">';
-  if(mode==='direct')h+='<div class="srow">'+lab('What does the lab type?','<input data-tp="rl" value="'+esc(T.rl)+'" placeholder="e.g. pH reading">')+lab('Unit','<input data-tp="unit" value="'+esc(T.unit)+'" placeholder="e.g. %, ppm, CFU/mL" style="width:140px">')+'</div><p class="say">The lab types the reading. The result is the reading.</p>';
-  if(mode==='titr'){h+='<div class="srow">'+lab('Which solution?','<select data-tp="sol">'+sol.map(y=>'<option value="'+y.id+'"'+(y.id===T.sol?' selected':'')+'>'+esc(y.name)+' ('+esc(y.conc)+' '+esc(y.unit)+')</option>').join('')+'</select>')+
-    lab('Sample taken','<span class="row"><input data-tp="vs" class="num" value="'+esc(T.vs)+'" style="width:90px" inputmode="decimal"><select data-tp="su">'+['mL','g'].map(u=>'<option'+(T.su===u?' selected':'')+'>'+u+'</option>').join('')+'</select></span>')+
-    lab('Factor','<span class="row"><input data-tp="f" class="num" value="'+esc(T.f)+'" style="width:110px" inputmode="decimal"><select data-tp="fpre"><option value="">Pick…</option>'+[['192.12','Citric acid (anhydrous) 192.12'],['210.14','Citric acid (monohydrate) 210.14'],['60.05','Acetic acid 60.05'],['56.1','KOH 56.1'],['5.85','Salt NaCl 5.85']].map(q=>'<option value="'+q[0]+'">'+q[1]+'</option>').join('')+'</select></span>')+
-    lab('Result unit','<input data-tp="unit" value="'+esc(T.unit)+'" style="width:90px">')+'</div>'+
-    '<p class="say"><b>'+esc(t.name)+'</b> = <span class="solchip">'+esc(x.name||'solution')+' '+esc(x.conc||'')+'</span> × <b>V</b> × '+esc(T.f||'factor')+' ÷ '+esc(T.vs||'sample')+'</p><p class="small muted">The lab only types <b>V</b>, the volume of '+esc(x.name||'solution')+' used. When the solution’s concentration changes on this page, this test uses the new one.</p>'}
-  if(mode==='dens')h+='<div class="srow">'+lab('Volume weighed (mL)','<input data-tp="vd" class="num" value="'+esc(T.vd)+'" style="width:90px">')+lab('Unit','<input data-tp="unit" value="'+esc(T.unit)+'" style="width:90px">')+'</div><p class="say"><b>'+esc(t.name)+'</b> = mass ÷ '+esc(T.vd)+' mL. The lab types the mass in g.</p>';
-  h+='<div class="srow">'+(lim?lab('Min','<input data-tp="min" class="num" value="'+esc(o.min==null?'':o.min)+'" style="width:90px">')+lab('Max','<input data-tp="max" class="num" value="'+esc(o.max==null?'':o.max)+'" style="width:90px">'):'<span class="small">Limit: '+(esc(limitText(o))||'none')+' <span class="muted">(set by the lab manager)</span></span>')+lab('Decimals','<input data-tp="dp" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:70px">')+'</div>';
-  return h+'</div>'}
-function fbOuts(outs){return outs.map(o=>'<span class="out '+o.state+'">'+esc(o.label)+': '+(o.value==null?'enter numbers':isNaN(o.value)?'formula error':fmt(o.value,o.dp)+' '+esc(o.unit||''))+'</span>').join('')}
-let fbFocus=0;
+function newTest(){return{id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume'}],consts:[],outputs:[{key:'r',label:'Result',rule:[],formula:'',unit:'',min:'',max:'',dp:2}],_new:1}}
+function fbOuts(outs){return outs.map(o=>'<span class="out '+o.state+'">'+esc(o.label)+': '+(o.value==null?'type numbers':isNaN(o.value)?'rule not finished':fmt(o.value,o.dp))+'</span>').join('')}
 function bindChem(){
   const keep=()=>{const y=window.scrollY;render();window.scrollTo(0,y)};
   const saveSol=async()=>{try{await S.db.doc('config/solutions').set({list:S.sol});toast('Saved')}catch(e){toast('Could not save: '+(e.code||e.message))}};
   document.querySelectorAll('[data-sol]').forEach(card=>{const x=S.sol.find(o=>o.id===card.dataset.sol);
     card.querySelectorAll('[data-solf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.solf;let v=i.value.trim();if(k==='conc'){v=v.replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number');i.value=x.conc;return}if(v===String(x.conc))return;x.history=(x.history||[]).concat([{conc:x.conc,by:S.me.id,at:Date.now()}]).slice(-30)}if(k==='nominal')v=v===''?null:Number(v.replace(',','.'));x[k]=v;x.at=Date.now();x.by=S.me.id;saveSol();keep()}))});
-  const sa=$('#solAdd');sa&&(sa.onsubmit=e=>{e.preventDefault();const v=$('#sa-v').value.trim().replace(',','.');if(isNaN(Number(v))){toast('Concentration must be a number');return}S.sol=(S.sol||[]).concat([{id:uid('sol'),name:$('#sa-n').value.trim(),chem:$('#sa-c').value.trim(),nominal:null,conc:v,unit:$('#sa-u').value.trim()||'N',at:Date.now(),by:S.me.id,history:[]}]);S.dirty=false;saveSol();keep()});
+  document.querySelectorAll('[data-ctab]').forEach(b=>b.onclick=()=>{S.chemTab=b.dataset.ctab;keep()});
+  const sa=$('#solAdd');sa&&(sa.onsubmit=e=>{e.preventDefault();const v=$('#sa-v').value.trim().replace(',','.');if(isNaN(Number(v))){toast('Concentration must be a number');return}S.sol=(S.sol||[]).concat([{id:uid('sol'),name:$('#sa-n').value.trim(),chem:'',nominal:null,conc:v,unit:'N',at:Date.now(),by:S.me.id,history:[]}]);S.dirty=false;saveSol();keep()});
   const fb=S.fb;if(!fb||!fb.t)return;const t=fb.t;
-  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:'',mode:null};keep()};
-  document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{const md=b.dataset.tpl;S.fb.mode=md;if(md!=='adv')applyTpl(t,tplOf(t,md));keep()});
-  document.querySelectorAll('[data-tp]').forEach(i=>i.addEventListener('change',()=>{const md=fbMode(t);const T=tplOf(t,md);let k=i.dataset.tp,v=i.value.trim().replace(',','.');
-    if(k==='fpre'){if(!v)return;k='f'}
-    if(k==='min'||k==='max'||k==='dp'){applyTpl(t,T);t.outputs[0][k]=k==='dp'?Number(v)||0:v;keep();return}
-    T[k]=v;applyTpl(t,T);keep()}));
-  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.tid='__new';S.fb.t={id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume',unit:'mL'}],consts:[],outputs:[{key:'r',label:'Result',formula:'V',unit:'',min:'',max:'',dp:2}],_new:1};S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};S.fb.mode=null;keep()};
-  document.querySelectorAll('[data-fbt]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.fbt]=i.value;const md=fbMode(t);if(md!=='adv')applyTpl(t,tplOf(t,md));keep()}));
-  document.querySelectorAll('[data-fr]').forEach(row=>{const arr=t[row.dataset.fr];const it=arr[Number(row.dataset.k)];
-    row.querySelectorAll('[data-ff]').forEach(i=>{const k=i.dataset.ff;
-      if(k==='formula'){i.addEventListener('focus',()=>fbFocus=Number(row.dataset.k));i.addEventListener('input',()=>{it.formula=i.value.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}))});return}
-      i.addEventListener('change',()=>{let v=i.value.trim();if(k==='dp')v=Number(v)||0;if(k==='value'||k==='min'||k==='max')v=v.replace(',','.');it[k]=v;if(k==='sol'&&v){const x=solOf(v);it.label=x?x.name:'';it.unit=x?x.unit:''}keep()})});
-    const d=row.querySelector('[data-fdel]');d&&(d.onclick=()=>{arr.splice(Number(row.dataset.k),1);keep()})});
-  document.querySelectorAll('[data-fadd]').forEach(b=>b.onclick=()=>{const k=b.dataset.fadd;const taken=fbKeys(t);
-    if(k==='inputs')t.inputs.push({key:keyOf('m',taken),label:'Reading',unit:''});
-    if(k==='consts')(t.consts=t.consts||[]).push({key:keyOf('F',taken),label:'Factor',value:'',unit:''});
-    if(k==='sol'){const x=(S.sol||[])[0];(t.consts=t.consts||[]).push({key:keyOf('C',taken),label:x?x.name:'Concentration',value:x?x.conc:'',unit:x?x.unit:'N',sol:x?x.id:''})}
-    if(k==='outputs')t.outputs.push({key:keyOf('r',taken),label:'Result',formula:'',unit:'',min:'',max:'',dp:2});keep()});
-  document.querySelectorAll('.fbout').forEach(box=>{const k=Number(box.dataset.k);const o=t.outputs[k];const inp=box.querySelector('.fbformula');
-    const put=txt=>{const a=inp.selectionStart==null?inp.value.length:inp.selectionStart,b=inp.selectionEnd==null?a:inp.selectionEnd;o.formula=inp.value.slice(0,a)+txt+inp.value.slice(b);inp.value=o.formula;inp.focus();inp.setSelectionRange(a+txt.length,a+txt.length);$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}))};
-    box.querySelectorAll('[data-ins]').forEach(c=>c.onclick=()=>put(c.dataset.ins));
-    box.querySelectorAll('[data-op]').forEach(c=>c.onclick=()=>{const m={'+':'+','−':'-','×':'*','÷':'/'}[c.dataset.op];if(c.dataset.op==='⌫'){const a=inp.selectionStart||inp.value.length;o.formula=inp.value.slice(0,Math.max(0,a-1))+inp.value.slice(a);inp.value=o.formula;inp.focus();inp.setSelectionRange(Math.max(0,a-1),Math.max(0,a-1));$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}));return}put(m||c.dataset.op)})});
+  const upd=()=>{compile(t);keep()};
+  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:''};keep()};
+  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.t=newTest();S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};keep()};
+  document.querySelectorAll('[data-fbt]').forEach(i=>i.addEventListener('change',()=>{const old=t.name;t.name=i.value.trim()||old;if(t.outputs.length===1&&(t.outputs[0].label===old||t.outputs[0].label==='Result'))t.outputs[0].label=t.name;keep()}));
+  document.querySelectorAll('[data-inl]').forEach(i=>i.addEventListener('change',()=>{t.inputs[Number(i.dataset.inl)].label=i.value.trim()||'Box';keep()}));
+  document.querySelectorAll('[data-indel]').forEach(b=>b.onclick=()=>{const k=t.inputs[Number(b.dataset.indel)].key;t.inputs.splice(Number(b.dataset.indel),1);t.outputs.forEach(o=>o.rule=o.rule.filter(x=>!(x.k==='in'&&x.key===k)));upd()});
+  $('#fb-newin').onsubmit=e=>{e.preventDefault();const n=$('#fb-inname').value.trim();if(!n)return;t.inputs.push({key:keyOf(n,fbKeys(t)),label:n});S.dirty=false;keep()};
+  document.querySelectorAll('[data-ol]').forEach(i=>i.addEventListener('change',()=>{t.outputs[Number(i.dataset.ol)].label=i.value.trim()||'Result';keep()}));
+  document.querySelectorAll('[data-odel]').forEach(b=>b.onclick=()=>{t.outputs.splice(Number(b.dataset.odel),1);upd()});
+  document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const o=t.outputs[Number(b.dataset.add)];const ty=b.dataset.t,v=b.dataset.v;o.rule.push(ty==='in'||ty==='res'?{k:ty,key:v}:ty==='sol'?{k:'sol',id:v}:{k:'op',v});upd()});
+  document.querySelectorAll('[data-numadd]').forEach(b=>b.onclick=()=>{const k=b.dataset.numadd;const i=document.querySelector('[data-numin="'+k+'"]');const v=i.value.trim().replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number first');return}t.outputs[Number(k)].rule.push({k:'num',v});S.dirty=false;upd()});
+  document.querySelectorAll('[data-numin]').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.querySelector('[data-numadd="'+i.dataset.numin+'"]').click()}}));
+  document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{t.outputs[Number(b.dataset.back)].rule.pop();upd()});
+  document.querySelectorAll('[data-rule]').forEach(r=>r.querySelectorAll('[data-tokdel]').forEach(b=>b.onclick=()=>{t.outputs[Number(r.dataset.rule)].rule.splice(Number(b.dataset.tokdel),1);upd()}));
+  document.querySelectorAll('[data-om]').forEach(i=>i.addEventListener('change',()=>{const o=t.outputs[Number(i.dataset.k)];const k=i.dataset.om;o[k]=k==='dp'?Number(i.value)||0:i.value.trim().replace(',','.');keep()}));
+  $('#fb-addout').onclick=()=>{t.outputs.push({key:keyOf('r',fbKeys(t)),label:'Result '+(t.outputs.length+1),rule:[],formula:'',unit:'',min:'',max:'',dp:2});keep()};
   document.querySelectorAll('[data-fex]').forEach(i=>i.addEventListener('input',()=>{S.fb.ex=S.fb.ex||{};S.fb.ex[i.dataset.fex]=i.value.trim().replace(',','.');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex))}));
-  $('#fb-reset').onclick=()=>{S.fb.t=null;S.fb.mode=null;if(t._new)S.fb.tid='';keep()};
-  $('#fb-save').onclick=async()=>{const bad=(t.outputs||[]).find(o=>!o.formula||(SAFE.test(o.formula)&&isNaN(evalFormula(o.formula,Object.fromEntries(fbKeys(t).map((k,j)=>[k,1.3+j*0.37]))))));
-    if(bad){$('#fb-msg').textContent='Check the formula of '+bad.label+': it uses a name that is not in this test.';return}
+  $('#fb-reset').onclick=()=>{S.fb.t=null;if(t._new)S.fb.tid='';keep()};
+  $('#fb-save').onclick=async()=>{compile(t);if(!t.inputs.length){$('#fb-msg').textContent='Add at least one box the lab types.';return}
+    const vals=Object.fromEntries(fbKeys(t).map((k,j)=>[k,1.3+j*0.37]));const bad=t.outputs.find(o=>!o.formula||isNaN(evalFormula(o.formula,vals)));
+    if(bad){$('#fb-msg').textContent='The rule for '+bad.label+' is not finished (check the signs and brackets).';return}
     const c=JSON.parse(JSON.stringify(S.cfg));const p=(c.products||[]).find(x=>x.id===S.fb.pid);const clean=JSON.parse(JSON.stringify(t));delete clean._new;
     p.tests=p.tests||[];const i=p.tests.findIndex(x=>x.id===clean.id);if(i>=0)p.tests[i]=clean;else p.tests.push(clean);
-    try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb.t=null;S.fb.mode=null;toast('Formula saved for '+p.name);keep()}catch(e){$('#fb-msg').textContent='Could not save: '+(e.code||e.message)}};
+    try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb.t=null;toast('Saved: '+clean.name+' for '+p.name);keep()}catch(e){$('#fb-msg').textContent='Could not save: '+(e.code||e.message)}};
 }
 
 /* ---------- PEOPLE (admin) ---------- */
