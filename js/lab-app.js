@@ -634,10 +634,13 @@ function builderHTML(){
   let h='<h2>Formula builder</h2><div class="card stack fb">';
   h+='<div class="row"><label class="field"><span>Product or sample</span><select id="fb-p">'+opts+'</select></label><label class="field"><span>Test</span><select id="fb-t">'+chem.map(x=>'<option value="'+x.id+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+(t._new?'<option value="'+t.id+'" selected>'+esc(t.name)+' (new)</option>':'')+'<option value="__new">+ New test</option></select></label>'+
     '<label class="field" style="flex:1"><span>Test name</span><input data-fbt="name" value="'+esc(t.name)+'"></label><label class="field" style="flex:1"><span>Method</span><input data-fbt="method" value="'+esc(t.method||'')+'" placeholder="e.g. Titration"></label></div>';
-  h+='<div class="fbcols"><div class="stack"><div class="label">1 · What you read</div>'+(t.inputs||[]).map((x,k)=>'<div class="fbrow" data-fr="inputs" data-k="'+k+'"><span class="chip key">'+esc(x.key)+'</span><input data-ff="label" value="'+esc(x.label)+'" placeholder="e.g. V NaOH"><input data-ff="unit" value="'+esc(x.unit||'')+'" placeholder="unit" style="width:70px"><button class="ghost danger" data-fdel>×</button></div>').join('')+'<button class="ghost" data-fadd="inputs">+ Reading</button>'+
+  const mode=fbMode(t);
+  h+='<div class="label">What kind of test is it?</div><div class="tpls">'+TPLS.map(x=>'<button type="button" class="tpl'+(mode===x[0]?' on':'')+'" data-tpl="'+x[0]+'"><span class="tplic">'+x[3]+'</span><b>'+x[1]+'</b><span class="small">'+x[2]+'</span></button>').join('')+'</div>';
+  if(mode!=='adv')h+=simpleForm(t,mode,lim);
+  else h+='<div class="fbcols"><div class="stack"><div class="label">1 · What you read</div>'+(t.inputs||[]).map((x,k)=>'<div class="fbrow" data-fr="inputs" data-k="'+k+'"><span class="chip key">'+esc(x.key)+'</span><input data-ff="label" value="'+esc(x.label)+'" placeholder="e.g. V NaOH"><input data-ff="unit" value="'+esc(x.unit||'')+'" placeholder="unit" style="width:70px"><button class="ghost danger" data-fdel>×</button></div>').join('')+'<button class="ghost" data-fadd="inputs">+ Reading</button>'+
     '<div class="label">2 · Solutions and fixed numbers</div>'+(t.consts||[]).map((x,k)=>'<div class="fbrow" data-fr="consts" data-k="'+k+'"><span class="chip key sol">'+esc(x.key)+'</span><select data-ff="sol"><option value="">Fixed number</option>'+sol.map(o=>'<option value="'+o.id+'"'+(x.sol===o.id?' selected':'')+'>'+esc(o.name)+'</option>').join('')+'</select>'+(x.sol?'<span class="small mono">'+esc((solOf(x.sol)||{}).conc||'')+' '+esc((solOf(x.sol)||{}).unit||'')+'</span>':'<input data-ff="label" value="'+esc(x.label||'')+'" placeholder="e.g. Sample volume"><input data-ff="value" class="num" value="'+esc(x.value||'')+'" style="width:90px" placeholder="value">')+'<button class="ghost danger" data-fdel>×</button></div>').join('')+
     '<div class="row"><button class="ghost" data-fadd="sol">+ Solution</button><button class="ghost" data-fadd="consts">+ Fixed number</button></div></div>';
-  h+='<div class="stack"><div class="label">3 · Results (tap the chips to build the formula)</div>'+(t.outputs||[]).map((o,k)=>{const before=(t.outputs||[]).slice(0,k).map(x=>x.key);
+  if(mode==='adv')h+='<div class="stack"><div class="label">3 · Results (tap the chips to build the formula)</div>'+(t.outputs||[]).map((o,k)=>{const before=(t.outputs||[]).slice(0,k).map(x=>x.key);
     return '<div class="fbout" data-fr="outputs" data-k="'+k+'"><div class="row"><input data-ff="label" value="'+esc(o.label)+'" placeholder="Result name" style="flex:1"><input data-ff="unit" value="'+esc(o.unit||'')+'" placeholder="unit" style="width:70px"><label class="row small">Decimals <input data-ff="dp" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:60px"></label><button class="ghost danger" data-fdel>×</button></div>'+
       '<input class="formula fbformula" data-ff="formula" data-k="'+k+'" value="'+esc(o.formula||'')+'" placeholder="tap chips below">'+
       '<div class="chips">'+(t.inputs||[]).map(x=>'<button type="button" class="chip key" data-ins="'+esc(x.key)+'" title="'+esc(x.label)+'">'+esc(x.key)+'</button>').join('')+(t.consts||[]).map(x=>'<button type="button" class="chip key sol" data-ins="'+esc(x.key)+'" title="'+esc(x.sol?(solOf(x.sol)||{}).name:x.label)+'">'+esc(x.key)+'</button>').join('')+before.map(x=>'<button type="button" class="chip key res" data-ins="'+esc(x)+'">'+esc(x)+'</button>').join('')+
@@ -648,6 +651,36 @@ function builderHTML(){
   h+='<div class="row between"><span class="small muted" id="fb-msg"></span><div class="row"><button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save formula</button></div></div></div>';
   return h;
 }
+
+/* ready-made test types: the lab fills plain boxes, the formula is written for them */
+const TPLS=[['direct','Direct reading','pH, Brix, TDS, chlorine, hardness, a count','📟'],['titr','Titration','Acidity, salinity: you read the volume of solution used','🧪'],['dens','Weigh a volume','Density: weigh a known volume','⚖️'],['adv','Own formula','Build any formula with chips','✏️']];
+function fbMode(t){if(S.fb.mode)return S.fb.mode;if(t.tpl&&t.tpl.type)return t.tpl.type;const o=(t.outputs||[]);
+  if((t.inputs||[]).length===1&&o.length===1&&(!o[0].formula||o[0].formula===t.inputs[0].key))return 'direct';
+  if(o.length===1&&(t.inputs||[]).length===1&&/^C\*V\*F\/Vs$/.test(o[0].formula||''))return 'titr';
+  if(o.length===1&&/^m\/V[d]?$/.test(o[0].formula||''))return 'dens';return 'adv'}
+function tplOf(t,mode){const o=(t.outputs||[])[0]||{};const g=k=>((t.consts||[]).find(c=>c.key===k)||{});const T=Object.assign({},t.tpl||{});
+  if(mode==='direct'){T.rl=T.rl||((t.inputs||[])[0]||{}).label||t.name;T.unit=T.unit!=null?T.unit:(o.unit||((t.inputs||[])[0]||{}).unit||'')}
+  if(mode==='titr'){T.sol=T.sol||g('C').sol||((S.sol||[])[0]||{}).id;T.vs=T.vs||g('Vs').value||'';T.su=T.su||g('Vs').unit||'mL';T.f=T.f||g('F').value||g('MW').value||'';T.unit=T.unit!=null?T.unit:(o.unit||'%')}
+  if(mode==='dens'){T.vd=T.vd||(g('Vd').value||g('V').value)||'10';T.unit=T.unit||o.unit||'g/mL'}
+  T.type=mode;return T}
+function applyTpl(t,T){const o0=(t.outputs||[])[0]||{};const keep={min:o0.min==null?'':o0.min,max:o0.max==null?'':o0.max,dp:o0.dp==null?2:o0.dp};t.tpl=T;
+  if(T.type==='direct'){t.inputs=[{key:'x',label:T.rl||t.name,unit:T.unit||''}];t.consts=[];t.outputs=[Object.assign({key:'r',label:t.name,formula:'x',unit:T.unit||''},keep)]}
+  if(T.type==='titr'){const x=solOf(T.sol)||{};t.solution=(x.name||'').split(' ')[0];t.method=t.method||'Titration';t.inputs=[{key:'V',label:'V '+(x.name||'solution'),unit:'mL'}];
+    t.consts=[{key:'C',label:x.name||'Concentration',sol:T.sol,value:x.conc||'',unit:x.unit||'N'},{key:'Vs',label:'Sample',value:T.vs,unit:T.su||'mL'},{key:'F',label:'Factor',value:T.f}];
+    t.outputs=[Object.assign({key:'r',label:t.name,formula:'C*V*F/Vs',unit:T.unit||''},keep)]}
+  if(T.type==='dens'){t.method=t.method||'Weigh a known volume';t.inputs=[{key:'m',label:'Mass of '+(T.vd||'')+' mL',unit:'g'}];t.consts=[{key:'Vd',label:'Volume',value:T.vd,unit:'mL'}];t.outputs=[Object.assign({key:'r',label:t.name,formula:'m/Vd',unit:T.unit||'g/mL'},keep,{dp:o0.dp==null?3:o0.dp})]}}
+function simpleForm(t,mode,lim){const T=tplOf(t,mode);const o=(t.outputs||[])[0]||{};const sol=S.sol||[];const x=solOf(T.sol)||{};
+  const lab=(l,inner)=>'<label class="field"><span>'+l+'</span>'+inner+'</label>';
+  let h='<div class="simple">';
+  if(mode==='direct')h+='<div class="srow">'+lab('What does the lab type?','<input data-tp="rl" value="'+esc(T.rl)+'" placeholder="e.g. pH reading">')+lab('Unit','<input data-tp="unit" value="'+esc(T.unit)+'" placeholder="e.g. %, ppm, CFU/mL" style="width:140px">')+'</div><p class="say">The lab types the reading. The result is the reading.</p>';
+  if(mode==='titr'){h+='<div class="srow">'+lab('Which solution?','<select data-tp="sol">'+sol.map(y=>'<option value="'+y.id+'"'+(y.id===T.sol?' selected':'')+'>'+esc(y.name)+' ('+esc(y.conc)+' '+esc(y.unit)+')</option>').join('')+'</select>')+
+    lab('Sample taken','<span class="row"><input data-tp="vs" class="num" value="'+esc(T.vs)+'" style="width:90px" inputmode="decimal"><select data-tp="su">'+['mL','g'].map(u=>'<option'+(T.su===u?' selected':'')+'>'+u+'</option>').join('')+'</select></span>')+
+    lab('Factor','<span class="row"><input data-tp="f" class="num" value="'+esc(T.f)+'" style="width:110px" inputmode="decimal"><select data-tp="fpre"><option value="">Pick…</option>'+[['192.12','Citric acid (anhydrous) 192.12'],['210.14','Citric acid (monohydrate) 210.14'],['60.05','Acetic acid 60.05'],['56.1','KOH 56.1'],['5.85','Salt NaCl 5.85']].map(q=>'<option value="'+q[0]+'">'+q[1]+'</option>').join('')+'</select></span>')+
+    lab('Result unit','<input data-tp="unit" value="'+esc(T.unit)+'" style="width:90px">')+'</div>'+
+    '<p class="say"><b>'+esc(t.name)+'</b> = <span class="solchip">'+esc(x.name||'solution')+' '+esc(x.conc||'')+'</span> × <b>V</b> × '+esc(T.f||'factor')+' ÷ '+esc(T.vs||'sample')+'</p><p class="small muted">The lab only types <b>V</b>, the volume of '+esc(x.name||'solution')+' used. When the solution’s concentration changes on this page, this test uses the new one.</p>'}
+  if(mode==='dens')h+='<div class="srow">'+lab('Volume weighed (mL)','<input data-tp="vd" class="num" value="'+esc(T.vd)+'" style="width:90px">')+lab('Unit','<input data-tp="unit" value="'+esc(T.unit)+'" style="width:90px">')+'</div><p class="say"><b>'+esc(t.name)+'</b> = mass ÷ '+esc(T.vd)+' mL. The lab types the mass in g.</p>';
+  h+='<div class="srow">'+(lim?lab('Min','<input data-tp="min" class="num" value="'+esc(o.min==null?'':o.min)+'" style="width:90px">')+lab('Max','<input data-tp="max" class="num" value="'+esc(o.max==null?'':o.max)+'" style="width:90px">'):'<span class="small">Limit: '+(esc(limitText(o))||'none')+' <span class="muted">(set by the lab manager)</span></span>')+lab('Decimals','<input data-tp="dp" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:70px">')+'</div>';
+  return h+'</div>'}
 function fbOuts(outs){return outs.map(o=>'<span class="out '+o.state+'">'+esc(o.label)+': '+(o.value==null?'enter numbers':isNaN(o.value)?'formula error':fmt(o.value,o.dp)+' '+esc(o.unit||''))+'</span>').join('')}
 let fbFocus=0;
 function bindChem(){
@@ -657,9 +690,14 @@ function bindChem(){
     card.querySelectorAll('[data-solf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.solf;let v=i.value.trim();if(k==='conc'){v=v.replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number');i.value=x.conc;return}if(v===String(x.conc))return;x.history=(x.history||[]).concat([{conc:x.conc,by:S.me.id,at:Date.now()}]).slice(-30)}if(k==='nominal')v=v===''?null:Number(v.replace(',','.'));x[k]=v;x.at=Date.now();x.by=S.me.id;saveSol();keep()}))});
   const sa=$('#solAdd');sa&&(sa.onsubmit=e=>{e.preventDefault();const v=$('#sa-v').value.trim().replace(',','.');if(isNaN(Number(v))){toast('Concentration must be a number');return}S.sol=(S.sol||[]).concat([{id:uid('sol'),name:$('#sa-n').value.trim(),chem:$('#sa-c').value.trim(),nominal:null,conc:v,unit:$('#sa-u').value.trim()||'N',at:Date.now(),by:S.me.id,history:[]}]);S.dirty=false;saveSol();keep()});
   const fb=S.fb;if(!fb||!fb.t)return;const t=fb.t;
-  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:''};keep()};
-  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.tid='__new';S.fb.t={id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume',unit:'mL'}],consts:[],outputs:[{key:'r',label:'Result',formula:'V',unit:'',min:'',max:'',dp:2}],_new:1};S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};keep()};
-  document.querySelectorAll('[data-fbt]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.fbt]=i.value;keep()}));
+  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:'',mode:null};keep()};
+  document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{const md=b.dataset.tpl;S.fb.mode=md;if(md!=='adv')applyTpl(t,tplOf(t,md));keep()});
+  document.querySelectorAll('[data-tp]').forEach(i=>i.addEventListener('change',()=>{const md=fbMode(t);const T=tplOf(t,md);let k=i.dataset.tp,v=i.value.trim().replace(',','.');
+    if(k==='fpre'){if(!v)return;k='f'}
+    if(k==='min'||k==='max'||k==='dp'){applyTpl(t,T);t.outputs[0][k]=k==='dp'?Number(v)||0:v;keep();return}
+    T[k]=v;applyTpl(t,T);keep()}));
+  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.tid='__new';S.fb.t={id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume',unit:'mL'}],consts:[],outputs:[{key:'r',label:'Result',formula:'V',unit:'',min:'',max:'',dp:2}],_new:1};S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};S.fb.mode=null;keep()};
+  document.querySelectorAll('[data-fbt]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.fbt]=i.value;const md=fbMode(t);if(md!=='adv')applyTpl(t,tplOf(t,md));keep()}));
   document.querySelectorAll('[data-fr]').forEach(row=>{const arr=t[row.dataset.fr];const it=arr[Number(row.dataset.k)];
     row.querySelectorAll('[data-ff]').forEach(i=>{const k=i.dataset.ff;
       if(k==='formula'){i.addEventListener('focus',()=>fbFocus=Number(row.dataset.k));i.addEventListener('input',()=>{it.formula=i.value.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}))});return}
@@ -675,12 +713,12 @@ function bindChem(){
     box.querySelectorAll('[data-ins]').forEach(c=>c.onclick=()=>put(c.dataset.ins));
     box.querySelectorAll('[data-op]').forEach(c=>c.onclick=()=>{const m={'+':'+','−':'-','×':'*','÷':'/'}[c.dataset.op];if(c.dataset.op==='⌫'){const a=inp.selectionStart||inp.value.length;o.formula=inp.value.slice(0,Math.max(0,a-1))+inp.value.slice(a);inp.value=o.formula;inp.focus();inp.setSelectionRange(Math.max(0,a-1),Math.max(0,a-1));$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}));return}put(m||c.dataset.op)})});
   document.querySelectorAll('[data-fex]').forEach(i=>i.addEventListener('input',()=>{S.fb.ex=S.fb.ex||{};S.fb.ex[i.dataset.fex]=i.value.trim().replace(',','.');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex))}));
-  $('#fb-reset').onclick=()=>{S.fb.t=null;if(t._new)S.fb.tid='';keep()};
+  $('#fb-reset').onclick=()=>{S.fb.t=null;S.fb.mode=null;if(t._new)S.fb.tid='';keep()};
   $('#fb-save').onclick=async()=>{const bad=(t.outputs||[]).find(o=>!o.formula||(SAFE.test(o.formula)&&isNaN(evalFormula(o.formula,Object.fromEntries(fbKeys(t).map((k,j)=>[k,1.3+j*0.37]))))));
     if(bad){$('#fb-msg').textContent='Check the formula of '+bad.label+': it uses a name that is not in this test.';return}
     const c=JSON.parse(JSON.stringify(S.cfg));const p=(c.products||[]).find(x=>x.id===S.fb.pid);const clean=JSON.parse(JSON.stringify(t));delete clean._new;
     p.tests=p.tests||[];const i=p.tests.findIndex(x=>x.id===clean.id);if(i>=0)p.tests[i]=clean;else p.tests.push(clean);
-    try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb.t=null;toast('Formula saved for '+p.name);keep()}catch(e){$('#fb-msg').textContent='Could not save: '+(e.code||e.message)}};
+    try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb.t=null;S.fb.mode=null;toast('Formula saved for '+p.name);keep()}catch(e){$('#fb-msg').textContent='Could not save: '+(e.code||e.message)}};
 }
 
 /* ---------- PEOPLE (admin) ---------- */
