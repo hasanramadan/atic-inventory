@@ -1,0 +1,40 @@
+/* ATIC Lab · 3D look on top of the lab layout: deep glass rail, lifted cards, a live flask, soft motion */
+:root{--accent:#0b6f8c;--accent-soft:#d9eef5;--glow:0 18px 40px -18px rgba(11,95,122,.45)}
+body{background:radial-gradient(1200px 600px at 100% -10%,#d6ecf3 0%,transparent 60%),radial-gradient(900px 500px at -10% 110%,#e3f1e9 0%,transparent 55%),var(--bg)}
+.rail{background:linear-gradient(165deg,#0b3d4f 0%,#0e566d 48%,#0a3242 100%)!important;color:#e6f4f8;border-right:0!important;box-shadow:inset -1px 0 0 rgba(255,255,255,.08),12px 0 40px -24px rgba(5,40,52,.8)}
+.rail .brand{color:#fff;font-size:22px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding-bottom:14px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.12)}
+.rail .brand small{color:rgba(230,244,248,.7)}
+.rail .tab{color:rgba(230,244,248,.85);background:transparent;border:1px solid transparent;border-radius:12px;transition:transform .18s ease,background .18s,box-shadow .18s}
+.rail .tab:hover{background:rgba(255,255,255,.07);transform:translateX(3px)}
+.rail .tab.on{background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,.06));color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 10px 22px -12px rgba(0,0,0,.6);transform:translateX(4px) translateZ(0)}
+.rail .badge{background:#f4c35a;color:#2a1a00}
+.rail .me{color:#e6f4f8;border-top:1px solid rgba(255,255,255,.12)}.rail .me .muted,.rail .me .label{color:rgba(230,244,248,.65)!important}
+/* the flask */
+.flask3d{position:relative;width:46px;height:52px;margin-bottom:6px;perspective:300px}
+.flask3d i{position:absolute;left:8px;right:8px;bottom:0;height:34px;border-radius:6px 6px 16px 16px;background:linear-gradient(90deg,rgba(255,255,255,.35),rgba(255,255,255,.08) 40%,rgba(255,255,255,.3));border:2px solid rgba(255,255,255,.7);overflow:hidden;transform:rotateX(8deg)}
+.flask3d i::before{content:"";position:absolute;left:-2px;right:-2px;bottom:0;height:58%;background:linear-gradient(180deg,#5fe0c1,#14a37f);animation:labwave 3s ease-in-out infinite}
+.flask3d i::after{content:"";position:absolute;left:13px;top:-16px;width:10px;height:16px;border:2px solid rgba(255,255,255,.7);border-bottom:0;border-radius:3px 3px 0 0}
+.flask3d b{position:absolute;bottom:6px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85);animation:labbub 2.4s ease-in infinite;opacity:0}
+.flask3d b:nth-child(2){left:17px}.flask3d b:nth-child(3){left:25px;animation-delay:.8s}.flask3d b:nth-child(4){left:21px;animation-delay:1.5s}
+@keyframes labbub{0%{transform:translateY(0);opacity:0}25%{opacity:.9}100%{transform:translateY(-30px);opacity:0}}
+@keyframes labwave{50%{transform:translateY(3px)}}
+/* lifted cards */
+.card{border:1px solid rgba(11,95,122,.12)!important;border-radius:16px!important;background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(255,255,255,.86))!important;box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 14px 30px -20px rgba(11,60,80,.45),0 2px 6px rgba(11,60,80,.06)!important;transition:transform .25s cubic-bezier(.2,.7,.2,1),box-shadow .25s}
+.card:hover{transform:translateY(-2px);box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 22px 40px -22px rgba(11,60,80,.55),0 3px 8px rgba(11,60,80,.08)!important}
+main h1{font-size:30px;background:linear-gradient(90deg,#0b3d4f,#0b6f8c 60%,#14a37f);-webkit-background-clip:text;background-clip:text;color:transparent}
+button.primary{background:linear-gradient(135deg,#0b6f8c,#0a4f66)!important;border-color:#0a4f66!important;box-shadow:0 10px 20px -10px rgba(11,95,122,.7),inset 0 1px 0 rgba(255,255,255,.25);border-radius:10px!important}
+button.primary:hover{transform:translateY(-1px)}
+button{border-radius:10px!important;transition:transform .15s,box-shadow .15s}
+input,select,textarea{border-radius:10px!important}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(11,111,140,.15)}
+/* hero for the live overview / today title rows */
+main>.stack>.row.between:first-child{padding:18px 20px;border-radius:18px;background:linear-gradient(135deg,#0b3d4f,#0e6a84 55%,#14a37f);box-shadow:var(--glow);position:relative;overflow:hidden}
+main>.stack>.row.between:first-child h1{color:#fff;background:none;-webkit-text-fill-color:#fff}
+main>.stack>.row.between:first-child::after{content:"";position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.22),transparent);pointer-events:none}
+main>.stack>.row.between:first-child button:not(.primary){background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.3)}
+main>.stack>.row.between:first-child button.primary{background:#fff!important;color:#0b4f66!important;border-color:#fff!important}
+/* states */
+.ok,.state-ok{color:var(--ok)}
+table tr{transition:background .15s}table tr:hover td{background:rgba(11,111,140,.04)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body{background:var(--bg)}:root:not([data-theme="light"]) .card{background:linear-gradient(180deg,#1a2a31,#152228)!important;border-color:#2a3a42!important}:root:not([data-theme="light"]) main h1{background:linear-gradient(90deg,#9fdcef,#5fe0c1);-webkit-background-clip:text;background-clip:text}}
+@media (prefers-reduced-motion:reduce){.flask3d i::before,.flask3d b{animation:none}.card,.rail .tab{transition:none}}
