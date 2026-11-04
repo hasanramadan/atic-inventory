@@ -28,9 +28,12 @@ function evalFormula(expr,vars){
   try{const v=f(...keys.map(k=>vars[k]));return typeof v==='number'&&isFinite(v)?v:NaN}catch(e){return NaN}
 }
 /* returns [{key,label,unit,value,state}] for a test given inputs */
-function computeTest(test,inputs){
+function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
+function constVal(c,snap){if(snap&&snap[c.key]!=null)return Number(snap[c.key]);if(c.sol){const x=solOf(c.sol);if(x&&x.conc!==''&&x.conc!=null)return Number(x.conc)}return Number(c.value)}
+function constSnap(t){const k={};(t.consts||[]).forEach(c=>{if(c.sol)k[c.key]=constVal(c)});return Object.keys(k).length?k:null}
+function computeTest(test,inputs,snap){
   const vars={};
-  (test.consts||[]).forEach(c=>vars[c.key]=Number(c.value));
+  (test.consts||[]).forEach(c=>vars[c.key]=constVal(c,snap));
   let missing=false;
   (test.inputs||[]).forEach(i=>{const v=inputs&&inputs[i.key];if(v===''||v==null||isNaN(Number(v))){missing=true;vars[i.key]=NaN}else vars[i.key]=Number(v)});
   return (test.outputs||[]).map(o=>{
@@ -50,13 +53,15 @@ function limitText(o){const mn=o.min!==''&&o.min!=null,mx=o.max!==''&&o.max!=nul
 
 /* ---------- state ---------- */
 const S={db:null,assets:null,downloads:null,ready:false,cfg:null,people:{},sessions:{},samples:{},tasks:{},daynotes:{},plans:{},
-  me:null,view:'today',sessionId:null,sampleId:null,setupProduct:null,dirty:false,error:null,cfgDraft:null};
+  sol:null,me:null,view:'today',sessionId:null,sampleId:null,setupProduct:null,dirty:false,error:null,cfgDraft:null};
 const today=()=>dubaiToday();
 function person(id){return S.people[id]||{name:'Unknown'}}
 function product(id){return (S.cfg&&S.cfg.products||[]).find(p=>p.id===id)}
 function role(){return S.me&&S.me.role}
 const isDoctor=()=>role()==='doctor'||role()==='admin';
 const isAdmin=()=>role()==='admin';
+const isStation=()=>role()==='station';
+const canBuild=()=>isStation()||isDoctor();
 
 /* ---------- per-doc write queue (one write at a time per doc) ---------- */
 const Q={};
@@ -100,10 +105,22 @@ async function boot(){
       if(local&&((q&&(q.busy||q.next))||typingTimers[d.id]))return; S.samples[d.id]=Object.assign({id:d.id},d.data())});
     const ids=new Set(snap.docs.map(d=>d.id));Object.keys(S.samples).forEach(k=>{if(!ids.has(k)&&!(Q['samples/'+k]&&(Q['samples/'+k].busy||Q['samples/'+k].next)))delete S.samples[k]});
     changed('samples')},err);
+  S.db.doc('config/solutions').onSnapshot(snap=>{const d=snap.exists?snap.data():null;S.sol=d&&d.list||null;if(!S.sol)seedSolutions();changed('sol')},()=>{});
   S.db.collection('tasks').orderBy('at','desc').limit(300).onSnapshot(snap=>{S.tasks={};snap.docs.forEach(d=>S.tasks[d.id]=Object.assign({id:d.id},d.data()));changed('tasks')},()=>{});
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
 }
+const SOL_SEED=[
+  {id:'naoh01',name:'NaOH 0.1 N',chem:'Sodium hydroxide',nominal:0.1,conc:'0.107209',unit:'N'},
+  {id:'naoh05',name:'NaOH 0.5 N',chem:'Sodium hydroxide',nominal:0.5,conc:'0.484624',unit:'N'},
+  {id:'agno301',name:'AgNO3 0.1 N',chem:'Silver nitrate (salinity)',nominal:0.1,conc:'0.095472',unit:'N'},
+  {id:'koh001',name:'KOH 0.01 N',chem:'Potassium hydroxide',nominal:0.01,conc:'0.01',unit:'N'}];
+const SOL_LINKS={'t03|C':'naoh01','t05|C':'agno301','t15|C':'naoh05','t20|C':'koh001','t28|C':'koh001'};
+let seeding=false;
+async function seedSolutions(){if(seeding||!S.cfg||!(window.LAB_ME||{}).id)return;seeding=true;
+  try{await S.db.doc('config/solutions').set({list:SOL_SEED.map(x=>Object.assign({},x,{at:Date.now(),history:[]}))});
+    const c=JSON.parse(JSON.stringify(S.cfg));let n=0;(c.products||[]).forEach(p=>(p.tests||[]).forEach(t=>(t.consts||[]).forEach(k=>{const id=SOL_LINKS[t.id+'|'+k.key];if(id&&!k.sol){k.sol=id;n++}})));
+    if(n)await S.db.doc('config/main').set(c)}catch(e){seeding=false}}
 function restoreLogin(){
   const me=window.LAB_ME||{}; const site=me.is_owner||me.role==='admin';
   let p=Object.values(S.people).find(x=>x.uid===me.id&&x.active!==false);
@@ -112,7 +129,8 @@ function restoreLogin(){
     p=p?Object.assign(p,{uid:me.id}):{id:uid('u'),uid:me.id,name:me.full_name||me.username||'Admin',role:'admin',canTest:true,canValidate:true,pin:'',active:true};
     S.people[p.id]=p;queueWrite('people/'+p.id,strip(p));
   }
-  if(p){S.me=p;S.view=p.role==='lab'?'today':'overview'}
+  if(!p&&String(me.username||'').toLowerCase()==='lab'){p={id:uid('u'),uid:me.id,name:'Lab',role:'station',canTest:false,canValidate:false,pin:'',active:true};S.people[p.id]=p;queueWrite('people/'+p.id,strip(p))}
+  if(p){S.me=p;S.view=(p.role==='lab'||p.role==='station')?'today':'overview'}
   else S.error='You are not in the lab team yet. Ask the lab admin to add you in Lab → People (link your website account '+(me.full_name||me.username||'')+').';
 }
 function changed(){ if(!S.ready)return; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.dirty=true;return} if($('.modal-bg')){S.dirty=true;return} render()}
@@ -123,8 +141,8 @@ setInterval(()=>{if(S.ready&&S.view==='overview'&&!S.dirty)changed()},15000);
 function sessionSamples(sid){return Object.values(S.samples).filter(s=>s.sessionId===sid).sort((a,b)=>a.n-b.n)}
 function testsOf(p,kind){return (p&&p.tests||[]).filter(t=>!kind||t.kind===kind)}
 function resultOf(s,t){return (s.results||{})[t.id]||{}}
-function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=computeTest(t,r.in);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
-function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}computeTest(t,r.in).forEach(o=>{if(o.state==='bad')bad++})});return bad}
+function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=computeTest(t,r.in,r.k);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
+function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}computeTest(t,r.in,r.k).forEach(o=>{if(o.state==='bad')bad++})});return bad}
 function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional);return ts.length>0&&ts.every(t=>testDone(s,t))}
 function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
@@ -137,8 +155,10 @@ function render(){
   if(S.error){root.innerHTML='<div class="login"><h1>ATIC Lab</h1><div class="card">'+esc(S.error)+'</div></div>';return}
   if(!S.ready)return;
   if(!S.me){root.innerHTML=loginView();bindLogin();return}
+  if(isStation())return renderStation();
   const tabs=[['today','Today',myTasks().length||''],['history','Records',''],['micro','Micro pending',microPendingCount()||''],['tasks','Tasks',myTasks().length||'']];
   if(isDoctor())tabs.unshift(['overview','Live overview','']);
+  if(isDoctor())tabs.push(['chem','Solutions & formulas','']);
   if(isDoctor())tabs.push(['setup','Tests & limits','']);
   if(isAdmin())tabs.push(['people','People','']);
   if(S.view==='session'&&!S.sessions[S.sessionId])S.view='today';
@@ -151,7 +171,19 @@ function render(){
   root.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;lsSet('lab.cat',S.cat);histFilter.product='';render()});
   root.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{S.kind=b.dataset.kind;lsSet('lab.kind',S.kind);render()});
 }
-function roleName(r){return r==='admin'?'Admin':r==='doctor'?'Lab manager':'Lab technician'}
+function roleName(r){return r==='admin'?'Admin':r==='doctor'?'Lab manager':r==='station'?'Lab account':'Lab technician'}
+function renderStation(){
+  const root=$('#root');
+  if(!['today','session','micro','history','chem'].includes(S.view))S.view='today';
+  const cur=S.view==='session'?'today':S.view;const mp=microPendingCount();
+  const tabs=[['today','Testing',''],['micro','Micro to read',mp||''],['history','Records',''],['chem','Solutions & formulas','']];
+  root.innerHTML='<div class="station"><header class="stbar"><div class="stbrand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div><div><b>ATIC Lab</b><small>'+niceDate(today())+'</small></div></div><nav class="sttabs" aria-label="Sections">'+
+    tabs.map(t=>'<button class="sttab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'">'+t[1]+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+'</nav></header><main id="main">'+viewHTML()+'</main></div>';
+  root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
+  bindView();
+  root.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;lsSet('lab.cat',S.cat);histFilter.product='';render()});
+  root.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{S.kind=b.dataset.kind;lsSet('lab.kind',S.kind);render()});
+}
 function viewHTML(){
   switch(S.view){
     case 'overview':return overviewView();
@@ -160,11 +192,12 @@ function viewHTML(){
     case 'micro':return microView();
     case 'tasks':return tasksView();
     case 'setup':return setupView();
+    case 'chem':return chemView();
     case 'people':return peopleView();
     default:return todayView();
   }
 }
-function bindView(){({overview:bindOverview,session:bindSession,history:bindHistory,micro:bindMicro,tasks:bindTasks,setup:bindSetup,people:bindPeople}[S.view]||bindToday)()}
+function bindView(){({overview:bindOverview,session:bindSession,history:bindHistory,micro:bindMicro,tasks:bindTasks,setup:bindSetup,chem:bindChem,people:bindPeople}[S.view]||bindToday)()}
 
 /* ---------- login ---------- */
 let pick=null;
@@ -205,8 +238,8 @@ function todayView(){
   const sess=Object.values(S.sessions).filter(s=>s.date===d&&inCat(s)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const started=new Set(sess.map(s=>s.productId+'|'+s.section));
   const planned=Object.keys(plan).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);return{key:k,p,sec,batches:plan[k]}}).filter(x=>x.p&&(catSel()==='all'||catOfP(x.p)===catSel()));
-  const tasks=myTasks();
-  const assigned=Object.values(S.samples).filter(s=>inCat(s)&&s.assignedTo===S.me.id&&!sampleChemDone(s,product(s.productId)));
+  const tasks=isStation()?[]:myTasks();
+  const assigned=isStation()?[]:Object.values(S.samples).filter(s=>inCat(s)&&s.assignedTo===S.me.id&&!sampleChemDone(s,product(s.productId)));
   let h='<div class="stack">'+catBar()+'<div class="row between"><h1>'+esc(catLabel(catSel()))+' · '+niceDate(d)+'</h1><button class="primary" id="newSess">Start testing</button></div>';
   if(note&&note.text)h+='<div class="note-banner"><div class="label">Note from '+esc(person(note.by).name)+' · '+hhmm(note.at)+'</div>'+esc(note.text).replace(/\n/g,'<br>')+'</div>';
   if(tasks.length||assigned.length){h+='<div class="card stack"><h3>For you</h3>'+tasks.map(t=>'<div class="row between"><span>'+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
@@ -311,13 +344,13 @@ function testRow(s,t){
   const r=resultOf(s,t);
   let h='<div class="test" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b>'+(t.optional?' <span class="pill">'+esc(t.freq||'optional')+'</span>':'')+
     '<div class="small muted">'+esc([t.method,t.solution].filter(Boolean).join(' · '))+'</div>'+
-    ((t.consts||[]).length?'<div class="small muted mono">'+t.consts.map(c=>esc(c.label||c.key)+' '+esc(c.value)).join(' · ')+'</div>':'')+
+    ((t.consts||[]).length?'<div class="small muted mono">'+t.consts.map(c=>{const x=c.sol&&solOf(c.sol);return x?'<span class="solchip">'+esc(x.name)+' '+esc(String(constVal(c,resultOf(s,t).k)))+' '+esc(x.unit||'N')+'</span>':esc(c.label||c.key)+' '+esc(c.value)}).join(' · ')+'</div>':'')+
     (t.kind==='micro'&&t.incubDays?'<div class="small muted">Read on '+niceDate(addDays(s.date,Number(t.incubDays)))+'</div>':'')+'</div><div>';
   if(t.kind==='org'){
     h+='<div class="ins"><label>Result<select data-org="'+t.id+'"><option value="">–</option>'+['Acceptable','Not acceptable'].map(o=>'<option'+(r.value===o?' selected':'')+'>'+o+'</option>').join('')+'</select></label><label style="flex:1">Comment<input data-orgc="'+t.id+'" value="'+esc(r.comment||'')+'" style="width:100%"></label></div>';
     if(r.value==='Not acceptable')h+='<div class="outs"><span class="out bad">Not acceptable</span></div>';
   }else{
-    const outs=computeTest(t,r.in);
+    const outs=computeTest(t,r.in,r.k);
     const single=t.inputs.length===1&&t.outputs.length===1&&(!t.outputs[0].formula||t.outputs[0].formula===t.inputs[0].key);
     h+='<div class="ins">'+t.inputs.map(i=>{const st=single?outs[0].state:'';return '<label>'+esc(i.label)+(i.unit?' ('+esc(i.unit)+')':'')+'<input class="num'+(st==='bad'?' bad':'')+'" inputmode="decimal" data-in="'+t.id+'" data-key="'+esc(i.key)+'" value="'+esc(r.in&&r.in[i.key]!=null?r.in[i.key]:'')+'"></label>'}).join('')+'</div>';
     h+='<div class="outs">'+outs.map(o=>{if(single&&o.value==null)return'<span class="out muted small">Limit '+(limitText(t.outputs[0])||'none')+'</span>';const lt=limitText(t.outputs.find(x=>x.key===o.key)||{});return '<span class="out '+o.state+'" title="'+(lt?'Limit '+esc(lt):'No limit set')+'">'+esc(o.label)+': '+(o.value==null?'–':isNaN(o.value)?'check formula':fmt(o.value,o.dp))+(o.unit?' '+esc(o.unit):'')+(lt?' <span class="muted">('+esc(lt)+')</span>':'')+'</span>'}).join('')+'</div>';
@@ -355,10 +388,10 @@ function bindSession(){
   const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()}};
   document.querySelectorAll('[data-in]').forEach(inp=>{
     inp.addEventListener('input',()=>{const t=p.tests.find(x=>x.id===inp.dataset.in);s.results=s.results||{};const r=s.results[t.id]=s.results[t.id]||{};r.in=r.in||{};
-      r.in[inp.dataset.key]=inp.value.trim().replace(',','.');r.by=S.me.id;r.at=Date.now();live(t.id,inp.dataset.key);
+      if(!r.k){const k=constSnap(t);if(k)r.k=k}r.in[inp.dataset.key]=inp.value.trim().replace(',','.');r.by=S.me.id;r.at=Date.now();live(t.id,inp.dataset.key);
       const row=inp.closest('.test');const tmp=document.createElement('div');tmp.innerHTML=testRow(s,t);
       row.querySelector('.outs').replaceWith(tmp.querySelector('.outs'));
-      const outs=computeTest(t,r.in);if(t.inputs.length===1&&t.outputs.length===1)inp.classList.toggle('bad',outs[0].state==='bad');
+      const outs=computeTest(t,r.in,r.k);if(t.inputs.length===1&&t.outputs.length===1)inp.classList.toggle('bad',outs[0].state==='bad');
       liveSave(s)});
     inp.addEventListener('focus',()=>{live(inp.dataset.in,inp.dataset.key);liveSave(s,300)});
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const all=[...document.querySelectorAll('[data-in]')];const i=all.indexOf(inp);if(all[i+1])all[i+1].focus();else inp.blur()}});
@@ -390,7 +423,7 @@ function editSessionModal(ss){
     const del=bg.querySelector('#es-del');let armed=false;del&&(del.onclick=()=>{if(!armed){armed=true;del.textContent='Press again to delete it and all its samples';return}
       sessionSamples(ss.id).forEach(s=>{delete S.samples[s.id];queueWrite('samples/'+s.id,null,'delete')});delete S.sessions[ss.id];queueWrite('sessions/'+ss.id,null,'delete');close();S.view='today';render()})});
 }
-function resultText(s,t){const r=resultOf(s,t);if(t.kind==='org')return (r.value||'–')+(r.comment?' ('+r.comment+')':'');const outs=computeTest(t,r.in);return outs.map(o=>o.label+' '+fmt(o.value,o.dp)).join(', ')+' · inputs '+Object.entries(r.in||{}).map(([k,v])=>k+'='+v).join(' ')}
+function resultText(s,t){const r=resultOf(s,t);if(t.kind==='org')return (r.value||'–')+(r.comment?' ('+r.comment+')':'');const outs=computeTest(t,r.in,r.k);return outs.map(o=>o.label+' '+fmt(o.value,o.dp)).join(', ')+' · inputs '+Object.entries(r.in||{}).map(([k,v])=>k+'='+v).join(' ')}
 function retestModal(s,t){
   modal('<h2>Retest '+esc(t.name)+' · '+esc(s.code)+'</h2><p class="small muted">The first result is kept in the record. The test fields are cleared so you can enter the new reading.</p><p class="small">First result: <span class="mono">'+esc(resultText(s,t))+'</span></p><form id="rtf" class="stack"><label class="field"><span>Why are you retesting?</span><textarea id="rt-r" required placeholder="e.g. Endpoint overshot, burette air bubble"></textarea></label><label class="field"><span>Photo (optional)</span><input id="rt-f" type="file" accept="image/*,application/pdf" multiple></label><div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Start retest</button></div></form>',(bg,close)=>{
     bg.querySelector('#rtf').onsubmit=async e=>{e.preventDefault();const reason=bg.querySelector('#rt-r').value.trim();if(!reason)return;e.submitter&&(e.submitter.disabled=true);
@@ -459,8 +492,8 @@ function overviewView(){
   h+='<div class="card stack"><div class="row between"><h3>Working right now</h3><span class="small muted">Updates as they type</span></div>'+(live.length?'<table><tr><th>Who</th><th>Sample</th><th>Test</th><th>Entry</th><th>When</th></tr>'+live.map(s=>{const p=product(s.productId);const t=(p&&p.tests||[]).find(x=>x.id===s.live.testId);const r=resultOf(s,t||{});const val=t&&t.kind==='org'?(r.value||''):(r.in?Object.entries(r.in).map(([k,v])=>k+'='+v).join(' '):'');
       return '<tr><td><span class="live-dot"></span> '+esc(person(s.live.by).name)+'</td><td><button class="ghost" data-open-sample="'+s.id+'"><b class="mono">'+esc(s.code)+'</b></button> <span class="small muted">'+esc(p?p.name:'')+'</span></td><td>'+esc(t?t.name:'')+'</td><td class="mono small">'+esc(val)+'</td><td class="small muted">'+ago(s.live.at)+'</td></tr>'}).join('')+'</table>':'<p class="muted small">Nobody is typing at the moment.</p>')+'</div>';
   h+='<h2>Today’s testing</h2>'+(all.length?'<div class="grid">'+sess.map(sessCard).join('')+'</div>':'<div class="card muted">The lab has not started anything today.</div>');
-  h+='<div class="card stack"><h3>Latest entries</h3>'+(recent.length?'<div class="tablewrap"><table><tr><th>Time</th><th>Sample</th><th>Test</th><th>Result</th><th>By</th></tr>'+recent.map(x=>{const st=x.t.kind==='org'?(x.r.value==='Not acceptable'?'bad':''):computeTest(x.t,x.r.in).some(o=>o.state==='bad')?'bad':'';
-      return '<tr><td class="num small">'+hhmm(x.r.at)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'"><b class="mono">'+esc(x.s.code)+'</b></button></td><td>'+esc(x.t.name)+'</td><td class="mono small"><span class="out '+st+'">'+esc(x.t.kind==='org'?(x.r.value||''):computeTest(x.t,x.r.in).map(o=>o.label+' '+fmt(o.value,o.dp)).join(' · '))+'</span></td><td class="small">'+esc(person(x.r.by).name)+'</td></tr>'}).join('')+'</table></div>':'<p class="muted small">No results entered today.</p>')+'</div>';
+  h+='<div class="card stack"><h3>Latest entries</h3>'+(recent.length?'<div class="tablewrap"><table><tr><th>Time</th><th>Sample</th><th>Test</th><th>Result</th><th>By</th></tr>'+recent.map(x=>{const st=x.t.kind==='org'?(x.r.value==='Not acceptable'?'bad':''):computeTest(x.t,x.r.in,x.r.k).some(o=>o.state==='bad')?'bad':'';
+      return '<tr><td class="num small">'+hhmm(x.r.at)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'"><b class="mono">'+esc(x.s.code)+'</b></button></td><td>'+esc(x.t.name)+'</td><td class="mono small"><span class="out '+st+'">'+esc(x.t.kind==='org'?(x.r.value||''):computeTest(x.t,x.r.in,x.r.k).map(o=>o.label+' '+fmt(o.value,o.dp)).join(' · '))+'</span></td><td class="small">'+esc(person(x.r.by).name)+'</td></tr>'}).join('')+'</table></div>':'<p class="muted small">No results entered today.</p>')+'</div>';
   return h+'</div>';
 }
 function bindOverview(){
@@ -560,12 +593,90 @@ function bindSetup(){
   });
 }
 
+/* ---------- SOLUTIONS & FORMULAS (lab account, lab manager, admin) ---------- */
+function solUsedIn(id){const L=[];(S.cfg.products||[]).forEach(p=>(p.tests||[]).forEach(t=>{if((t.consts||[]).some(c=>c.sol===id))L.push(p.code+' '+t.name)}));return L}
+function keyOf(label,taken){let k=String(label||'v').replace(/[^A-Za-z0-9]/g,'').slice(0,6)||'v';if(/^\d/.test(k))k='v'+k;let n=k,i=2;while(taken.includes(n))n=k+i++;return n}
+function fbKeys(t){return [].concat((t.inputs||[]).map(x=>x.key),(t.consts||[]).map(x=>x.key),(t.outputs||[]).map(x=>x.key)).filter(Boolean)}
+function chemView(){
+  const sol=S.sol||[];const ed=canBuild();
+  let h='<div class="stack"><div><h1>Solutions &amp; formulas</h1><p class="muted">Change a concentration here after you standardise a solution: every test that uses it takes the new value. Results already entered keep the value they were made with.</p></div>';
+  h+='<h2>Solutions</h2><div class="solgrid">'+sol.map(x=>{const u=solUsedIn(x.id);const last=(x.history||[]).slice(-1)[0];
+    return '<div class="solcard" data-sol="'+x.id+'"><div class="soltop"><span class="flaskmini" aria-hidden="true"></span><div><b>'+esc(x.name)+'</b><div class="small muted">'+esc(x.chem||'')+'</div></div></div>'+
+    '<label class="field"><span>Concentration now ('+esc(x.unit||'N')+')</span><input class="num big" data-solf="conc" value="'+esc(x.conc)+'" inputmode="decimal"'+(ed?'':' disabled')+'></label>'+
+    '<div class="small muted">Nominal '+esc(x.nominal==null?'–':x.nominal)+' '+esc(x.unit||'N')+(last?' · was '+esc(last.conc)+' until '+niceDate(new Date(last.at+4*3600e3).toISOString().slice(0,10))+' ('+esc(person(last.by).name)+')':'')+'</div>'+
+    '<div class="small">'+(u.length?'Used in: '+u.map(esc).join(', '):'<span class="muted">Not used in a formula yet</span>')+'</div>'+
+    (ed?'<details class="small"><summary>Edit name</summary><div class="row"><input data-solf="name" value="'+esc(x.name)+'"><input data-solf="chem" value="'+esc(x.chem||'')+'" placeholder="Chemical"><input data-solf="nominal" class="num" value="'+esc(x.nominal==null?'':x.nominal)+'" style="width:80px" placeholder="Nominal"><input data-solf="unit" value="'+esc(x.unit||'N')+'" style="width:60px"></div></details>':'')+'</div>'}).join('')+'</div>';
+  if(ed)h+='<form id="solAdd" class="card row"><b>New solution</b><input id="sa-n" placeholder="Name, e.g. HCl 0.1 N" required style="flex:1"><input id="sa-c" placeholder="Chemical"><input id="sa-v" class="num" placeholder="Concentration" required inputmode="decimal" style="width:130px"><input id="sa-u" value="N" style="width:60px"><button class="primary">Add</button></form>';
+  if(ed)h+=builderHTML();
+  return h+'</div>';
+}
+function builderHTML(){
+  const prods=S.cfg.products||[];
+  if(!S.fb||!prods.find(p=>p.id===S.fb.pid)){const p=prods[0];S.fb={pid:p&&p.id,tid:''}}
+  const p=prods.find(x=>x.id===S.fb.pid);if(!p)return'';
+  const chem=(p.tests||[]).filter(t=>t.kind==='chem');
+  if(S.fb.tid===''&&chem[0])S.fb.tid=chem[0].id;
+  if(!S.fb.t||S.fb.t.id!==S.fb.tid){const src=(p.tests||[]).find(t=>t.id===S.fb.tid);S.fb.t=src?JSON.parse(JSON.stringify(src)):{id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume',unit:'mL'}],consts:[],outputs:[{key:'r',label:'Result',formula:'V',unit:'',min:'',max:'',dp:2}],_new:1};S.fb.tid=S.fb.t.id}
+  const t=S.fb.t;const sol=S.sol||[];const lim=isDoctor();
+  const opts=CATS.map(([c,n])=>{const ps=prods.filter(x=>catOfP(x)===c);return ps.length?'<optgroup label="'+n+'">'+ps.map(x=>'<option value="'+x.id+'"'+(x.id===p.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</optgroup>':''}).join('');
+  let h='<h2>Formula builder</h2><div class="card stack fb">';
+  h+='<div class="row"><label class="field"><span>Product or sample</span><select id="fb-p">'+opts+'</select></label><label class="field"><span>Test</span><select id="fb-t">'+chem.map(x=>'<option value="'+x.id+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+(t._new?'<option value="'+t.id+'" selected>'+esc(t.name)+' (new)</option>':'')+'<option value="__new">+ New test</option></select></label>'+
+    '<label class="field" style="flex:1"><span>Test name</span><input data-fbt="name" value="'+esc(t.name)+'"></label><label class="field" style="flex:1"><span>Method</span><input data-fbt="method" value="'+esc(t.method||'')+'" placeholder="e.g. Titration"></label></div>';
+  h+='<div class="fbcols"><div class="stack"><div class="label">1 · What you read</div>'+(t.inputs||[]).map((x,k)=>'<div class="fbrow" data-fr="inputs" data-k="'+k+'"><span class="chip key">'+esc(x.key)+'</span><input data-ff="label" value="'+esc(x.label)+'" placeholder="e.g. V NaOH"><input data-ff="unit" value="'+esc(x.unit||'')+'" placeholder="unit" style="width:70px"><button class="ghost danger" data-fdel>×</button></div>').join('')+'<button class="ghost" data-fadd="inputs">+ Reading</button>'+
+    '<div class="label">2 · Solutions and fixed numbers</div>'+(t.consts||[]).map((x,k)=>'<div class="fbrow" data-fr="consts" data-k="'+k+'"><span class="chip key sol">'+esc(x.key)+'</span><select data-ff="sol"><option value="">Fixed number</option>'+sol.map(o=>'<option value="'+o.id+'"'+(x.sol===o.id?' selected':'')+'>'+esc(o.name)+'</option>').join('')+'</select>'+(x.sol?'<span class="small mono">'+esc((solOf(x.sol)||{}).conc||'')+' '+esc((solOf(x.sol)||{}).unit||'')+'</span>':'<input data-ff="label" value="'+esc(x.label||'')+'" placeholder="e.g. Sample volume"><input data-ff="value" class="num" value="'+esc(x.value||'')+'" style="width:90px" placeholder="value">')+'<button class="ghost danger" data-fdel>×</button></div>').join('')+
+    '<div class="row"><button class="ghost" data-fadd="sol">+ Solution</button><button class="ghost" data-fadd="consts">+ Fixed number</button></div></div>';
+  h+='<div class="stack"><div class="label">3 · Results (tap the chips to build the formula)</div>'+(t.outputs||[]).map((o,k)=>{const before=(t.outputs||[]).slice(0,k).map(x=>x.key);
+    return '<div class="fbout" data-fr="outputs" data-k="'+k+'"><div class="row"><input data-ff="label" value="'+esc(o.label)+'" placeholder="Result name" style="flex:1"><input data-ff="unit" value="'+esc(o.unit||'')+'" placeholder="unit" style="width:70px"><label class="row small">Decimals <input data-ff="dp" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:60px"></label><button class="ghost danger" data-fdel>×</button></div>'+
+      '<input class="formula fbformula" data-ff="formula" data-k="'+k+'" value="'+esc(o.formula||'')+'" placeholder="tap chips below">'+
+      '<div class="chips">'+(t.inputs||[]).map(x=>'<button type="button" class="chip key" data-ins="'+esc(x.key)+'" title="'+esc(x.label)+'">'+esc(x.key)+'</button>').join('')+(t.consts||[]).map(x=>'<button type="button" class="chip key sol" data-ins="'+esc(x.key)+'" title="'+esc(x.sol?(solOf(x.sol)||{}).name:x.label)+'">'+esc(x.key)+'</button>').join('')+before.map(x=>'<button type="button" class="chip key res" data-ins="'+esc(x)+'">'+esc(x)+'</button>').join('')+
+      ['+','−','×','÷','(',')','100','1000','⌫'].map(x=>'<button type="button" class="chip op" data-op="'+x+'">'+x+'</button>').join('')+'</div>'+
+      '<div class="small">Limit: '+(lim?'min <input data-ff="min" class="num" value="'+esc(o.min==null?'':o.min)+'" style="width:70px"> max <input data-ff="max" class="num" value="'+esc(o.max==null?'':o.max)+'" style="width:70px">':(esc(limitText(o))||'none')+' <span class="muted">(the lab manager sets limits)</span>')+' · short name <span class="mono">'+esc(o.key)+'</span></div></div>'}).join('')+'<button class="ghost" data-fadd="outputs">+ Result</button></div></div>';
+  const ex=S.fb.ex||{};const outs=computeTest(t,ex);
+  h+='<div class="fbcheck"><b>Try it</b>'+(t.inputs||[]).map(x=>'<label class="row small">'+esc(x.label||x.key)+' <input class="num" data-fex="'+esc(x.key)+'" value="'+esc(ex[x.key]||'')+'" style="width:90px" inputmode="decimal"></label>').join('')+'<span id="fb-out">'+fbOuts(outs)+'</span></div>';
+  h+='<div class="row between"><span class="small muted" id="fb-msg"></span><div class="row"><button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save formula</button></div></div></div>';
+  return h;
+}
+function fbOuts(outs){return outs.map(o=>'<span class="out '+o.state+'">'+esc(o.label)+': '+(o.value==null?'enter numbers':isNaN(o.value)?'formula error':fmt(o.value,o.dp)+' '+esc(o.unit||''))+'</span>').join('')}
+let fbFocus=0;
+function bindChem(){
+  const keep=()=>{const y=window.scrollY;render();window.scrollTo(0,y)};
+  const saveSol=async()=>{try{await S.db.doc('config/solutions').set({list:S.sol});toast('Saved')}catch(e){toast('Could not save: '+(e.code||e.message))}};
+  document.querySelectorAll('[data-sol]').forEach(card=>{const x=S.sol.find(o=>o.id===card.dataset.sol);
+    card.querySelectorAll('[data-solf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.solf;let v=i.value.trim();if(k==='conc'){v=v.replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number');i.value=x.conc;return}if(v===String(x.conc))return;x.history=(x.history||[]).concat([{conc:x.conc,by:S.me.id,at:Date.now()}]).slice(-30)}if(k==='nominal')v=v===''?null:Number(v.replace(',','.'));x[k]=v;x.at=Date.now();x.by=S.me.id;saveSol();keep()}))});
+  const sa=$('#solAdd');sa&&(sa.onsubmit=e=>{e.preventDefault();const v=$('#sa-v').value.trim().replace(',','.');if(isNaN(Number(v))){toast('Concentration must be a number');return}S.sol=(S.sol||[]).concat([{id:uid('sol'),name:$('#sa-n').value.trim(),chem:$('#sa-c').value.trim(),nominal:null,conc:v,unit:$('#sa-u').value.trim()||'N',at:Date.now(),by:S.me.id,history:[]}]);S.dirty=false;saveSol();keep()});
+  const fb=S.fb;if(!fb||!fb.t)return;const t=fb.t;
+  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:''};keep()};
+  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.tid='__new';S.fb.t={id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume',unit:'mL'}],consts:[],outputs:[{key:'r',label:'Result',formula:'V',unit:'',min:'',max:'',dp:2}],_new:1};S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};keep()};
+  document.querySelectorAll('[data-fbt]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.fbt]=i.value;keep()}));
+  document.querySelectorAll('[data-fr]').forEach(row=>{const arr=t[row.dataset.fr];const it=arr[Number(row.dataset.k)];
+    row.querySelectorAll('[data-ff]').forEach(i=>{const k=i.dataset.ff;
+      if(k==='formula'){i.addEventListener('focus',()=>fbFocus=Number(row.dataset.k));i.addEventListener('input',()=>{it.formula=i.value.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}))});return}
+      i.addEventListener('change',()=>{let v=i.value.trim();if(k==='dp')v=Number(v)||0;if(k==='value'||k==='min'||k==='max')v=v.replace(',','.');it[k]=v;if(k==='sol'&&v){const x=solOf(v);it.label=x?x.name:'';it.unit=x?x.unit:''}keep()})});
+    const d=row.querySelector('[data-fdel]');d&&(d.onclick=()=>{arr.splice(Number(row.dataset.k),1);keep()})});
+  document.querySelectorAll('[data-fadd]').forEach(b=>b.onclick=()=>{const k=b.dataset.fadd;const taken=fbKeys(t);
+    if(k==='inputs')t.inputs.push({key:keyOf('m',taken),label:'Reading',unit:''});
+    if(k==='consts')(t.consts=t.consts||[]).push({key:keyOf('F',taken),label:'Factor',value:'',unit:''});
+    if(k==='sol'){const x=(S.sol||[])[0];(t.consts=t.consts||[]).push({key:keyOf('C',taken),label:x?x.name:'Concentration',value:x?x.conc:'',unit:x?x.unit:'N',sol:x?x.id:''})}
+    if(k==='outputs')t.outputs.push({key:keyOf('r',taken),label:'Result',formula:'',unit:'',min:'',max:'',dp:2});keep()});
+  document.querySelectorAll('.fbout').forEach(box=>{const k=Number(box.dataset.k);const o=t.outputs[k];const inp=box.querySelector('.fbformula');
+    const put=txt=>{const a=inp.selectionStart==null?inp.value.length:inp.selectionStart,b=inp.selectionEnd==null?a:inp.selectionEnd;o.formula=inp.value.slice(0,a)+txt+inp.value.slice(b);inp.value=o.formula;inp.focus();inp.setSelectionRange(a+txt.length,a+txt.length);$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}))};
+    box.querySelectorAll('[data-ins]').forEach(c=>c.onclick=()=>put(c.dataset.ins));
+    box.querySelectorAll('[data-op]').forEach(c=>c.onclick=()=>{const m={'+':'+','−':'-','×':'*','÷':'/'}[c.dataset.op];if(c.dataset.op==='⌫'){const a=inp.selectionStart||inp.value.length;o.formula=inp.value.slice(0,Math.max(0,a-1))+inp.value.slice(a);inp.value=o.formula;inp.focus();inp.setSelectionRange(Math.max(0,a-1),Math.max(0,a-1));$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex||{}));return}put(m||c.dataset.op)})});
+  document.querySelectorAll('[data-fex]').forEach(i=>i.addEventListener('input',()=>{S.fb.ex=S.fb.ex||{};S.fb.ex[i.dataset.fex]=i.value.trim().replace(',','.');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex))}));
+  $('#fb-reset').onclick=()=>{S.fb.t=null;if(t._new)S.fb.tid='';keep()};
+  $('#fb-save').onclick=async()=>{const bad=(t.outputs||[]).find(o=>!o.formula||(SAFE.test(o.formula)&&isNaN(evalFormula(o.formula,Object.fromEntries(fbKeys(t).map((k,j)=>[k,1.3+j*0.37]))))));
+    if(bad){$('#fb-msg').textContent='Check the formula of '+bad.label+': it uses a name that is not in this test.';return}
+    const c=JSON.parse(JSON.stringify(S.cfg));const p=(c.products||[]).find(x=>x.id===S.fb.pid);const clean=JSON.parse(JSON.stringify(t));delete clean._new;
+    p.tests=p.tests||[];const i=p.tests.findIndex(x=>x.id===clean.id);if(i>=0)p.tests[i]=clean;else p.tests.push(clean);
+    try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb.t=null;toast('Formula saved for '+p.name);keep()}catch(e){$('#fb-msg').textContent='Could not save: '+(e.code||e.message)}};
+}
+
 /* ---------- PEOPLE (admin) ---------- */
 function peopleView(){
   const ps=Object.values(S.people).sort((a,b)=>(a.active===false)-(b.active===false)||a.name.localeCompare(b.name));
   return '<div class="stack"><div><h1>People</h1><p class="muted">Who can sign in, who appears in "Tested by" and who can validate. PINs are a simple lock for the shared laptop.</p></div>'+
-  '<div class="card stack" style="gap:6px"><b>Who sees what</b><span class="small muted"><b>Lab technician</b>: Today, Records, Micro pending and their tasks. <b>Lab manager (doctor)</b>: everything above plus the <b>Live overview</b> of all testing as it happens, assigning tasks, Tests &amp; limits. <b>Admin</b>: everything, plus this page. Only people whose website account has the <b>Lab</b> area (Admin page of the website) can open the lab at all.</span></div>'+
-  '<div class="card tablewrap"><table><tr><th>Name</th><th>Website account</th><th>Role</th><th>Can test</th><th>Can validate</th><th>PIN</th><th>Active</th></tr>'+ps.map(p=>'<tr data-pid="'+p.id+'"><td><input data-pp="name" value="'+esc(p.name)+'"></td><td><select data-pp="uid"><option value="">— not linked —</option>'+(window.LAB_ACCOUNTS||[]).map(a=>'<option value="'+a.id+'"'+(p.uid===a.id?' selected':'')+'>'+esc(a.full_name||a.username)+((a.areas||[]).indexOf('lab')<0&&!a.is_owner?' (no Lab area)':'')+'</option>').join('')+'</select></td><td><select data-pp="role">'+[['lab','Lab technician'],['doctor','Lab manager'],['admin','Admin']].map(o=>'<option value="'+o[0]+'"'+(p.role===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></td><td><input type="checkbox" data-pp="canTest"'+(p.canTest?' checked':'')+'></td><td><input type="checkbox" data-pp="canValidate"'+(p.canValidate?' checked':'')+'></td><td><input data-pp="pin" value="'+esc(p.pin||'')+'" style="width:90px" inputmode="numeric"></td><td><input type="checkbox" data-pp="active"'+(p.active!==false?' checked':'')+'></td></tr>').join('')+'</table></div>'+
+  '<div class="card stack" style="gap:6px"><b>Who sees what</b><span class="small muted"><b>Lab technician</b>: Today, Records, Micro pending and their tasks. <b>Lab manager (doctor)</b>: everything above plus the <b>Live overview</b> of all testing as it happens, assigning tasks, Tests &amp; limits. <b>Lab account (shared, username lab)</b>: opens straight into the lab with its own simple screen: Testing, Micro to read, Records, Solutions &amp; formulas. No tasks, no live overview, no people. Who tested is still signed with each person’s PIN. <b>Admin</b>: everything, plus this page. Only people whose website account has the <b>Lab</b> area (Admin page of the website) can open the lab at all.</span></div>'+
+  '<div class="card tablewrap"><table><tr><th>Name</th><th>Website account</th><th>Role</th><th>Can test</th><th>Can validate</th><th>PIN</th><th>Active</th></tr>'+ps.map(p=>'<tr data-pid="'+p.id+'"><td><input data-pp="name" value="'+esc(p.name)+'"></td><td><select data-pp="uid"><option value="">— not linked —</option>'+(window.LAB_ACCOUNTS||[]).map(a=>'<option value="'+a.id+'"'+(p.uid===a.id?' selected':'')+'>'+esc(a.full_name||a.username)+((a.areas||[]).indexOf('lab')<0&&!a.is_owner?' (no Lab area)':'')+'</option>').join('')+'</select></td><td><select data-pp="role">'+[['lab','Lab technician'],['station','Lab account (shared)'],['doctor','Lab manager'],['admin','Admin']].map(o=>'<option value="'+o[0]+'"'+(p.role===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></td><td><input type="checkbox" data-pp="canTest"'+(p.canTest?' checked':'')+'></td><td><input type="checkbox" data-pp="canValidate"'+(p.canValidate?' checked':'')+'></td><td><input data-pp="pin" value="'+esc(p.pin||'')+'" style="width:90px" inputmode="numeric"></td><td><input type="checkbox" data-pp="active"'+(p.active!==false?' checked':'')+'></td></tr>').join('')+'</table></div>'+
   '<form id="npf" class="card row"><input id="np-n" placeholder="Full name" required style="flex:1"><select id="np-r"><option value="lab">Lab technician</option><option value="doctor">Lab manager</option><option value="admin">Admin</option></select><input id="np-pin" placeholder="PIN" inputmode="numeric" style="width:90px" required><button class="primary">Add person</button></form></div>';
 }
 function bindPeople(){

@@ -64,3 +64,40 @@ table tr{transition:background .15s}table tr:hover td{background:rgba(11,111,140
 .qbtn{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;background:linear-gradient(160deg,#fff,#eef5f8);box-shadow:0 12px 22px -16px rgba(10,40,60,.8);transition:transform .15s}
 .qbtn:hover{transform:translateY(-2px)}
 @media (prefers-reduced-motion:reduce){.cat,.kind,.ctile,.qbtn{transition:none}.ctile:hover{transform:none}}
+/* solutions & formula builder */
+.solgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;perspective:900px}
+.solcard{display:flex;flex-direction:column;gap:8px;padding:16px;border-radius:18px;background:linear-gradient(160deg,#fff,#eaf4f8);box-shadow:0 18px 30px -22px rgba(10,40,60,.8),inset 0 1px 0 #fff;transition:transform .2s}
+.solcard:hover{transform:rotateX(4deg) translateY(-2px)}
+.soltop{display:flex;gap:10px;align-items:center}
+.flaskmini{width:30px;height:34px;flex:none;border-radius:4px 4px 14px 14px;background:linear-gradient(180deg,rgba(255,255,255,.9) 0 40%,#46b3d6 40% 100%);box-shadow:inset 0 0 0 2px #0f6e8c,0 6px 10px -6px rgba(10,74,97,.8)}
+.solcard input.big{font-size:22px;font-weight:800;color:#0a4a61;padding:8px 10px}
+.solchip{display:inline-block;padding:1px 8px;border-radius:999px;background:#e3f2f8;color:#0a4a61;font-weight:700}
+.fbcols{display:grid;grid-template-columns:1fr 1.3fr;gap:20px}
+@media (max-width:900px){.fbcols{grid-template-columns:1fr}}
+.fbrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fbrow input,.fbrow select{flex:1;min-width:90px}
+.fbout{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:#f6fafc;box-shadow:inset 0 1px 0 #fff,0 8px 18px -14px rgba(10,40,60,.6)}
+.fbformula{font-size:17px;padding:10px 12px;border-radius:10px;border:2px solid #b9d9e5;background:#fff}
+.fbformula:focus{border-color:#0f6e8c;outline:none}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{all:unset;cursor:pointer;font-family:var(--f-mono,monospace);font-weight:700;font-size:14px;padding:6px 11px;border-radius:10px;background:#fff;box-shadow:0 3px 0 #c9dbe2,0 6px 10px -8px rgba(0,0,0,.4);transition:transform .1s}
+.chip:active{transform:translateY(2px);box-shadow:0 1px 0 #c9dbe2}
+.chip:focus-visible{outline:2px solid #0f6e8c}
+.chip.key{background:#e7f1ff;color:#1d4f91} .chip.key.sol{background:#e3f6ee;color:#16704a} .chip.key.res{background:#f6ecff;color:#6a2a99} .chip.op{background:#fff7e6;color:#8a5a00}
+span.chip{cursor:default}
+.fbcheck{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#0f6e8c,#0a4a61);color:#fff}
+.fbcheck input{background:#fff;color:#0a2a36;border-radius:8px}
+.fbcheck .out{background:rgba(255,255,255,.16);color:#fff;padding:4px 10px;border-radius:999px}
+.fbcheck .out.bad{background:#ffd5d5;color:#8a1010}
+/* shared lab account: its own screen */
+.station{min-height:100vh;background:radial-gradient(1200px 500px at 10% -10%,#d8eef6,transparent),linear-gradient(180deg,#f4f9fb,#eef4f6)}
+.stbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px max(16px,env(safe-area-inset-left,0px));background:linear-gradient(135deg,#0a4a61,#0f6e8c 60%,#1b8aa8);color:#fff;box-shadow:0 14px 30px -18px rgba(5,40,55,.9)}
+.stbrand{display:flex;align-items:center;gap:10px}.stbrand small{display:block;opacity:.8;font-size:12px}
+.sttabs{display:flex;gap:8px;flex-wrap:wrap}
+.sttab{all:unset;cursor:pointer;display:flex;gap:8px;align-items:center;padding:12px 18px;border-radius:14px;font-weight:800;font-size:16px;color:rgba(255,255,255,.9);transition:transform .15s,background .15s}
+.sttab:hover{background:rgba(255,255,255,.12);transform:translateY(-1px)}
+.sttab.on{background:#fff;color:#0a4a61;box-shadow:0 10px 20px -10px rgba(0,0,0,.6)}
+.sttab:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.station main{margin:0 auto;max-width:1300px;padding-top:18px}
+.station .cat{font-size:16px;padding:12px 18px}
+@media (prefers-reduced-motion:reduce){.solcard,.chip,.sttab{transition:none}.solcard:hover{transform:none}}
