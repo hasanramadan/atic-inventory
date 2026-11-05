@@ -16,6 +16,8 @@
     var m = {}; (r.data || []).forEach(function (d) { m[d.id] = d.data || {}; }); cache[coll] = m; return m;
   }
   function fire(coll) { (subs[coll] || []).forEach(function (s) { try { s(); } catch (e) { console.error(e); } }); }
+  /* safety net: realtime can miss events, so every 8 s re-read what is open and update only if it changed */
+  setInterval(function () { if (document.hidden) return; Object.keys(subs).forEach(function (c) { if (c === 'plan' || !(subs[c] || []).length) return; var before = JSON.stringify(cache[c] || {}); load(c).then(function () { if (JSON.stringify(cache[c] || {}) !== before) fire(c); }, function () {}); }); }, 8000);
   function live() {
     if (chan) return;
     chan = sb.channel('lab-' + Math.random().toString(36).slice(2)).on('postgres_changes', { event: '*', schema: 'public', table: 'planner_docs' }, function (p) {
