@@ -186,3 +186,4 @@ span.chip{cursor:default}
 .ev{display:flex;gap:10px;align-items:center;padding:6px 8px;border-radius:10px}
 .ev:nth-child(odd){background:#f6fafc}
 .ev>span:nth-child(2){flex:1}
+.forlab{box-shadow:inset 0 0 0 2px #f4c35a,0 14px 26px -20px rgba(10,40,60,.9);background:linear-gradient(160deg,#fffaf0,#fff)}

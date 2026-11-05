@@ -204,7 +204,7 @@ function renderStation(){
   const root=$('#root');
   if(!['today','session','micro','history','chem'].includes(S.view))S.view='today';
   const cur=S.view==='session'?'today':S.view;const mp=microPendingCount();
-  const tabs=[['today','Testing',''],['micro','Micro to read',mp||''],['history','Records',''],['chem','Solutions & formulas','']];
+  const tabs=[['today','Testing',Object.values(S.tasks).filter(t=>!t.done).length||''],['micro','Micro to read',mp||''],['history','Records',''],['chem','Solutions & formulas','']];
   root.innerHTML='<div class="station"><header class="stbar"><div class="stbrand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div><div><b>ATIC Lab</b><small>'+niceDate(today())+'</small></div></div><nav class="sttabs" aria-label="Sections">'+
     tabs.map(t=>'<button class="sttab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'">'+t[1]+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+'</nav></header><main id="main">'+viewHTML()+'</main></div>';
   root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
@@ -266,11 +266,11 @@ function todayView(){
   const sess=Object.values(S.sessions).filter(s=>s.date===d&&inCat(s)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const started=new Set(sess.map(s=>s.productId+'|'+s.section));
   const planned=Object.keys(plan).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);return{key:k,p,sec,batches:plan[k]}}).filter(x=>x.p&&(catSel()==='all'||catOfP(x.p)===catSel()));
-  const tasks=isStation()?[]:myTasks();
+  const tasks=isStation()?Object.values(S.tasks).filter(t=>!t.done).sort((a,b)=>b.at-a.at):myTasks();
   const assigned=isStation()?[]:Object.values(S.samples).filter(s=>inCat(s)&&s.assignedTo===S.me.id&&!sampleChemDone(s,product(s.productId)));
   let h='<div class="stack">'+catBar()+'<div class="row between"><h1>'+esc(catLabel(catSel()))+' · '+niceDate(d)+'</h1>'+(isAdmin()?'<span class="pill acc">Admin view · you see and correct, the lab tests</span>':'<button class="primary" id="newSess">Start testing</button>')+'</div>';
   if(note&&note.text)h+='<div class="note-banner"><div class="label">Note from '+esc(person(note.by).name)+' · '+hhmm(note.at)+'</div>'+esc(note.text).replace(/\n/g,'<br>')+'</div>';
-  if(tasks.length||assigned.length){h+='<div class="card stack"><h3>For you</h3>'+tasks.map(t=>'<div class="row between"><span>'+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
+  if(tasks.length||assigned.length){h+='<div class="card stack forlab"><h3>'+(isStation()?'Tasks from the lab manager':'For you')+'</h3>'+tasks.map(t=>'<div class="row between"><span>'+(isStation()&&t.to?'<b>'+esc(person(t.to).name.split(' ')[0])+':</b> ':'')+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
     assigned.map(s=>'<div class="row between"><span>Sample <b class="mono">'+esc(s.code)+'</b> assigned to you</span><button class="ghost" data-open-sample="'+s.id+'">Open</button></div>').join('')+'</div>'}
   const todo=planned.filter(x=>!started.has(x.p.id+'|'+x.sec));
   const ov=(S.daybatch||{})[d];
