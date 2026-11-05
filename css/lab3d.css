@@ -166,3 +166,8 @@ span.chip{cursor:default}
 .pickb.on{background:#0f6e8c;color:#fff;box-shadow:none}
 .pickb:focus-visible{outline:2px solid #0f6e8c;outline-offset:2px}
 .pickopt{gap:6px;font-size:14px}
+.finishbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0;padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,#e3f6ee,#f1fbf6);box-shadow:inset 0 0 0 2px #9fd8b8}
+.finishbar .primary{font-size:16px;padding:12px 18px}
+.finished{margin:8px 0;padding:8px 12px;border-radius:12px;background:#eef8f2}
+.batched .brow{padding:8px 10px;border-radius:12px;background:#f6fafc;gap:10px}
+.delbar{justify-content:flex-end;gap:14px}

@@ -63,6 +63,7 @@ function role(){return S.me&&S.me.role}
 const isDoctor=()=>role()==='doctor'||role()==='admin';
 const isAdmin=()=>role()==='admin';
 const isStation=()=>role()==='station';
+const canValidateHere=()=>isDoctor()||isStation()||(S.me&&S.me.canValidate);
 const canBuild=()=>isStation()||isDoctor();
 
 /* ---------- per-doc write queue (one write at a time per doc) ---------- */
@@ -111,6 +112,7 @@ async function boot(){
   S.db.doc('config/lab').onSnapshot(snap=>{S.labPin=snap.exists?String(snap.data().pin||''):'';changed('lab')},()=>{});
   S.db.collection('tasks').orderBy('at','desc').limit(300).onSnapshot(snap=>{S.tasks={};snap.docs.forEach(d=>S.tasks[d.id]=Object.assign({id:d.id},d.data()));changed('tasks')},()=>{});
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
+  S.db.collection('daybatch').onSnapshot(snap=>{S.daybatch={};snap.docs.forEach(d=>S.daybatch[d.id]=d.data());changed('daybatch')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
 }
 const SOL_SEED=[
@@ -158,7 +160,8 @@ function testActive(s,t){if(!t.everyDays)return true;if(s.on&&s.on[t.id])return 
 function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>testActive(s,t)&&!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
 function myTasks(){return Object.values(S.tasks).filter(t=>!t.done&&(!t.to||t.to===S.me.id))}
-function planFor(date){const m=S.plans[date.slice(0,7)];return (m&&m.days&&m.days[date])||{}}
+function factoryFor(date){const m=S.plans[date.slice(0,7)];return (m&&m.days&&m.days[date])||{}}
+function planFor(date){const o=(S.daybatch||{})[date];return o&&o.items?o.items:factoryFor(date)}
 
 /* ---------- render ---------- */
 function render(){
@@ -256,13 +259,27 @@ function todayView(){
   if(tasks.length||assigned.length){h+='<div class="card stack"><h3>For you</h3>'+tasks.map(t=>'<div class="row between"><span>'+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
     assigned.map(s=>'<div class="row between"><span>Sample <b class="mono">'+esc(s.code)+'</b> assigned to you</span><button class="ghost" data-open-sample="'+s.id+'">Open</button></div>').join('')+'</div>'}
   const todo=planned.filter(x=>!started.has(x.p.id+'|'+x.sec));
-  if(todo.length)h+='<div class="card stack"><div class="row between"><h3>Production plan for today</h3><span class="muted small">From the factory plan</span></div>'+todo.map(x=>'<div class="row between"><span><b>'+esc(x.p.name)+'</b> · '+esc(x.sec)+' · <span class="num">'+x.batches+'</span> batches</span><button data-start="'+x.key+'">Start</button></div>').join('')+'</div>';
+  const ov=(S.daybatch||{})[d];
+  if(isDoctor())h+=batchEditor(d);
+  else if(todo.length)h+='<div class="card stack"><div class="row between"><h3>Production plan for today</h3><span class="muted small">'+(ov?'Sent by '+esc(person(ov.by).name):'From the factory plan')+'</span></div>'+todo.map(x=>'<div class="row between"><span><b>'+esc(x.p.name)+'</b> · '+esc(x.sec)+' · <span class="num">'+x.batches+'</span> batches</span><button data-start="'+x.key+'">Start</button></div>').join('')+'</div>';
   if(catSel()!=='product'){const ps=(S.cfg.products||[]).filter(p=>catSel()==='all'?catOfP(p)!=='product':catOfP(p)===catSel());if(ps.length)h+='<div class="card stack"><h3>Start a test</h3><div class="quick">'+ps.map(p=>'<button class="qbtn" data-startp="'+p.id+'"><b>'+esc(p.name)+'</b><span class="small muted">'+testsOf(p).filter(t=>t.kind!=='micro').length+' chemical · '+testsOf(p,'micro').length+' micro</span></button>').join('')+'</div></div>'}
   h+='<h2>Open today</h2>';
   if(!sess.length)h+='<div class="card muted">Nothing started yet. Press <b>Start testing</b> or start one of the planned products above.</div>';
   else h+='<div class="grid">'+sess.map(sessCard).join('')+'</div>';
   return h+'</div>';
 }
+function batchEditor(d){const items=planFor(d);const ov=(S.daybatch||{})[d];const prods=(S.cfg.products||[]).filter(p=>catOfP(p)==='product');
+  const started=new Set(Object.values(S.sessions).filter(s=>s.date===d).map(s=>s.productId+'|'+s.section));
+  return '<div class="card stack batched"><div class="row between"><h3>Batches today</h3><span class="small muted">'+(ov?'Sent by '+esc(person(ov.by).name)+' · '+hhmm(ov.at):'From the factory plan · change and press Send')+'</span></div>'+
+  Object.keys(items).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);const st=p&&started.has(p.id+'|'+sec);return '<div class="row brow"><b style="flex:1">'+esc(p?p.name:pc)+'</b><span>'+esc(sec)+'</span><input class="num" type="number" min="0" data-bk="'+esc(k)+'" value="'+esc(items[k])+'" style="width:90px"> batches'+(st?'<span class="pill ok">Started</span>':'<button data-start="'+esc(k)+'">Start</button>')+'<button class="ghost danger" data-bdel="'+esc(k)+'" title="Remove">×</button></div>'}).join('')+
+  '<div class="row brow"><select id="ba-p">'+prods.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.name)+'</option>').join('')+'</select><select id="ba-s">'+(S.cfg.sections||['SEC-1','SEC-2']).map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><input id="ba-n" class="num" type="number" min="0" placeholder="batches" style="width:90px"><button id="ba-add">+ Add</button></div>'+
+  '<div class="row" style="justify-content:flex-end">'+(ov?'<button class="ghost" id="ba-reset">Use the factory plan again</button>':'')+'<button class="primary" id="ba-send">Send to the lab</button></div></div>'}
+function bindBatch(){const d=today();const box=$('.batched');if(!box)return;const cur=()=>{const o={};box.querySelectorAll('[data-bk]').forEach(i=>{o[i.dataset.bk]=Number(i.value)||0});return o};
+  const save=items=>S.db.doc('daybatch/'+d).set({items,by:S.me.id,at:Date.now()}).then(()=>{S.daybatch=S.daybatch||{};S.daybatch[d]={items,by:S.me.id,at:Date.now()};S.dirty=false;render();toast('Batches sent to the lab')},e=>toast('Could not save: '+(e.code||e.message)));
+  $('#ba-send').onclick=()=>save(cur());
+  $('#ba-add').onclick=()=>{const n=Number($('#ba-n').value)||0;if(!n){toast('Type the number of batches');return}const o=cur();o[$('#ba-p').value+'|'+$('#ba-s').value]=n;save(o)};
+  box.querySelectorAll('[data-bdel]').forEach(b=>b.onclick=()=>{const o=cur();delete o[b.dataset.bdel];save(o)});
+  const r=$('#ba-reset');r&&(r.onclick=()=>S.db.doc('daybatch/'+d).delete().then(()=>{delete S.daybatch[d];render();toast('Back to the factory plan')}));}
 function sessLabel(s){const p=product(s.productId);return (p?p.name:'?')+' · '+s.section+' · Lot '+(s.lot||'–')}
 function sessCard(s){const p=product(s.productId);const pr=sessionProgress(s);const pct=pr.target?Math.round(100*pr.done/pr.target):0;
   return '<button class="card stack" style="text-align:left;cursor:pointer" data-open-session="'+s.id+'"><div class="row between"><h3>'+esc(p?p.name:'?')+'</h3>'+statusPill(s)+'</div>'+
@@ -272,6 +289,7 @@ function statusPill(s){if(s.validated)return'<span class="pill ok">Validated</sp
 function bindToday(){
   const n=$('#newSess');n&&(n.onclick=()=>{const p=(S.cfg.products||[]).find(p=>catSel()==='all'||catOfP(p)===catSel());newSessionModal(p?{productId:p.id,section:catSel()==='product'||catSel()==='all'?'':'Lab'}:{})});
   document.querySelectorAll('[data-startp]').forEach(b=>b.onclick=()=>newSessionModal({productId:b.dataset.startp,section:'Lab'}));
+  bindBatch();
   document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{const[pc,sec]=b.dataset.start.split('|');const p=S.cfg.products.find(x=>x.code===pc);newSessionModal({productId:p.id,section:sec,batches:planFor(today())[b.dataset.start]})});
   bindCommon();
 }
@@ -342,12 +360,14 @@ function sampleForm(s,p,ss){
     (isDoctor()?'<label class="row">Assign <select id="sm-assign"><option value="">Anyone</option>'+Object.values(S.people).filter(x=>x.active!==false&&x.canTest).map(x=>'<option value="'+x.id+'"'+(s.assignedTo===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label>':(s.assignedTo?'<span class="pill acc">Assigned to '+esc(person(s.assignedTo).name)+'</span>':''))+
     '</div></div>';
   if(s.extra)h+='<p class="small"><span class="pill warn">Extra sample</span> '+esc(s.reason||'')+'</p>';
+  if(s.testedBy)h+='<div class="finished"><span class="pill ok">Finished</span> by <b>'+esc(person(s.testedBy).name)+'</b>'+(s.testedAt?' · '+hhmm(s.testedAt):'')+'</div>';
   const groups=[['chem','Chemical'],['org','Organoleptic'],['micro','Microbiology']];
   if(testsOf(p,'micro').length&&testsOf(p).some(t=>t.kind!=='micro'))h+=kindBar();
   groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length||!kindOk({kind:k}))return;
     h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?'<span class="small muted">Fill in when the plates are read</span>':'')+'</div>';
     ts.forEach(t=>h+=testRow(s,t))});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
+  if(!s.testedBy&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
   const rts=(s.retests||[]);
   if(rts.length)h+='<div class="group-h"><h3>Retests</h3></div>'+rts.map(r=>'<div class="note"><b>'+esc(r.testName)+'</b> · '+esc(person(r.by).name)+' · '+niceDate(r.date)+' '+hhmm(r.at)+'<br>Why: '+esc(r.reason)+'<br><span class="small muted">First result: '+esc(r.oldText||'–')+'</span>'+filesHTML(r.files)+'</div>').join('');
   return h;
@@ -384,7 +404,7 @@ function signoffHTML(ss,smp){
   let h='<div class="card stack"><h3>Sign-off</h3>';
   (ss.tested||[]).forEach(t=>h+='<div class="row"><span class="pill acc">Tested</span><b>'+esc(person(t.by).name)+'</b><span class="muted small">'+t.samples.map(id=>S.samples[id]?S.samples[id].code:'').filter(Boolean).join(', ')+' · '+niceDate(new Date(t.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(t.at)+'</span></div>');
   if(ss.validated)h+='<div class="row"><span class="pill ok">Validated</span><b>'+esc(person(ss.validated.by).name)+'</b><span class="muted small">'+hhmm(ss.validated.at)+(ss.validated.comment?' · '+esc(ss.validated.comment):'')+'</span></div>';
-  if(smp.length&&!ss.validated)h+='<div class="row"><button id="markTested">Tested by…</button><button class="primary" id="validate">Validate…</button></div>';
+  if(smp.length&&!ss.validated&&canValidateHere())h+='<div class="row"><button class="primary" id="validate">Validate…</button></div>';
   if(ss.validated&&isDoctor())h+='<div class="row"><span class="small muted">Only the lab manager can change a validated record.</span><button class="ghost" id="unvalidate">Reopen for changes</button></div>';
   if(isDoctor())h+='<div><button class="ghost danger" id="delSess">Delete this record</button></div>';
   return h+'</div>';
@@ -419,6 +439,11 @@ function bindSession(){
   const tb=$('#sm-taken');tb&&(tb.onchange=()=>{s.takenBy=tb.value;saveSample(s)});
   const bt=$('#sm-batch');bt.addEventListener('input',()=>{s.batch=bt.value.trim();liveSave(s)});
   const as=$('#sm-assign');as&&(as.onchange=()=>{s.assignedTo=as.value;saveSample(s);toast(as.value?'Assigned to '+person(as.value).name:'Assignment cleared')});
+  const fs=$('#finishS');fs&&(fs.onclick=()=>{const testers=Object.values(S.people).filter(x=>x.active!==false&&x.canTest);
+    modal('<h2>Finish '+esc(s.code)+'</h2><form id="fsf" class="stack"><label class="field"><span>Who tested it?</span><select id="fs-p">'+testers.map(x=>'<option value="'+x.id+'"'+((s.takenBy||S.me.id)===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label><label class="field"><span>PIN</span><input id="fs-pin" type="password" inputmode="numeric" autocomplete="off"></label><p id="fs-err" class="small" style="color:var(--bad)"></p><div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Finish</button></div></form>',(bg,close)=>{bg.querySelector('#fs-pin').focus();
+      bg.querySelector('#fsf').onsubmit=e=>{e.preventDefault();const pid=bg.querySelector('#fs-p').value;if(!pinCheck(pid,bg.querySelector('#fs-pin').value)){bg.querySelector('#fs-err').textContent='PIN does not match.';return}
+        s.testedBy=pid;s.testedAt=Date.now();saveSample(s);ss.tested=(ss.tested||[]).concat([{by:pid,samples:[s.id],at:Date.now()}]);saveSession(ss);close();
+        const next=sessionSamples(ss.id).find(x=>!x.testedBy&&x.id!==s.id);if(next)S.sampleId=next.id;render();toast(s.code+' finished')}})});
   document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{s.results=s.results||{};const r=s.results[b.dataset.pick]=s.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(s);render()});
   const dsm=$('#delSample');dsm&&(dsm.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+s.code;return}S.db.doc('samples/'+s.id).delete().then(()=>{delete S.samples[s.id];S.sampleId=null;render();toast('Sample deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{s.on=Object.assign({},s.on,{[b.dataset.mon]:true});if(s.off)delete s.off[b.dataset.mon];saveSample(s);render()});
@@ -529,11 +554,17 @@ function historyView(){
   const ss=Object.values(S.sessions).filter(s=>inCat(s)&&(!histFilter.product||s.productId===histFilter.product)&&s.date>=histFilter.from).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
   let h='<div class="stack">'+catBar()+'<div class="row between"><h1>Records · '+esc(catLabel(catSel()))+'</h1><div class="row"><select id="hf-p"><option value="">All</option>'+(S.cfg.products||[]).filter(p=>catSel()==='all'||catOfP(p)===catSel()).map(p=>'<option value="'+p.id+'"'+(histFilter.product===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select><label class="row small">From <input id="hf-f" type="date" value="'+histFilter.from+'"></label></div></div>';
   if(!ss.length)return h+'<div class="card muted">No records in this period.</div></div>';
-  h+='<div class="card tablewrap"><table><tr><th>Date</th><th>Product</th><th>Section</th><th>Lot</th><th>Samples</th><th>Out of limit</th><th>Micro</th><th>Status</th></tr>'+ss.map(s=>{const p=product(s.productId);const pr=sessionProgress(s);
-    return '<tr><td class="num">'+esc(s.date)+'</td><td><button class="ghost" data-open-session="'+s.id+'">'+esc(p?p.name:'?')+'</button></td><td>'+esc(s.section)+'</td><td class="num">'+esc(s.lot||'–')+'</td><td class="num">'+pr.done+'/'+pr.target+'</td><td>'+(pr.bad?'<span class="pill bad">'+pr.bad+'</span>':'<span class="muted">0</span>')+'</td><td>'+(pr.micro?'<span class="pill warn">'+pr.micro+' pending</span>':'<span class="muted">–</span>')+'</td><td>'+statusPill(s)+'</td></tr>'}).join('')+'</table></div>';
+  if(isDoctor())h+='<div class="row delbar"><label class="row small"><input type="checkbox" id="hs-all"> Select all</label><button class="ghost danger" id="hs-del" disabled>Delete selected</button></div>';
+  h+='<div class="card tablewrap"><table><tr>'+(isDoctor()?'<th></th>':'')+'<th>Date</th><th>Product</th><th>Section</th><th>Lot</th><th>Samples</th><th>Out of limit</th><th>Micro</th><th>Status</th></tr>'+ss.map(s=>{const p=product(s.productId);const pr=sessionProgress(s);
+    return '<tr>'+(isDoctor()?'<td><input type="checkbox" class="hs" value="'+s.id+'" aria-label="Select"></td>':'')+'<td class="num">'+esc(s.date)+'</td><td><button class="ghost" data-open-session="'+s.id+'">'+esc(p?p.name:'?')+'</button></td><td>'+esc(s.section)+'</td><td class="num">'+esc(s.lot||'–')+'</td><td class="num">'+pr.done+'/'+pr.target+'</td><td>'+(pr.bad?'<span class="pill bad">'+pr.bad+'</span>':'<span class="muted">0</span>')+'</td><td>'+(pr.micro?'<span class="pill warn">'+pr.micro+' pending</span>':'<span class="muted">–</span>')+'</td><td>'+statusPill(s)+'</td></tr>'}).join('')+'</table></div>';
   return h+'</div>';
 }
-function bindHistory(){$('#hf-p').onchange=e=>{histFilter.product=e.target.value;render()};$('#hf-f').onchange=e=>{histFilter.from=e.target.value||histFilter.from;render()};bindCommon()}
+function bindHistory(){
+  const del=$('#hs-del');if(del){const boxes=[...document.querySelectorAll('.hs')];const upd=()=>{const n=boxes.filter(b=>b.checked).length;del.disabled=!n;del.textContent=n?'Delete '+n+' record'+(n>1?'s':''):'Delete selected';delete del.dataset.armed};
+    boxes.forEach(b=>b.onchange=upd);$('#hs-all').onchange=e=>{boxes.forEach(b=>b.checked=e.target.checked);upd()};
+    del.onclick=async function(){const ids=boxes.filter(b=>b.checked).map(b=>b.value);if(!ids.length)return;if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete '+ids.length+' record(s) and their samples';return}
+      this.disabled=true;try{for(const id of ids){for(const x of sessionSamples(id)){await S.db.doc('samples/'+x.id).delete();delete S.samples[x.id]}await S.db.doc('sessions/'+id).delete();delete S.sessions[id]}toast('Deleted')}catch(e){toast('Could not delete: '+(e.code||e.message))}render()}}
+$('#hf-p').onchange=e=>{histFilter.product=e.target.value;render()};$('#hf-f').onchange=e=>{histFilter.from=e.target.value||histFilter.from;render()};bindCommon()}
 
 /* ---------- MICRO PENDING ---------- */
 function microList(){return Object.values(S.samples).flatMap(s=>{const p=product(s.productId);return sampleMicroPending(s,p).map(t=>({s,p,t,ready:addDays(s.date,Number(t.incubDays)||0)}))}).sort((a,b)=>a.ready.localeCompare(b.ready))}
