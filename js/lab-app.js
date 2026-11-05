@@ -116,6 +116,7 @@ async function boot(){
   S.db.doc('config/lab').onSnapshot(snap=>{S.labPin=snap.exists?String(snap.data().pin||''):'';changed('lab')},()=>{});
   S.db.collection('tasks').orderBy('at','desc').limit(300).onSnapshot(snap=>{S.tasks={};snap.docs.forEach(d=>S.tasks[d.id]=Object.assign({id:d.id},d.data()));changed('tasks')},()=>{});
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
+  S.db.collection('presence').onSnapshot(snap=>{S.pres={};snap.docs.forEach(d=>S.pres[d.id]=d.data());if(S.view==='overview')changed('pres')},()=>{});
   S.db.collection('daybatch').onSnapshot(snap=>{S.daybatch={};snap.docs.forEach(d=>S.daybatch[d.id]=d.data());changed('daybatch')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
 }
@@ -185,10 +186,19 @@ function render(){
     tabs.map(t=>'<button class="tab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'"><span>'+t[1]+'</span>'+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+
     '<div class="me"><div><div class="label">Signed in</div><b>'+esc(S.me.name)+'</b> <span class="muted small">'+esc(roleName(S.me.role))+'</span></div></div></nav><main id="main">'+viewHTML()+'</main></div>';
   root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
-  bindView();
+  bindView();presence();
   root.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;lsSet('lab.cat',S.cat);histFilter.product='';render()});
   root.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{S.kind=b.dataset.kind;lsSet('lab.kind',S.kind);render()});
 }
+let presT=0,presLast='';
+function presence(force){if(!S.me||isAdmin()||!S.db)return;const ss=S.view==='session'&&S.sessions[S.sessionId];const smp=ss&&S.samples[S.sampleId];
+  const v={name:S.me.name,role:S.me.role,view:S.view,cat:S.cat||'',sessionId:ss?ss.id:'',sampleId:smp?smp.id:'',testId:smp&&smp.live&&smp.live.by===S.me.id?smp.live.testId:'',at:Date.now()};
+  const sig=JSON.stringify(Object.assign({},v,{at:0}));if(!force&&sig===presLast&&Date.now()-presT<45000)return;presLast=sig;presT=Date.now();S.db.doc('presence/'+S.me.id).set(v).catch(()=>{})}
+setInterval(()=>presence(true),60000);
+function where(v){const ss=v.sessionId&&S.sessions[v.sessionId];const p=ss&&product(ss.productId);const smp=v.sampleId&&S.samples[v.sampleId];const t=smp&&p&&(p.tests||[]).find(x=>x.id===v.testId);
+  const names={today:'Today',history:'Records',micro:'Micro pending',tasks:'Tasks',chem:'Solutions & formulas',setup:'Tests & limits',people:'People',overview:'Live overview'};
+  if(ss)return '<b>'+esc(p?p.name:'Record')+'</b> · '+esc(ss.section||'')+(ss.lot?' · lot '+esc(ss.lot):'')+(smp?' · sample <b class="mono">'+esc(smp.code)+'</b>':'')+(t?' · typing <b>'+esc(t.name)+'</b>':'');
+  return esc(names[v.view]||v.view)+(v.cat&&v.view==='today'?' · '+esc(catLabel(v.cat)):'')}
 function roleName(r){return r==='admin'?'Admin':r==='doctor'?'Lab manager':r==='station'?'Lab account':'Lab technician'}
 function renderStation(){
   const root=$('#root');
@@ -198,7 +208,7 @@ function renderStation(){
   root.innerHTML='<div class="station"><header class="stbar"><div class="stbrand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div><div><b>ATIC Lab</b><small>'+niceDate(today())+'</small></div></div><nav class="sttabs" aria-label="Sections">'+
     tabs.map(t=>'<button class="sttab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'">'+t[1]+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+'</nav></header><main id="main">'+viewHTML()+'</main></div>';
   root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
-  bindView();
+  bindView();presence();
   root.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;lsSet('lab.cat',S.cat);histFilter.product='';render()});
   root.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{S.kind=b.dataset.kind;lsSet('lab.kind',S.kind);render()});
 }
@@ -437,7 +447,7 @@ function bindSession(){
     Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;saveSession(ss);render()});
   const s=S.samples[S.sampleId]; if(!s)return;
-  const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()}};
+  const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()};presence()};
   document.querySelectorAll('[data-in]').forEach(inp=>{
     inp.addEventListener('input',()=>{const t=p.tests.find(x=>x.id===inp.dataset.in);s.results=s.results||{};const r=s.results[t.id]=s.results[t.id]||{};r.in=r.in||{};
       if(!r.k){const k=constSnap(t);if(k)r.k=k}r.in[inp.dataset.key]=inp.value.trim().replace(',','.');r.by=S.me.id;r.at=Date.now();live(t.id,inp.dataset.key);
@@ -567,7 +577,13 @@ function overviewView(){
   const recent=Object.values(S.samples).filter(s=>s.date===d&&inCat(s)).flatMap(s=>{const p=product(s.productId);return Object.entries(s.results||{}).map(([tid,r])=>({s,p,t:(p&&p.tests||[]).find(x=>x.id===tid),r}))}).filter(x=>x.t&&x.r.at&&kindOk(x.t)).sort((a,b)=>b.r.at-a.r.at).slice(0,14);
   const tiles=CATS.map(([k,n])=>{const ss=sessAll.filter(x=>catOfS(x)===k);const pr=ss.map(sessionProgress);const t=pr.reduce((a,x)=>a+x.target,0),dn=pr.reduce((a,x)=>a+x.done,0),b=pr.reduce((a,x)=>a+x.bad,0),m=pr.reduce((a,x)=>a+x.micro,0);
     return '<button class="ctile ct-'+k+(catSel()===k?' on':'')+'" data-cat="'+k+'"><span class="ci ci-'+k+'" aria-hidden="true"></span><b>'+n+'</b><span class="num big">'+dn+' / '+t+'</span><span class="small">'+(ss.length?ss.length+' running':'Nothing today')+'</span><span class="row small">'+(b?'<span class="pill bad">'+b+' out of limit</span>':'')+(m?'<span class="pill warn">'+m+' micro pending</span>':'')+'</span></button>'}).join('');
-  let h='<div class="stack"><h1>Live overview · '+niceDate(d)+'</h1><div class="ctiles">'+tiles+'</div>'+catBar()+kindBar()+'<h2>'+esc(catLabel(catSel()))+'</h2>';
+  const now=Date.now();const pres=Object.entries(S.pres||{}).map(([id,v])=>Object.assign({id},v)).filter(v=>now-v.at<5*60000).sort((a,b)=>b.at-a.at);
+  const acts=[];Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);if(x.createdAt)acts.push({at:x.createdAt,by:x.createdBy,txt:'started <b>'+esc(p?p.name:'')+'</b> '+esc(x.section||''),sid:x.id});if(x.validated)acts.push({at:x.validated.at,by:x.validated.by,txt:'validated chemical of <b>'+esc(p?p.name:'')+'</b>',sid:x.id});Object.entries(x.microVal||{}).forEach(([day,v])=>acts.push({at:v.at,by:v.by,txt:'validated micro (read '+niceDate(day)+') of <b>'+esc(p?p.name:'')+'</b>',sid:x.id}))});
+  Object.values(S.samples).filter(x=>x.date===d||(x.testedAt&&x.testedAt>now-86400000)).forEach(x=>{const p=product(x.productId);if(x.testedAt)acts.push({at:x.testedAt,by:x.testedBy,txt:'finished sample <b class="mono">'+esc(x.code)+'</b>',mid:x.id});Object.entries(x.results||{}).forEach(([tid,r])=>{const t=p&&(p.tests||[]).find(y=>y.id===tid);if(t&&r.at&&r.at>now-86400000)acts.push({at:r.at,by:r.by,txt:'entered <b>'+esc(t.name)+'</b> on <b class="mono">'+esc(x.code)+'</b>',mid:x.id})})});
+  acts.sort((a,b)=>b.at-a.at);
+  const watch=isDoctor()?'<div class="watch"><div class="card stack"><div class="row between"><h3>In the lab now</h3><span class="small muted">What each person has open</span></div>'+(pres.length?pres.map(v=>'<div class="who"><span class="av">'+esc((v.name||'?').split(' ').map(x=>x[0]).join('').slice(0,2))+'</span><div style="flex:1"><b>'+esc(v.name)+'</b> <span class="small muted">'+esc(roleName(v.role))+'</span><div class="small">'+where(v)+'</div></div><span class="small muted">'+(now-v.at<90000?'<span class="live-dot"></span> now':ago(v.at))+'</span>'+(v.sampleId&&S.samples[v.sampleId]?'<button class="ghost" data-open-sample="'+v.sampleId+'">Look</button>':v.sessionId&&S.sessions[v.sessionId]?'<button class="ghost" data-open-session="'+v.sessionId+'">Look</button>':'')+'</div>').join(''):'<p class="muted small">Nobody has the lab open right now.</p>')+'</div>'+
+    '<div class="card stack"><div class="row between"><h3>What happened today</h3><span class="small muted">Newest first</span></div><div class="feed">'+(acts.length?acts.slice(0,40).map(a=>'<div class="ev"><span class="num small muted">'+hhmm(a.at)+'</span><span><b>'+esc(person(a.by).name)+'</b> '+a.txt+'</span>'+(a.mid&&S.samples[a.mid]?'<button class="ghost small" data-open-sample="'+a.mid+'">Open</button>':a.sid&&S.sessions[a.sid]?'<button class="ghost small" data-open-session="'+a.sid+'">Open</button>':'')+'</div>').join(''):'<p class="muted small">Nothing yet today.</p>')+'</div></div></div>':'';
+  let h='<div class="stack"><h1>Live overview · '+niceDate(d)+'</h1>'+watch+'<div class="ctiles">'+tiles+'</div>'+catBar()+kindBar()+'<h2>'+esc(catLabel(catSel()))+'</h2>';
   h+='<div class="card row between"><div class="row"><b class="num" style="font-size:22px">'+done+' / '+tgt+'</b><span>samples tested today</span>'+(bad?'<span class="pill bad">'+bad+' out of limit</span>':'<span class="pill ok">No results out of limit</span>')+'</div><div class="bar" style="flex:1;min-width:120px;max-width:360px"><i style="width:'+(tgt?Math.round(100*done/tgt):0)+'%"></i></div></div>';
   h+='<div class="card stack"><h3>Note for the lab today</h3><textarea id="dn" placeholder="Shown at the top of the lab’s Today page">'+esc(note.text||'')+'</textarea><div class="row between"><span class="small muted">'+(note.at?'Last saved '+hhmm(note.at):'')+'</span><button class="primary" id="dnSave">Save note</button></div></div>';
   h+='<div class="card stack"><div class="row between"><h3>Working right now</h3><span class="small muted">Updates as they type</span></div>'+(live.length?'<table><tr><th>Who</th><th>Sample</th><th>Test</th><th>Entry</th><th>When</th></tr>'+live.map(s=>{const p=product(s.productId);const t=(p&&p.tests||[]).find(x=>x.id===s.live.testId);const r=resultOf(s,t||{});const val=t&&t.kind==='org'?(r.value||''):(r.in?Object.entries(r.in).map(([k,v])=>k+'='+v).join(' '):'');
