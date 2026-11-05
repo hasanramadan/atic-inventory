@@ -29,7 +29,11 @@ function evalFormula(expr,vars){
 }
 /* returns [{key,label,unit,value,state}] for a test given inputs */
 function locked(s){const ss=s&&S.sessions[s.sessionId];return !!(ss&&ss.validated&&!isDoctor())}
-function readDay(s,t){return addDays(s.date,Number(t.incubDays)||0)}
+function isFri(d){return new Date(d+'T00:00:00Z').getUTCDay()===5}
+function offFri(d){return isFri(d)?addDays(d,1):d}
+function readDay(s,t){return offFri(addDays(s.microDate||s.date,Number(t.incubDays)||0))}
+function needsPE(p){const c=catOfP(p);return c==='product'||c==='raw'}
+function lotOf(d){try{return (window.ATIC_PARENT&&window.ATIC_PARENT.lot)?String(window.ATIC_PARENT.lot(d)):''}catch(e){return''}}
 function lockedT(s,t){if(isDoctor())return false;const ss=s&&S.sessions[s.sessionId];if(!ss)return false;if(t.kind==='micro')return !!(ss.microVal&&ss.microVal[readDay(s,t)]);return !!ss.validated}
 function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
 function constVal(c,snap){if(snap&&snap[c.key]!=null)return Number(snap[c.key]);if(c.sol){const x=solOf(c.sol);if(x&&x.conc!==''&&x.conc!=null)return Number(x.conc)}return Number(c.value)}
@@ -275,6 +279,7 @@ function todayView(){
   if(tasks.length||assigned.length){h+='<div class="card stack forlab"><h3>'+(isStation()?'Lab tasks':'For you')+'</h3>'+tasks.map(t=>'<div class="row between"><span>'+(isStation()&&t.to?'<b>'+esc(person(t.to).name.split(' ')[0])+':</b> ':'')+esc(t.text)+'<br><span class="small muted">by <b>'+esc(person(t.from).name)+'</b> · '+hhmm(t.at)+'</span>'+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
     assigned.map(s=>'<div class="row between"><span>Sample <b class="mono">'+esc(s.code)+'</b> assigned to you</span><button class="ghost" data-open-sample="'+s.id+'">Open</button></div>').join('')+'</div>'}
   const todo=planned.filter(x=>!started.has(x.p.id+'|'+x.sec));
+  if(isFri(d))h+='<div class="note-banner">Friday · the factory is off. Micro plates that are due today are read on Saturday.</div>';
   const ov=(S.daybatch||{})[d];
   if(isDoctor())h+=batchEditor(d);
   else if(todo.length)h+='<div class="card stack"><div class="row between"><h3>Production plan for today</h3><span class="muted small">'+(ov?'Sent by '+esc(person(ov.by).name):'From the factory plan')+'</span></div>'+todo.map(x=>'<div class="row between"><span><b>'+esc(x.p.name)+'</b> · '+esc(x.sec)+' · <span class="num">'+x.batches+'</span> batches</span><button data-start="'+x.key+'">Start</button></div>').join('')+'</div>';
@@ -324,14 +329,18 @@ function newSessionModal(pre){
     '<label class="field"><span>What are you testing?</span><select id="ns-p">'+opts+'</select></label>'+
     '<div class="row"><label class="field" style="flex:1"><span>Date</span><input id="ns-d" type="date" value="'+today()+'"></label>'+
     '<label class="field" style="flex:1"><span>Section</span><select id="ns-s">'+(S.cfg.sections||['SEC-1','SEC-2']).concat(['Lab','Other']).map(x=>'<option'+(pre.section===x?' selected':'')+'>'+x+'</option>').join('')+'</select></label></div>'+
-    '<div class="row"><label class="field" style="flex:1"><span>Lot number</span><input id="ns-l" class="num" placeholder="e.g. 25279"></label>'+
+    '<div class="row"><label class="field" style="flex:1"><span>Lot number</span><input id="ns-l" class="num" value="'+esc(lotOf(today()))+'"></label>'+
     '<label class="field" style="flex:1"><span>Batches / samples expected</span><input id="ns-b" type="number" min="0" class="num" value="'+(pre.batches||'')+'"></label></div>'+
+    '<div class="row" id="ns-pe"><label class="field" style="flex:1"><span>Production date</span><input id="ns-pd" type="date" value="'+today()+'"></label><label class="field" style="flex:1"><span>Expiry date</span><input id="ns-ed" type="date" required></label></div>'+
     '<label class="field"><span>Tank number (optional, used for every sample unless changed)</span><input id="ns-t" placeholder="e.g. 4"></label>'+
     '<p class="small muted" id="ns-hint"></p>'+
     '<div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary" type="submit">Start</button></div></form>',(bg,close)=>{
-      const hint=()=>{const ll=lastLot(bg.querySelector('#ns-p').value);bg.querySelector('#ns-hint').textContent=ll?'Last lot used for this product: '+ll:''};hint();bg.querySelector('#ns-p').onchange=hint;
+      const hint=()=>{const ll=lastLot(bg.querySelector('#ns-p').value);bg.querySelector('#ns-hint').textContent=ll?'Last lot used for this product: '+ll:''};hint();
+      const peBox=bg.querySelector('#ns-pe'),ed=bg.querySelector('#ns-ed');const pe=()=>{const on=needsPE(product(bg.querySelector('#ns-p').value));peBox.style.display=on?'':'none';ed.required=on};pe();
+      bg.querySelector('#ns-p').onchange=()=>{hint();pe()};
+      const ld=bg.querySelector('#ns-l');let lotTouched=false;ld.oninput=()=>lotTouched=true;bg.querySelector('#ns-d').onchange=e=>{if(!lotTouched)ld.value=lotOf(e.target.value)};
       bg.querySelector('#nsf').onsubmit=e=>{e.preventDefault();
-        const s={id:uid('s'),productId:bg.querySelector('#ns-p').value,date:bg.querySelector('#ns-d').value||today(),section:bg.querySelector('#ns-s').value,lot:bg.querySelector('#ns-l').value.trim(),batches:Number(bg.querySelector('#ns-b').value)||0,tank:bg.querySelector('#ns-t').value.trim(),createdBy:S.me.id,createdAt:Date.now(),tested:[],validated:null};
+        const s={id:uid('s'),productId:bg.querySelector('#ns-p').value,date:bg.querySelector('#ns-d').value||today(),section:bg.querySelector('#ns-s').value,lot:bg.querySelector('#ns-l').value.trim(),batches:Number(bg.querySelector('#ns-b').value)||0,tank:bg.querySelector('#ns-t').value.trim(),prod:needsPE(product(bg.querySelector('#ns-p').value))?bg.querySelector('#ns-pd').value:'',exp:needsPE(product(bg.querySelector('#ns-p').value))?bg.querySelector('#ns-ed').value:'',createdBy:S.me.id,createdAt:Date.now(),tested:[],validated:null};
         saveSession(s);close();S.sessionId=s.id;S.sampleId=null;S.back=S.view==='session'?S.back:S.view;S.view='session';render()}})
 }
 
@@ -376,11 +385,13 @@ function sampleForm(s,p,ss){
     (isDoctor()?'<label class="row">Assign <select id="sm-assign"><option value="">Anyone</option>'+Object.values(S.people).filter(x=>x.active!==false&&x.canTest).map(x=>'<option value="'+x.id+'"'+(s.assignedTo===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label>':(s.assignedTo?'<span class="pill acc">Assigned to '+esc(person(s.assignedTo).name)+'</span>':''))+
     '</div></div>';
   if(s.extra)h+='<p class="small"><span class="pill warn">Extra sample</span> '+esc(s.reason||'')+'</p>';
+  const pe=needsPE(p);
+  if(pe)h+='<div class="row small pe"><label class="row">Production <input type="date" data-pe="prod" value="'+esc(s.prod||'')+'"></label><label class="row">Expiry <input type="date" data-pe="exp" value="'+esc(s.exp||'')+'"></label>'+(!s.prod||!s.exp?'<span class="pill warn">Enter both dates</span>':'')+'</div>';
   if(s.testedBy)h+='<div class="finished"><span class="pill ok">Finished</span> by <b>'+esc(person(s.testedBy).name)+'</b>'+(s.testedAt?' · '+hhmm(s.testedAt):'')+'</div>';
   const groups=[['chem','Chemical'],['org','Organoleptic'],['micro','Microbiology']];
   if(testsOf(p,'micro').length&&testsOf(p).some(t=>t.kind!=='micro'))h+=kindBar();
   groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length||!kindOk({kind:k}))return;
-    h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?'<span class="small muted">Fill in when the plates are read</span>':'')+'</div>';
+    h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?'<label class="row small">Micro started on <input type="date" id="sm-mdate" value="'+esc(s.microDate||s.date)+'"'+(lockedT(s,{kind:'chem'})&&!isDoctor()?' disabled':'')+'></label>':'')+'</div>';
     ts.forEach(t=>h+=testRow(s,t))});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
   if(!s.testedBy&&!isAdmin()&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
@@ -394,7 +405,7 @@ function testRow(s,t){
   let h='<div class="test" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b>'+(t.optional?' <span class="pill">'+esc(t.freq||'optional')+'</span>':'')+
     '<div class="small muted">'+esc([t.method,t.solution].filter(Boolean).join(' · '))+'</div>'+
     ((t.consts||[]).length?'<div class="small muted mono">'+t.consts.map(c=>{const x=c.sol&&solOf(c.sol);return x?'<span class="solchip">'+esc(x.name)+' '+esc(String(constVal(c,resultOf(s,t).k)))+' '+esc(x.unit||'N')+'</span>':esc(c.label||c.key)+' '+esc(c.value)}).join(' · ')+'</div>':'')+
-    (t.kind==='micro'&&t.incubDays?'<div class="small muted">Read on '+niceDate(addDays(s.date,Number(t.incubDays)))+'</div>':'')+'</div><div>';
+    (t.kind==='micro'&&t.incubDays?'<div class="small muted">Read on '+niceDate(readDay(s,t))+'</div>':'')+'</div><div>';
   if(t.kind==='org'){
     h+='<div class="ins"><label>Result<select data-org="'+t.id+'"><option value="">–</option>'+['Acceptable','Not acceptable'].map(o=>'<option'+(r.value===o?' selected':'')+'>'+o+'</option>').join('')+'</select></label><label style="flex:1">Comment<input data-orgc="'+t.id+'" value="'+esc(r.comment||'')+'" style="width:100%"></label></div>';
     if(r.value==='Not acceptable')h+='<div class="outs"><span class="out bad">Not acceptable</span></div>';
@@ -463,6 +474,8 @@ function bindSession(){
   document.querySelectorAll('[data-org]').forEach(sel=>sel.onchange=()=>{s.results=s.results||{};const r=s.results[sel.dataset.org]=s.results[sel.dataset.org]||{};r.value=sel.value;r.by=S.me.id;r.at=Date.now();live(sel.dataset.org,'result');saveSample(s);S.dirty=true});
   document.querySelectorAll('[data-orgc]').forEach(inp=>inp.addEventListener('input',()=>{s.results=s.results||{};const r=s.results[inp.dataset.orgc]=s.results[inp.dataset.orgc]||{};r.comment=inp.value;live(inp.dataset.orgc,'comment');liveSave(s)}));
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
+  const md=$('#sm-mdate');md&&(md.onchange=()=>{s.microDate=md.value&&md.value!==s.date?md.value:'';saveSample(s);render();toast('Micro read dates updated')});
+  document.querySelectorAll('[data-pe]').forEach(i=>i.onchange=()=>{s[i.dataset.pe]=i.value;saveSample(s);toast('Saved · next samples use this date')});
   const tb=$('#sm-taken');tb&&(tb.onchange=()=>{s.takenBy=tb.value;saveSample(s)});
   const bt=$('#sm-batch');bt.addEventListener('input',()=>{s.batch=bt.value.trim();liveSave(s)});
   const as=$('#sm-assign');as&&(as.onchange=()=>{s.assignedTo=as.value;saveSample(s);toast(as.value?'Assigned to '+person(as.value).name:'Assignment cleared')});
@@ -485,6 +498,7 @@ function nextCode(p,smp){return (p?p.code:'S')+(smp.length+1)}
 function addSample(ss,p){
   const smp=sessionSamples(ss.id);const left=(Number(ss.batches)||0)-smp.length;
   const make=(extra,reason)=>{const n=smp.length+1;const s={id:uid('m'),sessionId:ss.id,date:ss.date,productId:ss.productId,n,code:(p?p.code:'S')+n,tank:ss.tank||'',batch:extra?'':String(n),extra:!!extra,reason:reason||'',results:{},notes:[],retests:[],createdBy:S.me.id,createdAt:Date.now()};
+    {const last=smp[smp.length-1];s.prod=(last&&last.prod)||ss.prod||'';s.exp=(last&&last.exp)||ss.exp||''}
     saveSample(s);S.sampleId=s.id;render();toast('Sample '+s.code+' added'+(left-1>0?' · '+(left-1)+' left':''))};
   if(left>0)return make(false);
   modal('<h2>Add an extra sample</h2><p class="muted">All '+(ss.batches||0)+' batches already have a sample. Say why you are taking another.</p><form id="exf" class="stack"><label class="field"><span>Reason</span><textarea id="ex-r" required placeholder="e.g. Tank 3 topped up, second check after mixing"></textarea></label><div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Add extra sample</button></div></form>',(bg,close)=>{
@@ -540,12 +554,12 @@ function reportBody(ss,kind,day){const p=product(ss.productId)||{};const smp=ses
   const cols=[];tests.forEach(t=>{if(t.kind==='org')cols.push({t,o:null,label:t.name});else (t.outputs||[]).forEach(o=>cols.push({t,o,label:o.label+(o.unit?' ('+o.unit+')':'')}))});
   let h='<h1>ATIC Oman · Laboratory report</h1><div class="muted">'+(kind==='micro'?'Microbiology · read on '+niceDate(day):'Chemical analysis')+'</div>';
   h+='<table class="meta"><tr><td><b>Product</b></td><td>'+esc(p.name||'')+(p.standard?' · '+esc(p.standard):'')+'</td><td><b>Date</b></td><td>'+niceDate(ss.date)+'</td></tr><tr><td><b>Lot</b></td><td>'+esc(ss.lot||'–')+'</td><td><b>Section</b></td><td>'+esc(ss.section||'')+'</td></tr></table>';
-  h+='<table><tr><th>Sample</th><th>Tank</th><th>Batch</th><th>Taken by</th>'+cols.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'<th>Tested by</th></tr>';
-  smp.forEach(x=>{h+='<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.tank||'')+'</td><td>'+esc(x.batch||'')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td>'+cols.map(c=>{const r=resultOf(x,c.t);
+  h+='<table><tr><th>Sample</th><th>Tank</th><th>Batch</th><th>Production</th><th>Expiry</th><th>Taken by</th>'+cols.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'<th>Tested by</th></tr>';
+  smp.forEach(x=>{h+='<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.tank||'')+'</td><td>'+esc(x.batch||'')+'</td><td>'+(x.prod?niceDate(x.prod):'')+'</td><td>'+(x.exp?niceDate(x.exp):'')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td>'+cols.map(c=>{const r=resultOf(x,c.t);
     if(!c.o)return '<td'+(r.value==='Not acceptable'?' class="bad"':'')+'>'+esc(r.value||'–')+(r.comment?' · '+esc(r.comment):'')+'</td>';
     if(kind==='micro'&&!testActive(x,c.t))return '<td class="muted">not due</td>';
     const o=resOuts(c.t,r).find(y=>y.key===c.o.key);if(!o||o.value==null)return '<td class="muted">–</td>';return '<td'+(o.state==='bad'?' class="bad"':'')+'>'+fmt(o.value,o.dp)+'</td>'}).join('')+'<td>'+esc(x.testedBy?person(x.testedBy).name:'')+'</td></tr>'});
-  h+='<tr><td colspan="4"><b>Limit</b></td>'+cols.map(c=>'<td>'+esc(c.o?limitText(c.o)||'–':'Acceptable')+'</td>').join('')+'<td></td></tr></table>';
+  h+='<tr><td colspan="6"><b>Limit</b></td>'+cols.map(c=>'<td>'+esc(c.o?limitText(c.o)||'–':'Acceptable')+'</td>').join('')+'<td></td></tr></table>';
   h+='<div class="sign">'+(v?'Validated by <b>'+esc(person(v.by).name)+'</b> on '+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' at '+hhmm(v.at)+(v.comment?'<br>Comment: '+esc(v.comment):''):'<b>Not validated yet</b>')+'</div>';
   return h}
 function report(ss,kind,day,fmtx){const p=product(ss.productId)||{};const name='ATIC-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'-'+(kind==='micro'?'micro-'+day:'chemical');
@@ -557,10 +571,10 @@ function stickersModal(ss){
   modal('<h2>Sample stickers</h2><p class="small muted">A4 sheet, 3 × 8 labels (70 × 37 mm), the common 24-label sticker paper. Samples you have not added yet can be included.</p>'+
     '<form id="stf" class="stack"><div class="row"><label class="field" style="flex:1"><span>Stickers per sample</span><input id="st-c" type="number" min="1" max="24" value="1"></label><label class="field" style="flex:1"><span>Number of samples</span><input id="st-n" type="number" min="1" value="'+Math.max(smp.length,Number(ss.batches)||0,1)+'"></label><label class="field" style="flex:1"><span>Skip first labels</span><input id="st-skip" type="number" min="0" max="23" value="0" title="For a sheet that is partly used"></label></div><div id="st-prev" class="sheet"></div><div class="row" style="justify-content:flex-end"><button type="button" data-close>Close</button><button class="primary">Download PDF to print</button></div><p class="small muted" id="st-msg"></p></form>',(bg,close)=>{
     const labels=()=>{const n=Number(bg.querySelector('#st-n').value)||1,c=Number(bg.querySelector('#st-c').value)||1,skip=Number(bg.querySelector('#st-skip').value)||0;const out=[];for(let i=0;i<skip;i++)out.push(null);
-      for(let i=1;i<=n;i++){const s=smp[i-1];for(let k=0;k<c;k++)out.push({code:s?s.code:(p.code+i),name:p.name,date:ss.date,lot:ss.lot,tank:s?s.tank:ss.tank,batch:s?s.batch:String(i),section:ss.section})}return out};
+      for(let i=1;i<=n;i++){const s=smp[i-1];for(let k=0;k<c;k++)out.push({code:s?s.code:(p.code+i),name:p.name,date:ss.date,lot:ss.lot,tank:s?s.tank:ss.tank,batch:s?s.batch:String(i),section:ss.section,prod:(s&&s.prod)||ss.prod||'',exp:(s&&s.exp)||ss.exp||''})}return out};
     const prev=()=>{const L=labels().slice(0,24);bg.querySelector('#st-prev').innerHTML=L.map(l=>l?'<div class="sticker"><div><b>'+esc(l.code)+'</b> '+esc(l.section)+'</div><div>'+esc(l.name)+'</div><div>'+niceDate(l.date)+' · Lot '+esc(l.lot||'–')+(l.tank?' · Tank '+esc(l.tank):'')+'</div></div>':'<div class="sticker" style="opacity:.3"></div>').join('')+(labels().length>24?'<p class="small muted" style="grid-column:1/-1">+ '+(labels().length-24)+' more on the next sheet</p>':'')};
     prev();bg.querySelectorAll('input').forEach(i=>i.oninput=prev);
-    const body=()=>{const L=labels();let h='';for(let i=0;i<L.length;i+=24){h+='<table class="sheet">';for(let r=0;r<8;r++){h+='<tr>';for(let c=0;c<3;c++){const l=L[i+r*3+c];h+='<td>'+(l?'<div class="code">'+esc(l.code)+'<span>'+esc(l.section||'')+'</span></div><div>'+esc(l.name)+'</div><div>'+niceDate(l.date)+' · Lot '+esc(l.lot||'-')+'</div><div>'+(l.tank?'Tank '+esc(l.tank)+' ':'')+(l.batch?'Batch '+esc(l.batch):'')+'</div>':'')+'</td>'}h+='</tr>'}h+='</table>'}return h};
+    const body=()=>{const L=labels();let h='';for(let i=0;i<L.length;i+=24){h+='<table class="sheet">';for(let r=0;r<8;r++){h+='<tr>';for(let c=0;c<3;c++){const l=L[i+r*3+c];h+='<td>'+(l?'<div class="code">'+esc(l.code)+'<span>'+esc(l.section||'')+'</span></div><div>'+esc(l.name)+'</div><div>'+niceDate(l.date)+' · Lot '+esc(l.lot||'-')+'</div><div>'+(l.tank?'Tank '+esc(l.tank)+' ':'')+(l.batch?'Batch '+esc(l.batch):'')+'</div>'+(l.prod||l.exp?'<div>P '+(l.prod?niceDate(l.prod):'-')+' · E '+(l.exp?niceDate(l.exp):'-')+'</div>':''):'')+'</td>'}h+='</tr>'}h+='</table>'}return h};
     const css='@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}table.sheet{border-collapse:collapse;width:210mm;table-layout:fixed;page-break-after:always}table.sheet td{width:70mm;height:37.1mm;padding:3mm 5mm;vertical-align:top;font-size:10pt;overflow:hidden;box-sizing:border-box}.code{font-size:20pt;font-weight:bold}.code span{float:right;font-size:9pt;font-weight:normal}';
     const fname='stickers-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'');
     bg.querySelector('.primary').textContent='Print / save as PDF';
@@ -619,7 +633,7 @@ function bindHistory(){
 $('#hf-p').onchange=e=>{histFilter.product=e.target.value;render()};$('#hf-f').onchange=e=>{histFilter.from=e.target.value||histFilter.from;render()};bindCommon()}
 
 /* ---------- MICRO PENDING ---------- */
-function microList(){return Object.values(S.samples).flatMap(s=>{const p=product(s.productId);return sampleMicroPending(s,p).map(t=>({s,p,t,ready:addDays(s.date,Number(t.incubDays)||0)}))}).sort((a,b)=>a.ready.localeCompare(b.ready))}
+function microList(){return Object.values(S.samples).flatMap(s=>{const p=product(s.productId);return sampleMicroPending(s,p).map(t=>({s,p,t,ready:readDay(s,t)}))}).sort((a,b)=>a.ready.localeCompare(b.ready))}
 function microPendingCount(){const d=today();return microList().filter(x=>x.ready<=d).length}
 function microView(){
   const L=microList().filter(x=>catSel()==='all'||catOfP(x.p)===catSel());const d=today();
