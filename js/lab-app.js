@@ -33,6 +33,7 @@ function isFri(d){return new Date(d+'T00:00:00Z').getUTCDay()===5}
 function offFri(d){return isFri(d)?addDays(d,1):d}
 function readDay(s,t){return offFri(addDays(s.microDate||s.date,Number(t.incubDays)||0))}
 function needsPE(p){const c=catOfP(p);return c==='product'||c==='raw'}
+function logAct(txt){if(!S.me)return;const id=uid('a');const v={at:Date.now(),by:S.me.id,txt};S.acts=S.acts||{};S.acts[id]=v;S.db.doc('activity/'+id).set(v).catch(()=>{})}
 function lotOf(d){try{return (window.ATIC_PARENT&&window.ATIC_PARENT.lot)?String(window.ATIC_PARENT.lot(d)):''}catch(e){return''}}
 function lockedT(s,t){if(isDoctor())return false;const ss=s&&S.sessions[s.sessionId];if(!ss)return false;if(t.kind==='micro')return !!(ss.microVal&&ss.microVal[readDay(s,t)]);return !!ss.validated}
 function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
@@ -121,6 +122,7 @@ async function boot(){
   S.db.collection('tasks').orderBy('at','desc').limit(300).onSnapshot(snap=>{S.tasks={};snap.docs.forEach(d=>S.tasks[d.id]=Object.assign({id:d.id},d.data()));changed('tasks')},()=>{});
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
   S.db.collection('presence').onSnapshot(snap=>{S.pres={};snap.docs.forEach(d=>S.pres[d.id]=d.data());if(S.view==='overview')changed('pres')},()=>{});
+  S.db.collection('activity').onSnapshot(snap=>{S.acts={};snap.docs.forEach(d=>S.acts[d.id]=d.data());if(S.view==='overview')changed('acts')},()=>{});
   S.db.collection('daybatch').onSnapshot(snap=>{S.daybatch={};snap.docs.forEach(d=>S.daybatch[d.id]=d.data());changed('daybatch')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
 }
@@ -441,7 +443,7 @@ function signoffHTML(ss,smp){
     mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>Read on '+niceDate(g.day)+'</b><div class="small muted">'+esc([...g.tests].join(', '))+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
       (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>'))+'</div></div>'});
     h+='</div>'}
-  if(isDoctor())h+='<div class="sgrp"><button class="ghost danger" id="delSess">Delete this record</button></div>';
+  if(isDoctor()||(!ss.validated&&!isAdmin()))h+='<div class="sgrp"><button class="ghost danger" id="delSess">Delete this record</button></div>';
   return h+'</div>';
 }
 function bindSession(){
@@ -457,7 +459,7 @@ function bindSession(){
   document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>report(ss,b.dataset.rep,b.dataset.day,b.dataset.fmt));
   document.querySelectorAll('[data-unmv]').forEach(b=>b.onclick=()=>{const m=Object.assign({},ss.microVal);delete m[b.dataset.unmv];ss.microVal=m;saveSession(ss);render()});
   const dss=$('#delSess');dss&&(dss.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete this record and its '+sessionSamples(ss.id).length+' samples';return}
-    Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
+    Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();logAct('deleted the record <b>'+esc((product(ss.productId)||{}).name||'')+'</b> '+esc(ss.section||'')+(ss.lot?' lot '+esc(ss.lot):''));toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;saveSession(ss);render()});
   const s=S.samples[S.sampleId]; if(!s)return;
   const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()};presence()};
@@ -485,7 +487,7 @@ function bindSession(){
         s.testedBy=pid;s.testedAt=Date.now();saveSample(s);ss.tested=(ss.tested||[]).concat([{by:pid,samples:[s.id],at:Date.now()}]);saveSession(ss);close();
         const next=sessionSamples(ss.id).find(x=>!x.testedBy&&x.id!==s.id);if(next)S.sampleId=next.id;render();toast(s.code+' finished')}})});
   document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{s.results=s.results||{};const r=s.results[b.dataset.pick]=s.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(s);render()});
-  const dsm=$('#delSample');dsm&&(dsm.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+s.code;return}S.db.doc('samples/'+s.id).delete().then(()=>{delete S.samples[s.id];S.sampleId=null;render();toast('Sample deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
+  const dsm=$('#delSample');dsm&&(dsm.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+s.code;return}S.db.doc('samples/'+s.id).delete().then(()=>{delete S.samples[s.id];S.sampleId=null;render();logAct('deleted sample <b class="mono">'+esc(s.code)+'</b> of <b>'+esc((product(s.productId)||{}).name||'')+'</b>');toast('Sample deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{s.on=Object.assign({},s.on,{[b.dataset.mon]:true});if(s.off)delete s.off[b.dataset.mon];saveSample(s);render()});
   document.querySelectorAll('[data-moff]').forEach(b=>b.onclick=()=>{s.off=Object.assign({},s.off,{[b.dataset.moff]:true});if(s.on)delete s.on[b.dataset.moff];saveSample(s);render()});
   document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>retestModal(s,p.tests.find(x=>x.id===b.dataset.retest)));
@@ -596,6 +598,7 @@ function overviewView(){
   const now=Date.now();const pres=Object.entries(S.pres||{}).map(([id,v])=>Object.assign({id},v)).filter(v=>now-v.at<5*60000).sort((a,b)=>b.at-a.at);
   const acts=[];Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);if(x.createdAt)acts.push({at:x.createdAt,by:x.createdBy,txt:'started <b>'+esc(p?p.name:'')+'</b> '+esc(x.section||''),sid:x.id});if(x.validated)acts.push({at:x.validated.at,by:x.validated.by,txt:'validated chemical of <b>'+esc(p?p.name:'')+'</b>',sid:x.id});Object.entries(x.microVal||{}).forEach(([day,v])=>acts.push({at:v.at,by:v.by,txt:'validated micro (read '+niceDate(day)+') of <b>'+esc(p?p.name:'')+'</b>',sid:x.id}))});
   Object.values(S.samples).filter(x=>x.date===d||(x.testedAt&&x.testedAt>now-86400000)).forEach(x=>{const p=product(x.productId);if(x.testedAt)acts.push({at:x.testedAt,by:x.testedBy,txt:'finished sample <b class="mono">'+esc(x.code)+'</b>',mid:x.id});Object.entries(x.results||{}).forEach(([tid,r])=>{const t=p&&(p.tests||[]).find(y=>y.id===tid);if(t&&r.at&&r.at>now-86400000)acts.push({at:r.at,by:r.by,txt:'entered <b>'+esc(t.name)+'</b> on <b class="mono">'+esc(x.code)+'</b>',mid:x.id})})});
+  Object.values(S.acts||{}).filter(a=>a.at>now-86400000).forEach(a=>acts.push({at:a.at,by:a.by,txt:'<span class="pill bad">Deleted</span> '+a.txt.replace(/^deleted /,'')}));
   acts.sort((a,b)=>b.at-a.at);
   const watch=isDoctor()?'<div class="watch" id="watchBox"><div class="card stack"><div class="row between"><h3>In the lab now</h3><span class="small muted">What each person has open</span></div>'+(pres.length?pres.map(v=>'<div class="who"><span class="av">'+esc((v.name||'?').split(' ').map(x=>x[0]).join('').slice(0,2))+'</span><div style="flex:1"><b>'+esc(v.name)+'</b> <span class="small muted">'+esc(roleName(v.role))+'</span><div class="small">'+where(v)+'</div></div><span class="small muted">'+(now-v.at<90000?'<span class="live-dot"></span> now':ago(v.at))+'</span>'+(v.sampleId&&S.samples[v.sampleId]?'<button class="ghost" data-open-sample="'+v.sampleId+'">Look</button>':v.sessionId&&S.sessions[v.sessionId]?'<button class="ghost" data-open-session="'+v.sessionId+'">Look</button>':'')+'</div>').join(''):'<p class="muted small">Nobody has the lab open right now.</p>')+'</div>'+
     '<div class="card stack"><div class="row between"><h3>What happened today</h3><span class="small muted">Newest first</span></div><div class="feed">'+(acts.length?acts.slice(0,40).map(a=>'<div class="ev"><span class="num small muted">'+hhmm(a.at)+'</span><span><b>'+esc(person(a.by).name)+'</b> '+a.txt+'</span>'+(a.mid&&S.samples[a.mid]?'<button class="ghost small" data-open-sample="'+a.mid+'">Open</button>':a.sid&&S.sessions[a.sid]?'<button class="ghost small" data-open-session="'+a.sid+'">Open</button>':'')+'</div>').join(''):'<p class="muted small">Nothing yet today.</p>')+'</div></div></div>':'';
@@ -629,7 +632,7 @@ function bindHistory(){
   const del=$('#hs-del');if(del){const boxes=[...document.querySelectorAll('.hs')];const upd=()=>{const n=boxes.filter(b=>b.checked).length;del.disabled=!n;del.textContent=n?'Delete '+n+' record'+(n>1?'s':''):'Delete selected';delete del.dataset.armed};
     boxes.forEach(b=>b.onchange=upd);$('#hs-all').onchange=e=>{boxes.forEach(b=>b.checked=e.target.checked);upd()};
     del.onclick=async function(){const ids=boxes.filter(b=>b.checked).map(b=>b.value);if(!ids.length)return;if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete '+ids.length+' record(s) and their samples';return}
-      this.disabled=true;try{for(const id of ids){for(const x of sessionSamples(id)){await S.db.doc('samples/'+x.id).delete();delete S.samples[x.id]}await S.db.doc('sessions/'+id).delete();delete S.sessions[id]}toast('Deleted')}catch(e){toast('Could not delete: '+(e.code||e.message))}render()}}
+      this.disabled=true;try{for(const id of ids){for(const x of sessionSamples(id)){await S.db.doc('samples/'+x.id).delete();delete S.samples[x.id]}await S.db.doc('sessions/'+id).delete();delete S.sessions[id]}logAct('deleted '+ids.length+' record(s) from Records');toast('Deleted')}catch(e){toast('Could not delete: '+(e.code||e.message))}render()}}
 $('#hf-p').onchange=e=>{histFilter.product=e.target.value;render()};$('#hf-f').onchange=e=>{histFilter.from=e.target.value||histFilter.from;render()};bindCommon()}
 
 /* ---------- MICRO PENDING ---------- */
