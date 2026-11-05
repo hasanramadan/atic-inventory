@@ -29,21 +29,25 @@ function evalFormula(expr,vars){
 }
 /* returns [{key,label,unit,value,state}] for a test given inputs */
 function locked(s){const ss=s&&S.sessions[s.sessionId];return !!(ss&&ss.validated&&!isDoctor())}
+function readDay(s,t){return addDays(s.date,Number(t.incubDays)||0)}
+function lockedT(s,t){if(isDoctor())return false;const ss=s&&S.sessions[s.sessionId];if(!ss)return false;if(t.kind==='micro')return !!(ss.microVal&&ss.microVal[readDay(s,t)]);return !!ss.validated}
 function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
 function constVal(c,snap){if(snap&&snap[c.key]!=null)return Number(snap[c.key]);if(c.sol){const x=solOf(c.sol);if(x&&x.conc!==''&&x.conc!=null)return Number(x.conc)}return Number(c.value)}
 function constSnap(t){const k={};(t.consts||[]).forEach(c=>{if(c.sol)k[c.key]=constVal(c)});return Object.keys(k).length?k:null}
 function computeTest(test,inputs,snap){
   const vars={};
   (test.consts||[]).forEach(c=>vars[c.key]=constVal(c,snap));
-  let missing=false;
-  (test.inputs||[]).forEach(i=>{const v=inputs&&inputs[i.key];if(v===''||v==null||isNaN(Number(v))){missing=true;vars[i.key]=NaN}else vars[i.key]=Number(v)});
+  const miss=new Set();
+  (test.inputs||[]).forEach(i=>{const v=inputs&&inputs[i.key];if(v===''||v==null||isNaN(Number(v))){miss.add(i.key);vars[i.key]=NaN}else vars[i.key]=Number(v)});
   return (test.outputs||[]).map(o=>{
-    let v=null;
-    if(!missing){v=evalFormula(o.formula||(test.inputs[0]&&test.inputs[0].key),vars); if(o.key)vars[o.key]=v}
+    let v=null;const fx=o.formula||(test.inputs[0]&&test.inputs[0].key)||'';const ids=fx.match(/[A-Za-z_]\w*/g)||[];
+    if(!ids.some(x=>miss.has(x))){v=evalFormula(fx,vars)} if(o.key){vars[o.key]=v==null?NaN:v;if(v==null)miss.add(o.key)}
     return {key:o.key,label:o.label,unit:o.unit,dp:o.dp,value:v,state:limitState(v,o)};
   });
 }
-function resOuts(t,r){r=r||{};const all=computeTest(t,r.in,r.k);if(!t.pick||(t.outputs||[]).length<2)return all;return r.pick?all.filter(o=>o.key===r.pick):[]}
+function resOuts(t,r){r=r||{};const all=computeTest(t,r.in,r.k);if(!t.pick||(t.outputs||[]).length<2)return all;return r.pick?all.filter((o,i)=>{const d=t.outputs[i];return (d.grp||d.key)===r.pick}):[]}
+function pickGroups(t){const g=[];(t.outputs||[]).forEach(o=>{const k=o.grp||o.key;if(!g.find(x=>x.k===k))g.push({k,label:o.grpLabel||o.label})});return g}
+function usedInputs(t,r){if(!t.pick||!r.pick)return t.inputs||[];const outs=(t.outputs||[]).filter(o=>(o.grp||o.key)===r.pick);const need=new Set();const add=fx=>(String(fx||'').match(/[A-Za-z_]\w*/g)||[]).forEach(x=>{if(need.has(x))return;need.add(x);const o=(t.outputs||[]).find(y=>y.key===x);if(o)add(o.formula)});outs.forEach(o=>add(o.formula));return (t.inputs||[]).filter(i=>need.has(i.key))}
 function limitState(v,o){
   if(v==null||isNaN(v))return'';
   const mn=o.min===''||o.min==null?null:Number(o.min), mx=o.max===''||o.max==null?null:Number(o.max);
@@ -170,7 +174,7 @@ function render(){
   if(!S.ready)return;
   if(!S.me){root.innerHTML=loginView();bindLogin();return}
   if(isStation())return renderStation();
-  const tabs=[['today','Today',myTasks().length||''],['history','Records',''],['micro','Micro pending',microPendingCount()||''],['tasks','Tasks',myTasks().length||'']];
+  const tabs=isAdmin()?[['today','Batches',''],['history','Records',''],['micro','Micro pending',microPendingCount()||''],['tasks','Tasks','']]:[['today','Today',myTasks().length||''],['history','Records',''],['micro','Micro pending',microPendingCount()||''],['tasks','Tasks',myTasks().length||'']];
   if(isDoctor())tabs.unshift(['overview','Live overview','']);
   if(isDoctor())tabs.push(['chem','Solutions & formulas','']);
   if(isDoctor())tabs.push(['setup','Tests & limits','']);
@@ -254,7 +258,7 @@ function todayView(){
   const planned=Object.keys(plan).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);return{key:k,p,sec,batches:plan[k]}}).filter(x=>x.p&&(catSel()==='all'||catOfP(x.p)===catSel()));
   const tasks=isStation()?[]:myTasks();
   const assigned=isStation()?[]:Object.values(S.samples).filter(s=>inCat(s)&&s.assignedTo===S.me.id&&!sampleChemDone(s,product(s.productId)));
-  let h='<div class="stack">'+catBar()+'<div class="row between"><h1>'+esc(catLabel(catSel()))+' · '+niceDate(d)+'</h1><button class="primary" id="newSess">Start testing</button></div>';
+  let h='<div class="stack">'+catBar()+'<div class="row between"><h1>'+esc(catLabel(catSel()))+' · '+niceDate(d)+'</h1>'+(isAdmin()?'<span class="pill acc">Admin view · you see and correct, the lab tests</span>':'<button class="primary" id="newSess">Start testing</button>')+'</div>';
   if(note&&note.text)h+='<div class="note-banner"><div class="label">Note from '+esc(person(note.by).name)+' · '+hhmm(note.at)+'</div>'+esc(note.text).replace(/\n/g,'<br>')+'</div>';
   if(tasks.length||assigned.length){h+='<div class="card stack"><h3>For you</h3>'+tasks.map(t=>'<div class="row between"><span>'+esc(t.text)+(t.sessionId&&S.sessions[t.sessionId]?' <span class="muted small">· '+esc(sessLabel(S.sessions[t.sessionId]))+'</span>':'')+'</span><button class="ghost" data-taskdone="'+t.id+'">Mark done</button></div>').join('')+
     assigned.map(s=>'<div class="row between"><span>Sample <b class="mono">'+esc(s.code)+'</b> assigned to you</span><button class="ghost" data-open-sample="'+s.id+'">Open</button></div>').join('')+'</div>'}
@@ -262,8 +266,8 @@ function todayView(){
   const ov=(S.daybatch||{})[d];
   if(isDoctor())h+=batchEditor(d);
   else if(todo.length)h+='<div class="card stack"><div class="row between"><h3>Production plan for today</h3><span class="muted small">'+(ov?'Sent by '+esc(person(ov.by).name):'From the factory plan')+'</span></div>'+todo.map(x=>'<div class="row between"><span><b>'+esc(x.p.name)+'</b> · '+esc(x.sec)+' · <span class="num">'+x.batches+'</span> batches</span><button data-start="'+x.key+'">Start</button></div>').join('')+'</div>';
-  if(catSel()!=='product'){const ps=(S.cfg.products||[]).filter(p=>catSel()==='all'?catOfP(p)!=='product':catOfP(p)===catSel());if(ps.length)h+='<div class="card stack"><h3>Start a test</h3><div class="quick">'+ps.map(p=>'<button class="qbtn" data-startp="'+p.id+'"><b>'+esc(p.name)+'</b><span class="small muted">'+testsOf(p).filter(t=>t.kind!=='micro').length+' chemical · '+testsOf(p,'micro').length+' micro</span></button>').join('')+'</div></div>'}
-  h+='<h2>Open today</h2>';
+  if(catSel()!=='product'&&!isAdmin()){const ps=(S.cfg.products||[]).filter(p=>catSel()==='all'?catOfP(p)!=='product':catOfP(p)===catSel());if(ps.length)h+='<div class="card stack"><h3>Start a test</h3><div class="quick">'+ps.map(p=>'<button class="qbtn" data-startp="'+p.id+'"><b>'+esc(p.name)+'</b><span class="small muted">'+testsOf(p).filter(t=>t.kind!=='micro').length+' chemical · '+testsOf(p,'micro').length+' micro</span></button>').join('')+'</div></div>'}
+  h+='<h2>'+(isAdmin()?'Records today':'Open today')+'</h2>';
   if(!sess.length)h+='<div class="card muted">Nothing started yet. Press <b>Start testing</b> or start one of the planned products above.</div>';
   else h+='<div class="grid">'+sess.map(sessCard).join('')+'</div>';
   return h+'</div>';
@@ -271,7 +275,7 @@ function todayView(){
 function batchEditor(d){const items=planFor(d);const ov=(S.daybatch||{})[d];const prods=(S.cfg.products||[]).filter(p=>catOfP(p)==='product');
   const started=new Set(Object.values(S.sessions).filter(s=>s.date===d).map(s=>s.productId+'|'+s.section));
   return '<div class="card stack batched"><div class="row between"><h3>Batches today</h3><span class="small muted">'+(ov?'Sent by '+esc(person(ov.by).name)+' · '+hhmm(ov.at):'From the factory plan · change and press Send')+'</span></div>'+
-  Object.keys(items).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);const st=p&&started.has(p.id+'|'+sec);return '<div class="row brow"><b style="flex:1">'+esc(p?p.name:pc)+'</b><span>'+esc(sec)+'</span><input class="num" type="number" min="0" data-bk="'+esc(k)+'" value="'+esc(items[k])+'" style="width:90px"> batches'+(st?'<span class="pill ok">Started</span>':'<button data-start="'+esc(k)+'">Start</button>')+'<button class="ghost danger" data-bdel="'+esc(k)+'" title="Remove">×</button></div>'}).join('')+
+  Object.keys(items).map(k=>{const[pc,sec]=k.split('|');const p=(S.cfg.products||[]).find(x=>x.code===pc);const st=p&&started.has(p.id+'|'+sec);return '<div class="row brow"><b style="flex:1">'+esc(p?p.name:pc)+'</b><span>'+esc(sec)+'</span><input class="num" type="number" min="0" data-bk="'+esc(k)+'" value="'+esc(items[k])+'" style="width:90px"> batches'+(st?'<span class="pill ok">Started</span>':isAdmin()?'<span class="pill">Not started</span>':'<button data-start="'+esc(k)+'">Start</button>')+'<button class="ghost danger" data-bdel="'+esc(k)+'" title="Remove">×</button></div>'}).join('')+
   '<div class="row brow"><select id="ba-p">'+prods.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.name)+'</option>').join('')+'</select><select id="ba-s">'+(S.cfg.sections||['SEC-1','SEC-2']).map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><input id="ba-n" class="num" type="number" min="0" placeholder="batches" style="width:90px"><button id="ba-add">+ Add</button></div>'+
   '<div class="row" style="justify-content:flex-end">'+(ov?'<button class="ghost" id="ba-reset">Use the factory plan again</button>':'')+'<button class="primary" id="ba-send">Send to the lab</button></div></div>'}
 function bindBatch(){const d=today();const box=$('.batched');if(!box)return;const cur=()=>{const o={};box.querySelectorAll('[data-bk]').forEach(i=>{o[i.dataset.bk]=Number(i.value)||0});return o};
@@ -285,7 +289,7 @@ function sessCard(s){const p=product(s.productId);const pr=sessionProgress(s);co
   return '<button class="card stack" style="text-align:left;cursor:pointer" data-open-session="'+s.id+'"><div class="row between"><h3>'+esc(p?p.name:'?')+'</h3>'+statusPill(s)+'</div>'+
   '<div class="row small muted"><span>'+esc(s.section)+'</span><span>Lot <span class="num">'+esc(s.lot||'–')+'</span></span><span>'+niceDate(s.date)+'</span></div>'+
   '<div class="bar"><i style="width:'+pct+'%"></i></div><div class="row small"><span class="num">'+pr.done+' / '+pr.target+'</span> samples tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+(pr.micro?'<span class="pill warn">'+pr.micro+' micro pending</span>':'')+'</div></button>'}
-function statusPill(s){if(s.validated)return'<span class="pill ok">Validated</span>';if(s.tested&&s.tested.length)return'<span class="pill acc">Tested</span>';return'<span class="pill">In progress</span>'}
+function statusPill(s){const mg=microGroups(s);const mv=mg.filter(g=>(s.microVal||{})[g.day]).length;if(s.validated)return'<span class="pill ok">Chemical validated</span>'+(mg.length?' <span class="pill '+(mv===mg.length?'ok':'warn')+'">Micro '+mv+'/'+mg.length+'</span>':'');if(s.tested&&s.tested.length)return'<span class="pill acc">Tested</span>';return'<span class="pill">In progress</span>'}
 function bindToday(){
   const n=$('#newSess');n&&(n.onclick=()=>{const p=(S.cfg.products||[]).find(p=>catSel()==='all'||catOfP(p)===catSel());newSessionModal(p?{productId:p.id,section:catSel()==='product'||catSel()==='all'?'':'Lab'}:{})});
   document.querySelectorAll('[data-startp]').forEach(b=>b.onclick=()=>newSessionModal({productId:b.dataset.startp,section:'Lab'}));
@@ -325,7 +329,7 @@ function sessionView(){
   const smp=sessionSamples(ss.id);const pr=sessionProgress(ss);
   if(!S.sampleId||!S.samples[S.sampleId]||S.samples[S.sampleId].sessionId!==ss.id)S.sampleId=smp[0]?smp[0].id:null;
   const left=Math.max(0,(Number(ss.batches)||0)-smp.length);
-  let h='<div class="stack"><div class="row between"><button class="ghost" data-tab-back>← Back</button><div class="row">'+statusPill(ss)+'<button id="stickers">Print sample stickers</button></div></div>';
+  let h='<div class="stack"><div class="row between"><button class="ghost" data-tab-back>← Back</button><div class="row">'+statusPill(ss)+'<button id="stickers">Print sample stickers</button></div></div>'+(isAdmin()?'<div class="note-banner small">Admin view: you can correct any value here. Testing is done by the lab.</div>':'');
   h+='<div class="session-head"><div><div class="label">'+esc(catName(p))+'</div><h1>'+esc(p?p.name:'?')+'</h1></div>'+
     kv('Date',niceDate(ss.date))+kv('Section',ss.section)+kv('Lot',ss.lot||'–','lot')+kv('Batches',ss.batches||'–','batches')+kv('Tank',ss.tank||'–','tank')+
     (ss.validated&&!isDoctor()?'':'<button class="ghost" id="editSess">Edit details</button>')+'</div>';
@@ -367,7 +371,7 @@ function sampleForm(s,p,ss){
     h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?'<span class="small muted">Fill in when the plates are read</span>':'')+'</div>';
     ts.forEach(t=>h+=testRow(s,t))});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
-  if(!s.testedBy&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
+  if(!s.testedBy&&!isAdmin()&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
   const rts=(s.retests||[]);
   if(rts.length)h+='<div class="group-h"><h3>Retests</h3></div>'+rts.map(r=>'<div class="note"><b>'+esc(r.testName)+'</b> · '+esc(person(r.by).name)+' · '+niceDate(r.date)+' '+hhmm(r.at)+'<br>Why: '+esc(r.reason)+'<br><span class="small muted">First result: '+esc(r.oldText||'–')+'</span>'+filesHTML(r.files)+'</div>').join('');
   return h;
@@ -385,8 +389,8 @@ function testRow(s,t){
   }else{
     const outs=t.pick&&!r.pick?[]:resOuts(t,r);
     const single=t.inputs.length===1&&t.outputs.length===1&&(!t.outputs[0].formula||t.outputs[0].formula===t.inputs[0].key);
-    if(t.pick&&(t.outputs||[]).length>1)h+='<div class="pickrow"><span>Which one?</span>'+t.outputs.map(o=>'<button type="button" class="pickb'+(r.pick===o.key?' on':'')+'" data-pick="'+t.id+'" data-v="'+esc(o.key)+'"'+(locked(s)?' disabled':'')+'>'+esc(o.label)+'</button>').join('')+'</div>';
-    h+='<div class="ins">'+t.inputs.map(i=>{const st=single?outs[0].state:'';return '<label>'+esc(i.label)+(i.unit?' ('+esc(i.unit)+')':'')+'<input class="num'+(st==='bad'?' bad':'')+'" inputmode="decimal" data-in="'+t.id+'" data-key="'+esc(i.key)+'"'+(locked(s)?' disabled':'')+' value="'+esc(r.in&&r.in[i.key]!=null?r.in[i.key]:'')+'"></label>'}).join('')+'</div>';
+    if(t.pick&&(t.outputs||[]).length>1)h+='<div class="pickrow"><span>Which one?</span>'+pickGroups(t).map(o=>'<button type="button" class="pickb'+(r.pick===o.k?' on':'')+'" data-pick="'+t.id+'" data-v="'+esc(o.k)+'"'+(lockedT(s,t)?' disabled':'')+'>'+esc(o.label)+'</button>').join('')+'</div>';
+    h+='<div class="ins">'+(t.pick&&!r.pick?[]:usedInputs(t,r)).map(i=>{const st=single?outs[0].state:'';return '<label>'+esc(i.label)+(i.unit?' ('+esc(i.unit)+')':'')+'<input class="num'+(st==='bad'?' bad':'')+'" inputmode="decimal" data-in="'+t.id+'" data-key="'+esc(i.key)+'"'+(lockedT(s,t)?' disabled':'')+' value="'+esc(r.in&&r.in[i.key]!=null?r.in[i.key]:'')+'"></label>'}).join('')+'</div>';
     h+='<div class="outs">'+outs.map(o=>{if(single&&o.value==null)return'<span class="out muted small">Limit '+(limitText(t.outputs[0])||'none')+'</span>';const lt=limitText(t.outputs.find(x=>x.key===o.key)||{});return '<span class="out '+o.state+'" title="'+(lt?'Limit '+esc(lt):'No limit set')+'">'+esc(o.label)+': '+(o.value==null?'–':isNaN(o.value)?'check formula':fmt(o.value,o.dp))+(o.unit?' '+esc(o.unit):'')+(lt?' <span class="muted">('+esc(lt)+')</span>':'')+'</span>'}).join('')+'</div>';
   }
   h+='</div><div class="row">'+(r.by?'<span class="small muted">'+esc(person(r.by).name.split(' ')[0])+' '+hhmm(r.at)+'</span>':'')+'<button class="ghost" data-retest="'+t.id+'" title="Retest">Retest</button>'+(t.everyDays&&!testDone(s,t)?'<button class="ghost" data-moff="'+t.id+'">Not today</button>':'')+'</div></div>';
@@ -398,26 +402,37 @@ function notesPanel(s){
     '<div class="row between"><label class="btn small" for="nt-files">Add photo or file</label><input id="nt-files" type="file" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" hidden><button class="primary" id="nt-add">Save note</button></div><div id="nt-chosen" class="small muted"></div>'+
     '<div class="notes-list">'+(notes.length?notes.slice().reverse().map(n=>'<div class="note"><div class="small muted">'+esc(person(n.by).name)+' · '+hhmm(n.at)+'</div>'+esc(n.text).replace(/\n/g,'<br>')+filesHTML(n.files)+'</div>').join(''):'<p class="small muted">No notes on this sample.</p>')+'</div></div>';
 }
+function microGroups(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const g={};
+  smp.forEach(x=>testsOf(p,'micro').forEach(t=>{if(!testActive(x,t))return;const d=readDay(x,t);(g[d]=g[d]||{day:d,tests:new Set(),need:0,done:0}).tests.add(t.name);g[d].need++;if(testDone(x,t))g[d].done++}));
+  return Object.values(g).sort((a,b)=>a.day.localeCompare(b.day))}
+function chemState(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);let need=0,done=0;smp.forEach(x=>testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional).forEach(t=>{need++;if(testDone(x,t))done++}));return{need,done}}
+function valLine(v){return '<span class="pill ok">Validated</span> <b>'+esc(person(v.by).name)+'</b> <span class="muted small">'+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(v.at)+(v.comment?' · '+esc(v.comment):'')+'</span>'}
 function signoffHTML(ss,smp){
-  const testers=Object.values(S.people).filter(p=>p.active!==false&&p.canTest);
-  const validators=Object.values(S.people).filter(p=>p.active!==false&&p.canValidate);
-  let h='<div class="card stack"><h3>Sign-off</h3>';
-  (ss.tested||[]).forEach(t=>h+='<div class="row"><span class="pill acc">Tested</span><b>'+esc(person(t.by).name)+'</b><span class="muted small">'+t.samples.map(id=>S.samples[id]?S.samples[id].code:'').filter(Boolean).join(', ')+' · '+niceDate(new Date(t.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(t.at)+'</span></div>');
-  if(ss.validated)h+='<div class="row"><span class="pill ok">Validated</span><b>'+esc(person(ss.validated.by).name)+'</b><span class="muted small">'+hhmm(ss.validated.at)+(ss.validated.comment?' · '+esc(ss.validated.comment):'')+'</span></div>';
-  if(smp.length&&!ss.validated&&canValidateHere())h+='<div class="row"><button class="primary" id="validate">Validate…</button></div>';
-  if(ss.validated&&isDoctor())h+='<div class="row"><span class="small muted">Only the lab manager can change a validated record.</span><button class="ghost" id="unvalidate">Reopen for changes</button></div>';
-  if(isDoctor())h+='<div><button class="ghost danger" id="delSess">Delete this record</button></div>';
+  if(!smp.length)return '';
+  const can=canValidateHere();const cs=chemState(ss);const mg=microGroups(ss);
+  let h='<div class="signoff"><div class="sgrp"><h3>Chemical</h3><div class="small muted">'+cs.done+' of '+cs.need+' results entered</div>';
+  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+'</div><div class="row"><button data-rep="chem" data-fmt="pdf">Report · PDF</button><button data-rep="chem" data-fmt="doc">Report · Word</button>'+(isDoctor()?'<button class="ghost" id="unvalidate">Reopen</button>':'')+'</div>';
+  else if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';
+  h+='</div>';
+  if(mg.length){h+='<div class="sgrp"><h3>Microbiology</h3>';
+    mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>Read on '+niceDate(g.day)+'</b><div class="small muted">'+esc([...g.tests].join(', '))+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
+      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>'))+'</div></div>'});
+    h+='</div>'}
+  if(isDoctor())h+='<div class="sgrp"><button class="ghost danger" id="delSess">Delete this record</button></div>';
   return h+'</div>';
 }
 function bindSession(){
   const ss=S.sessions[S.sessionId];const p=product(ss.productId);
   $('[data-tab-back]').onclick=()=>{S.view=role()==='lab'?'today':'today';render()};
+  if(isAdmin()){const a0=$('#addSample');a0&&a0.remove()}
   const ad=$('#addSample');ad&&(ad.onclick=()=>addSample(ss,p));
   const es=$('#editSess');es&&(es.onclick=()=>editSessionModal(ss));
   $('#stickers').onclick=()=>stickersModal(ss);
   document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{S.sampleId=b.dataset.sample;render()});
-  const mt=$('#markTested');mt&&(mt.onclick=()=>testedModal(ss));
-  const va=$('#validate');va&&(va.onclick=()=>validateModal(ss));
+  
+  document.querySelectorAll('[data-val]').forEach(b=>b.onclick=()=>validateModal(ss,b.dataset.val,b.dataset.day));
+  document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>report(ss,b.dataset.rep,b.dataset.day,b.dataset.fmt));
+  document.querySelectorAll('[data-unmv]').forEach(b=>b.onclick=()=>{const m=Object.assign({},ss.microVal);delete m[b.dataset.unmv];ss.microVal=m;saveSession(ss);render()});
   const dss=$('#delSess');dss&&(dss.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete this record and its '+sessionSamples(ss.id).length+' samples';return}
     Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;saveSession(ss);render()});
@@ -489,16 +504,40 @@ function testedModal(ss){
       const ids=[...bg.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);if(!ids.length){bg.querySelector('#tb-err').textContent='Tick at least one sample.';return}
       ss.tested=(ss.tested||[]).concat([{by:pid,samples:ids,at:Date.now()}]);ids.forEach(id=>{const s=S.samples[id];s.testedBy=pid;saveSample(s)});saveSession(ss);close();render();toast('Signed as tested')}});
 }
-function validateModal(ss){
+function validateModal(ss,kind,day){
   const vals=Object.values(S.people).filter(p=>p.active!==false&&p.canValidate);
-  const pr=sessionProgress(ss);
-  modal('<h2>Validate</h2>'+(pr.bad?'<p class="note-banner">'+pr.bad+' result(s) are out of limit in this record.</p>':'')+(pr.done<pr.added?'<p class="small muted">'+(pr.added-pr.done)+' sample(s) still have chemical tests missing.</p>':'')+
+  const cs=chemState(ss);const title=kind==='micro'?'Validate microbiology · read on '+niceDate(day):'Validate chemical';
+  modal('<h2>'+title+'</h2>'+(kind!=='micro'&&cs.done<cs.need?'<p class="note-banner">'+(cs.need-cs.done)+' chemical result(s) are still empty.</p>':'')+
     '<form id="vf" class="stack"><label class="field"><span>Validated by</span><select id="v-p">'+vals.map(p=>'<option value="'+p.id+'"'+(p.id===S.me.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label><label class="field"><span>Comment (optional)</span><input id="v-c"></label><label class="field"><span>PIN</span><input id="v-pin" type="password" inputmode="numeric" autocomplete="off"></label><p id="v-err" class="small" style="color:var(--bad)"></p>'+
     '<div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Validate</button></div></form>',(bg,close)=>{
     if(!vals.length)bg.querySelector('#v-err').textContent='Nobody is set up to validate yet. The admin can tick "Can validate" under People.';
     bg.querySelector('#vf').onsubmit=e=>{e.preventDefault();const pid=bg.querySelector('#v-p').value;if(!pinCheck(pid,bg.querySelector('#v-pin').value)){bg.querySelector('#v-err').textContent='PIN does not match.';return}
-      ss.validated={by:pid,at:Date.now(),comment:bg.querySelector('#v-c').value.trim()};saveSession(ss);close();render();toast('Validated')}});
+      const v={by:pid,at:Date.now(),comment:bg.querySelector('#v-c').value.trim()};
+      if(kind==='micro'){ss.microVal=Object.assign({},ss.microVal,{[day]:v})}else ss.validated=v;
+      saveSession(ss);close();render();toast('Validated · the report is ready')}});
 }
+/* ---------- printing: PDF (print → Save as PDF) and Word ---------- */
+const DOCCSS='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:18mm 14mm;font-size:11pt}h1{font-size:18pt;margin:0 0 4px}h2{font-size:13pt;margin:16px 0 6px}table{border-collapse:collapse;width:100%;margin:6px 0}th,td{border:1px solid #999;padding:4px 6px;text-align:left;font-size:10pt;vertical-align:top}th{background:#e8f1f4}.bad{color:#b00000;font-weight:bold}.meta td{border:0;padding:2px 8px 2px 0}.sign{margin-top:22px}.muted{color:#666}';
+function openPrint(title,body,css){const w=window.open('','_blank');if(!w){toast('Allow pop-ups for this site to print');return}
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');w.document.close()}
+function saveWord(name,title,body,css){const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'</body></html>';
+  const blob=new Blob(['﻿'+html],{type:'application/msword'});S.downloads.save({filename:name+'.doc',data:blob});toast('Saved '+name+'.doc')}
+function reportBody(ss,kind,day){const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);
+  const tests=kind==='micro'?testsOf(p,'micro').filter(t=>smp.some(x=>testActive(x,t)&&readDay(x,t)===day)):testsOf(p).filter(t=>t.kind!=='micro');
+  const v=kind==='micro'?(ss.microVal||{})[day]:ss.validated;
+  const cols=[];tests.forEach(t=>{if(t.kind==='org')cols.push({t,o:null,label:t.name});else (t.outputs||[]).forEach(o=>cols.push({t,o,label:o.label+(o.unit?' ('+o.unit+')':'')}))});
+  let h='<h1>ATIC Oman · Laboratory report</h1><div class="muted">'+(kind==='micro'?'Microbiology · read on '+niceDate(day):'Chemical analysis')+'</div>';
+  h+='<table class="meta"><tr><td><b>Product</b></td><td>'+esc(p.name||'')+(p.standard?' · '+esc(p.standard):'')+'</td><td><b>Date</b></td><td>'+niceDate(ss.date)+'</td></tr><tr><td><b>Lot</b></td><td>'+esc(ss.lot||'–')+'</td><td><b>Section</b></td><td>'+esc(ss.section||'')+'</td></tr></table>';
+  h+='<table><tr><th>Sample</th><th>Tank</th><th>Batch</th><th>Taken by</th>'+cols.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'<th>Tested by</th></tr>';
+  smp.forEach(x=>{h+='<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.tank||'')+'</td><td>'+esc(x.batch||'')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td>'+cols.map(c=>{const r=resultOf(x,c.t);
+    if(!c.o)return '<td'+(r.value==='Not acceptable'?' class="bad"':'')+'>'+esc(r.value||'–')+(r.comment?' · '+esc(r.comment):'')+'</td>';
+    if(kind==='micro'&&!testActive(x,c.t))return '<td class="muted">not due</td>';
+    const o=resOuts(c.t,r).find(y=>y.key===c.o.key);if(!o||o.value==null)return '<td class="muted">–</td>';return '<td'+(o.state==='bad'?' class="bad"':'')+'>'+fmt(o.value,o.dp)+'</td>'}).join('')+'<td>'+esc(x.testedBy?person(x.testedBy).name:'')+'</td></tr>'});
+  h+='<tr><td colspan="4"><b>Limit</b></td>'+cols.map(c=>'<td>'+esc(c.o?limitText(c.o)||'–':'Acceptable')+'</td>').join('')+'<td></td></tr></table>';
+  h+='<div class="sign">'+(v?'Validated by <b>'+esc(person(v.by).name)+'</b> on '+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' at '+hhmm(v.at)+(v.comment?'<br>Comment: '+esc(v.comment):''):'<b>Not validated yet</b>')+'</div>';
+  return h}
+function report(ss,kind,day,fmtx){const p=product(ss.productId)||{};const name='ATIC-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'-'+(kind==='micro'?'micro-'+day:'chemical');
+  const body=reportBody(ss,kind,day);if(fmtx==='doc')saveWord(name,name,body);else openPrint(name,body)}
 
 /* ---------- STICKERS (A4, 3 x 8 labels of 70 x 37 mm) ---------- */
 function stickersModal(ss){
@@ -509,18 +548,13 @@ function stickersModal(ss){
       for(let i=1;i<=n;i++){const s=smp[i-1];for(let k=0;k<c;k++)out.push({code:s?s.code:(p.code+i),name:p.name,date:ss.date,lot:ss.lot,tank:s?s.tank:ss.tank,batch:s?s.batch:String(i),section:ss.section})}return out};
     const prev=()=>{const L=labels().slice(0,24);bg.querySelector('#st-prev').innerHTML=L.map(l=>l?'<div class="sticker"><div><b>'+esc(l.code)+'</b> '+esc(l.section)+'</div><div>'+esc(l.name)+'</div><div>'+niceDate(l.date)+' · Lot '+esc(l.lot||'–')+(l.tank?' · Tank '+esc(l.tank):'')+'</div></div>':'<div class="sticker" style="opacity:.3"></div>').join('')+(labels().length>24?'<p class="small muted" style="grid-column:1/-1">+ '+(labels().length-24)+' more on the next sheet</p>':'')};
     prev();bg.querySelectorAll('input').forEach(i=>i.oninput=prev);
-    bg.querySelector('#stf').onsubmit=async e=>{e.preventDefault();const msg=bg.querySelector('#st-msg');
-      if(!window.jspdf){msg.textContent='The PDF maker did not load. Check the internet connection and reopen the page.';return}
-      const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});const L=labels();const W=70,H=37.125;
-      L.forEach((l,i)=>{const pos=i%24;if(i>0&&pos===0)doc.addPage();if(!l)return;const x=(pos%3)*W,y=Math.floor(pos/3)*H;
-        doc.setFont('helvetica','bold');doc.setFontSize(22);doc.text(l.code,x+5,y+11);
-        doc.setFontSize(9);doc.text(l.section||'',x+W-5,y+8,{align:'right'});
-        doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text(l.name,x+5,y+18,{maxWidth:W-10});
-        doc.text(niceDate(l.date)+'   Lot '+(l.lot||'-'),x+5,y+25);
-        doc.text((l.tank?'Tank '+l.tank+'   ':'')+(l.batch?'Batch '+l.batch:''),x+5,y+31)});
-      const blob=doc.output('blob');const fname='stickers-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'.pdf';
-      if(!S.downloads){msg.textContent='Saving files is not available in this view.';return}
-      try{await S.downloads.save({filename:fname,data:blob});msg.textContent='Saved '+fname+'. Print it at 100% scale (no "fit to page").'}catch(err){msg.textContent=err.code==='cancelled'||err.code==='declined'?'Download cancelled.':'Could not save the file ('+(err.code||err.message)+').'}}});
+    const body=()=>{const L=labels();let h='';for(let i=0;i<L.length;i+=24){h+='<table class="sheet">';for(let r=0;r<8;r++){h+='<tr>';for(let c=0;c<3;c++){const l=L[i+r*3+c];h+='<td>'+(l?'<div class="code">'+esc(l.code)+'<span>'+esc(l.section||'')+'</span></div><div>'+esc(l.name)+'</div><div>'+niceDate(l.date)+' · Lot '+esc(l.lot||'-')+'</div><div>'+(l.tank?'Tank '+esc(l.tank)+' ':'')+(l.batch?'Batch '+esc(l.batch):'')+'</div>':'')+'</td>'}h+='</tr>'}h+='</table>'}return h};
+    const css='@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}table.sheet{border-collapse:collapse;width:210mm;table-layout:fixed;page-break-after:always}table.sheet td{width:70mm;height:37.1mm;padding:3mm 5mm;vertical-align:top;font-size:10pt;overflow:hidden;box-sizing:border-box}.code{font-size:20pt;font-weight:bold}.code span{float:right;font-size:9pt;font-weight:normal}';
+    const fname='stickers-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'');
+    bg.querySelector('.primary').textContent='Print / save as PDF';
+    const wb=document.createElement('button');wb.type='button';wb.textContent='Word file';bg.querySelector('.primary').before(wb);
+    wb.onclick=()=>saveWord(fname,fname,body(),css);
+    bg.querySelector('#stf').onsubmit=e=>{e.preventDefault();openPrint(fname,body(),css);bg.querySelector('#st-msg').textContent='In the print window choose your printer, or "Save as PDF". Scale 100%, margins none.'}});
 }
 
 /* ---------- OVERVIEW (doctor) ---------- */
