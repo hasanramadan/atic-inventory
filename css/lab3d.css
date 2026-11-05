@@ -148,3 +148,21 @@ span.chip{cursor:default}
 .trow input.num{width:70px}
 .tkind{font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;width:92px;text-align:center}
 .k-chem{background:#e7f1ff;color:#1d4f91}.k-micro{background:#e3f6ee;color:#16704a}.k-org{background:#fff3d6;color:#7a5200}
+/* testing screen: bigger, calmer */
+#sampleForm .test{padding:14px 16px;border-radius:16px;background:linear-gradient(160deg,#fff,#f4f9fb);box-shadow:0 10px 22px -18px rgba(10,40,60,.9);margin:8px 0;border:0}
+#sampleForm .test b{font-size:16px}
+#sampleForm .ins input{font-size:20px;font-weight:700;padding:10px 12px;border-radius:12px;border:2px solid #cfe3ea;min-width:110px;background:#fff}
+#sampleForm .ins input:focus{border-color:#0f6e8c;outline:none;box-shadow:0 0 0 4px rgba(15,110,140,.12)}
+#sampleForm .ins input:disabled{background:#f1f4f5;color:#55666d}
+#sampleForm .outs .out{font-size:15px;padding:6px 12px;border-radius:999px;background:#eef4f6}
+#sampleForm .outs .out.ok{background:#dff5e8;color:#11683c}
+#sampleForm .outs .out.bad{background:#ffe0e0;color:#9a1414}
+.group-h h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#0f6e8c}
+.sbtn{border-radius:14px!important;box-shadow:0 8px 16px -14px rgba(10,40,60,.9)}
+.sbtn.on{background:linear-gradient(135deg,#0f6e8c,#0a4a61)!important;color:#fff!important}
+.sbtn.on .muted{color:rgba(255,255,255,.75)!important}
+.pickrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.pickb{all:unset;cursor:pointer;padding:8px 14px;border-radius:12px;font-weight:700;background:#eef4f6;box-shadow:inset 0 0 0 2px #cfe3ea}
+.pickb.on{background:#0f6e8c;color:#fff;box-shadow:none}
+.pickb:focus-visible{outline:2px solid #0f6e8c;outline-offset:2px}
+.pickopt{gap:6px;font-size:14px}

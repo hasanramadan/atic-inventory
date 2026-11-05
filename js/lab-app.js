@@ -28,6 +28,7 @@ function evalFormula(expr,vars){
   try{const v=f(...keys.map(k=>vars[k]));return typeof v==='number'&&isFinite(v)?v:NaN}catch(e){return NaN}
 }
 /* returns [{key,label,unit,value,state}] for a test given inputs */
+function locked(s){const ss=s&&S.sessions[s.sessionId];return !!(ss&&ss.validated&&!isDoctor())}
 function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
 function constVal(c,snap){if(snap&&snap[c.key]!=null)return Number(snap[c.key]);if(c.sol){const x=solOf(c.sol);if(x&&x.conc!==''&&x.conc!=null)return Number(x.conc)}return Number(c.value)}
 function constSnap(t){const k={};(t.consts||[]).forEach(c=>{if(c.sol)k[c.key]=constVal(c)});return Object.keys(k).length?k:null}
@@ -42,6 +43,7 @@ function computeTest(test,inputs,snap){
     return {key:o.key,label:o.label,unit:o.unit,dp:o.dp,value:v,state:limitState(v,o)};
   });
 }
+function resOuts(t,r){r=r||{};const all=computeTest(t,r.in,r.k);if(!t.pick||(t.outputs||[]).length<2)return all;return r.pick?all.filter(o=>o.key===r.pick):[]}
 function limitState(v,o){
   if(v==null||isNaN(v))return'';
   const mn=o.min===''||o.min==null?null:Number(o.min), mx=o.max===''||o.max==null?null:Number(o.max);
@@ -145,8 +147,8 @@ setInterval(()=>{if(S.ready&&S.view==='overview'&&!S.dirty)changed()},15000);
 function sessionSamples(sid){return Object.values(S.samples).filter(s=>s.sessionId===sid).sort((a,b)=>a.n-b.n)}
 function testsOf(p,kind){return (p&&p.tests||[]).filter(t=>!kind||t.kind===kind)}
 function resultOf(s,t){return (s.results||{})[t.id]||{}}
-function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=computeTest(t,r.in,r.k);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
-function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}computeTest(t,r.in,r.k).forEach(o=>{if(o.state==='bad')bad++})});return bad}
+function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=resOuts(t,r);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
+function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}resOuts(t,r).forEach(o=>{if(o.state==='bad')bad++})});return bad}
 function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional);return ts.length>0&&ts.every(t=>testDone(s,t))}
 /* tests done every N days (water micro: weekly): only due when N days passed since the last time it was done */
 function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(x=>{if(x.productId!==pid||x.date>=date)return;const p=product(pid);const t=p&&p.tests.find(y=>y.id===tid);if(t&&testDone(x,t)&&x.date>L)L=x.date});return L}
@@ -307,14 +309,14 @@ function sessionView(){
   let h='<div class="stack"><div class="row between"><button class="ghost" data-tab-back>← Back</button><div class="row">'+statusPill(ss)+'<button id="stickers">Print sample stickers</button></div></div>';
   h+='<div class="session-head"><div><div class="label">'+esc(catName(p))+'</div><h1>'+esc(p?p.name:'?')+'</h1></div>'+
     kv('Date',niceDate(ss.date))+kv('Section',ss.section)+kv('Lot',ss.lot||'–','lot')+kv('Batches',ss.batches||'–','batches')+kv('Tank',ss.tank||'–','tank')+
-    '<button class="ghost" id="editSess">Edit details</button></div>';
+    (ss.validated&&!isDoctor()?'':'<button class="ghost" id="editSess">Edit details</button>')+'</div>';
   h+='<div class="card row between"><div class="row"><b class="num" style="font-size:18px">'+smp.length+' of '+(ss.batches||smp.length)+'</b><span>samples added</span>'+(left?'<span class="pill warn">'+left+' left to add</span>':'<span class="pill ok">All batches sampled</span>')+'<span class="muted">·</span><span class="num">'+pr.done+'</span> fully tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+'</div><button class="primary" id="addSample">'+(left?'Add sample '+(p?p.code:'')+(smp.length+1):'Add extra sample')+'</button></div>';
   if(!smp.length){h+='<div class="card muted">No samples yet. Press <b>Add sample</b> for each batch you take a sample from.</div>'+signoffHTML(ss,smp)+'</div>';return h}
   const cur=S.samples[S.sampleId];
   h+='<div class="work"><div class="samples" role="list">'+smp.map(s=>{const f=sampleFlags(s,p);const d=sampleChemDone(s,p);const live=s.live&&Date.now()-s.live.at<90000&&s.live.by!==S.me.id;
       return '<button class="sbtn'+(s.id===S.sampleId?' on':'')+'" data-sample="'+s.id+'"><span><b>'+esc(s.code)+'</b>'+(s.extra?' <span class="pill warn">extra</span>':'')+'<br><span class="small muted">'+(s.tank?'Tank '+esc(s.tank):'Batch '+esc(s.batch||s.n))+(live?' · <span class="live-dot"></span> '+esc(person(s.live.by).name.split(' ')[0]):'')+'</span></span>'+
       (f?'<span class="pill bad">'+f+'</span>':d?'<span class="pill ok">Done</span>':'<span class="pill">Open</span>')+'</button>'}).join('')+'</div>';
-  h+='<div class="card" id="sampleForm">'+sampleForm(cur,p,ss)+'</div>';
+  h+='<div class="card" id="sampleForm">'+sampleForm(cur,p,ss)+((isDoctor()||!ss.validated)?'<div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost danger small" id="delSample">Delete sample '+esc(cur.code)+'</button></div>':'')+'</div>';
   h+='<div class="side">'+notesPanel(cur)+'</div></div>';
   h+=signoffHTML(ss,smp);
   return h+'</div>';
@@ -360,9 +362,10 @@ function testRow(s,t){
     h+='<div class="ins"><label>Result<select data-org="'+t.id+'"><option value="">–</option>'+['Acceptable','Not acceptable'].map(o=>'<option'+(r.value===o?' selected':'')+'>'+o+'</option>').join('')+'</select></label><label style="flex:1">Comment<input data-orgc="'+t.id+'" value="'+esc(r.comment||'')+'" style="width:100%"></label></div>';
     if(r.value==='Not acceptable')h+='<div class="outs"><span class="out bad">Not acceptable</span></div>';
   }else{
-    const outs=computeTest(t,r.in,r.k);
+    const outs=t.pick&&!r.pick?[]:resOuts(t,r);
     const single=t.inputs.length===1&&t.outputs.length===1&&(!t.outputs[0].formula||t.outputs[0].formula===t.inputs[0].key);
-    h+='<div class="ins">'+t.inputs.map(i=>{const st=single?outs[0].state:'';return '<label>'+esc(i.label)+(i.unit?' ('+esc(i.unit)+')':'')+'<input class="num'+(st==='bad'?' bad':'')+'" inputmode="decimal" data-in="'+t.id+'" data-key="'+esc(i.key)+'" value="'+esc(r.in&&r.in[i.key]!=null?r.in[i.key]:'')+'"></label>'}).join('')+'</div>';
+    if(t.pick&&(t.outputs||[]).length>1)h+='<div class="pickrow"><span>Which one?</span>'+t.outputs.map(o=>'<button type="button" class="pickb'+(r.pick===o.key?' on':'')+'" data-pick="'+t.id+'" data-v="'+esc(o.key)+'"'+(locked(s)?' disabled':'')+'>'+esc(o.label)+'</button>').join('')+'</div>';
+    h+='<div class="ins">'+t.inputs.map(i=>{const st=single?outs[0].state:'';return '<label>'+esc(i.label)+(i.unit?' ('+esc(i.unit)+')':'')+'<input class="num'+(st==='bad'?' bad':'')+'" inputmode="decimal" data-in="'+t.id+'" data-key="'+esc(i.key)+'"'+(locked(s)?' disabled':'')+' value="'+esc(r.in&&r.in[i.key]!=null?r.in[i.key]:'')+'"></label>'}).join('')+'</div>';
     h+='<div class="outs">'+outs.map(o=>{if(single&&o.value==null)return'<span class="out muted small">Limit '+(limitText(t.outputs[0])||'none')+'</span>';const lt=limitText(t.outputs.find(x=>x.key===o.key)||{});return '<span class="out '+o.state+'" title="'+(lt?'Limit '+esc(lt):'No limit set')+'">'+esc(o.label)+': '+(o.value==null?'–':isNaN(o.value)?'check formula':fmt(o.value,o.dp))+(o.unit?' '+esc(o.unit):'')+(lt?' <span class="muted">('+esc(lt)+')</span>':'')+'</span>'}).join('')+'</div>';
   }
   h+='</div><div class="row">'+(r.by?'<span class="small muted">'+esc(person(r.by).name.split(' ')[0])+' '+hhmm(r.at)+'</span>':'')+'<button class="ghost" data-retest="'+t.id+'" title="Retest">Retest</button>'+(t.everyDays&&!testDone(s,t)?'<button class="ghost" data-moff="'+t.id+'">Not today</button>':'')+'</div></div>';
@@ -381,18 +384,21 @@ function signoffHTML(ss,smp){
   (ss.tested||[]).forEach(t=>h+='<div class="row"><span class="pill acc">Tested</span><b>'+esc(person(t.by).name)+'</b><span class="muted small">'+t.samples.map(id=>S.samples[id]?S.samples[id].code:'').filter(Boolean).join(', ')+' · '+niceDate(new Date(t.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(t.at)+'</span></div>');
   if(ss.validated)h+='<div class="row"><span class="pill ok">Validated</span><b>'+esc(person(ss.validated.by).name)+'</b><span class="muted small">'+hhmm(ss.validated.at)+(ss.validated.comment?' · '+esc(ss.validated.comment):'')+'</span></div>';
   if(smp.length&&!ss.validated)h+='<div class="row"><button id="markTested">Tested by…</button><button class="primary" id="validate">Validate…</button></div>';
-  if(ss.validated&&isDoctor())h+='<div><button class="ghost" id="unvalidate">Reopen for changes</button></div>';
+  if(ss.validated&&isDoctor())h+='<div class="row"><span class="small muted">Only the lab manager can change a validated record.</span><button class="ghost" id="unvalidate">Reopen for changes</button></div>';
+  if(isDoctor())h+='<div><button class="ghost danger" id="delSess">Delete this record</button></div>';
   return h+'</div>';
 }
 function bindSession(){
   const ss=S.sessions[S.sessionId];const p=product(ss.productId);
   $('[data-tab-back]').onclick=()=>{S.view=role()==='lab'?'today':'today';render()};
-  $('#addSample').onclick=()=>addSample(ss,p);
-  $('#editSess').onclick=()=>editSessionModal(ss);
+  const ad=$('#addSample');ad&&(ad.onclick=()=>addSample(ss,p));
+  const es=$('#editSess');es&&(es.onclick=()=>editSessionModal(ss));
   $('#stickers').onclick=()=>stickersModal(ss);
   document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{S.sampleId=b.dataset.sample;render()});
   const mt=$('#markTested');mt&&(mt.onclick=()=>testedModal(ss));
   const va=$('#validate');va&&(va.onclick=()=>validateModal(ss));
+  const dss=$('#delSess');dss&&(dss.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete this record and its '+sessionSamples(ss.id).length+' samples';return}
+    Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;saveSession(ss);render()});
   const s=S.samples[S.sampleId]; if(!s)return;
   const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()}};
@@ -401,7 +407,7 @@ function bindSession(){
       if(!r.k){const k=constSnap(t);if(k)r.k=k}r.in[inp.dataset.key]=inp.value.trim().replace(',','.');r.by=S.me.id;r.at=Date.now();live(t.id,inp.dataset.key);
       const row=inp.closest('.test');const tmp=document.createElement('div');tmp.innerHTML=testRow(s,t);
       row.querySelector('.outs').replaceWith(tmp.querySelector('.outs'));
-      const outs=computeTest(t,r.in,r.k);if(t.inputs.length===1&&t.outputs.length===1)inp.classList.toggle('bad',outs[0].state==='bad');
+      const outs=resOuts(t,r);if(t.inputs.length===1&&t.outputs.length===1)inp.classList.toggle('bad',outs[0].state==='bad');
       liveSave(s)});
     inp.addEventListener('focus',()=>{live(inp.dataset.in,inp.dataset.key);liveSave(s,300)});
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const all=[...document.querySelectorAll('[data-in]')];const i=all.indexOf(inp);if(all[i+1])all[i+1].focus();else inp.blur()}});
@@ -411,6 +417,8 @@ function bindSession(){
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
   const bt=$('#sm-batch');bt.addEventListener('input',()=>{s.batch=bt.value.trim();liveSave(s)});
   const as=$('#sm-assign');as&&(as.onchange=()=>{s.assignedTo=as.value;saveSample(s);toast(as.value?'Assigned to '+person(as.value).name:'Assignment cleared')});
+  document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{s.results=s.results||{};const r=s.results[b.dataset.pick]=s.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(s);render()});
+  const dsm=$('#delSample');dsm&&(dsm.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+s.code;return}S.db.doc('samples/'+s.id).delete().then(()=>{delete S.samples[s.id];S.sampleId=null;render();toast('Sample deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{s.on=Object.assign({},s.on,{[b.dataset.mon]:true});if(s.off)delete s.off[b.dataset.mon];saveSample(s);render()});
   document.querySelectorAll('[data-moff]').forEach(b=>b.onclick=()=>{s.off=Object.assign({},s.off,{[b.dataset.moff]:true});if(s.on)delete s.on[b.dataset.moff];saveSample(s);render()});
   document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>retestModal(s,p.tests.find(x=>x.id===b.dataset.retest)));
@@ -435,7 +443,7 @@ function editSessionModal(ss){
     const del=bg.querySelector('#es-del');let armed=false;del&&(del.onclick=()=>{if(!armed){armed=true;del.textContent='Press again to delete it and all its samples';return}
       sessionSamples(ss.id).forEach(s=>{delete S.samples[s.id];queueWrite('samples/'+s.id,null,'delete')});delete S.sessions[ss.id];queueWrite('sessions/'+ss.id,null,'delete');close();S.view='today';render()})});
 }
-function resultText(s,t){const r=resultOf(s,t);if(t.kind==='org')return (r.value||'–')+(r.comment?' ('+r.comment+')':'');const outs=computeTest(t,r.in,r.k);return outs.map(o=>o.label+' '+fmt(o.value,o.dp)).join(', ')+' · inputs '+Object.entries(r.in||{}).map(([k,v])=>k+'='+v).join(' ')}
+function resultText(s,t){const r=resultOf(s,t);if(t.kind==='org')return (r.value||'–')+(r.comment?' ('+r.comment+')':'');const outs=resOuts(t,r);return outs.map(o=>o.label+' '+fmt(o.value,o.dp)).join(', ')+' · inputs '+Object.entries(r.in||{}).map(([k,v])=>k+'='+v).join(' ')}
 function retestModal(s,t){
   modal('<h2>Retest '+esc(t.name)+' · '+esc(s.code)+'</h2><p class="small muted">The first result is kept in the record. The test fields are cleared so you can enter the new reading.</p><p class="small">First result: <span class="mono">'+esc(resultText(s,t))+'</span></p><form id="rtf" class="stack"><label class="field"><span>Why are you retesting?</span><textarea id="rt-r" required placeholder="e.g. Endpoint overshot, burette air bubble"></textarea></label><label class="field"><span>Photo (optional)</span><input id="rt-f" type="file" accept="image/*,application/pdf" multiple></label><div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Start retest</button></div></form>',(bg,close)=>{
     bg.querySelector('#rtf').onsubmit=async e=>{e.preventDefault();const reason=bg.querySelector('#rt-r').value.trim();if(!reason)return;e.submitter&&(e.submitter.disabled=true);
@@ -504,8 +512,8 @@ function overviewView(){
   h+='<div class="card stack"><div class="row between"><h3>Working right now</h3><span class="small muted">Updates as they type</span></div>'+(live.length?'<table><tr><th>Who</th><th>Sample</th><th>Test</th><th>Entry</th><th>When</th></tr>'+live.map(s=>{const p=product(s.productId);const t=(p&&p.tests||[]).find(x=>x.id===s.live.testId);const r=resultOf(s,t||{});const val=t&&t.kind==='org'?(r.value||''):(r.in?Object.entries(r.in).map(([k,v])=>k+'='+v).join(' '):'');
       return '<tr><td><span class="live-dot"></span> '+esc(person(s.live.by).name)+'</td><td><button class="ghost" data-open-sample="'+s.id+'"><b class="mono">'+esc(s.code)+'</b></button> <span class="small muted">'+esc(p?p.name:'')+'</span></td><td>'+esc(t?t.name:'')+'</td><td class="mono small">'+esc(val)+'</td><td class="small muted">'+ago(s.live.at)+'</td></tr>'}).join('')+'</table>':'<p class="muted small">Nobody is typing at the moment.</p>')+'</div>';
   h+='<h2>Today’s testing</h2>'+(all.length?'<div class="grid">'+sess.map(sessCard).join('')+'</div>':'<div class="card muted">The lab has not started anything today.</div>');
-  h+='<div class="card stack"><h3>Latest entries</h3>'+(recent.length?'<div class="tablewrap"><table><tr><th>Time</th><th>Sample</th><th>Test</th><th>Result</th><th>By</th></tr>'+recent.map(x=>{const st=x.t.kind==='org'?(x.r.value==='Not acceptable'?'bad':''):computeTest(x.t,x.r.in,x.r.k).some(o=>o.state==='bad')?'bad':'';
-      return '<tr><td class="num small">'+hhmm(x.r.at)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'"><b class="mono">'+esc(x.s.code)+'</b></button></td><td>'+esc(x.t.name)+'</td><td class="mono small"><span class="out '+st+'">'+esc(x.t.kind==='org'?(x.r.value||''):computeTest(x.t,x.r.in,x.r.k).map(o=>o.label+' '+fmt(o.value,o.dp)).join(' · '))+'</span></td><td class="small">'+esc(person(x.r.by).name)+'</td></tr>'}).join('')+'</table></div>':'<p class="muted small">No results entered today.</p>')+'</div>';
+  h+='<div class="card stack"><h3>Latest entries</h3>'+(recent.length?'<div class="tablewrap"><table><tr><th>Time</th><th>Sample</th><th>Test</th><th>Result</th><th>By</th></tr>'+recent.map(x=>{const st=x.t.kind==='org'?(x.r.value==='Not acceptable'?'bad':''):resOuts(x.t,x.r).some(o=>o.state==='bad')?'bad':'';
+      return '<tr><td class="num small">'+hhmm(x.r.at)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'"><b class="mono">'+esc(x.s.code)+'</b></button></td><td>'+esc(x.t.name)+'</td><td class="mono small"><span class="out '+st+'">'+esc(x.t.kind==='org'?(x.r.value||''):resOuts(x.t,x.r).map(o=>o.label+' '+fmt(o.value,o.dp)).join(' · '))+'</span></td><td class="small">'+esc(person(x.r.by).name)+'</td></tr>'}).join('')+'</table></div>':'<p class="muted small">No results entered today.</p>')+'</div>';
   return h+'</div>';
 }
 function bindOverview(){
@@ -546,11 +554,11 @@ function tasksView(){
   const techs=Object.values(S.people).filter(p=>p.active!==false&&p.role==='lab');
   let h='<div class="stack" style="max-width:760px"><h1>Tasks</h1>';
   if(isDoctor())h+='<form id="tf" class="taskadd"><input id="tf-t" required placeholder="Write a task for the lab…" autocomplete="off">'+(techs.length?'<select id="tf-to" aria-label="For"><option value="">Everyone</option>'+techs.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select>':'')+'<button class="primary">Send</button></form>';
-  h+=open.length?'<div class="tasklist">'+open.map(t=>'<div class="task"><button class="tick" data-taskdone="'+t.id+'" aria-label="Mark done"></button><span class="tt">'+esc(t.text)+'</span><span class="small muted">'+(t.to?esc(person(t.to).name.split(' ')[0])+' · ':'')+hhmm(t.at)+'</span></div>').join('')+'</div>':'<div class="card muted">Nothing to do.</div>';
+  h+=open.length?'<div class="tasklist">'+open.map(t=>'<div class="task"><button class="tick" data-taskdone="'+t.id+'" aria-label="Mark done"></button><span class="tt">'+esc(t.text)+'</span><span class="small muted">'+(t.to?esc(person(t.to).name.split(' ')[0])+' · ':'')+hhmm(t.at)+'</span>'+(isDoctor()?'<button class="ghost danger" data-taskdel="'+t.id+'" title="Delete">×</button>':'')+'</div>').join('')+'</div>':'<div class="card muted">Nothing to do.</div>';
   if(done.length)h+='<details><summary class="small muted">Done ('+done.length+')</summary><div class="tasklist">'+done.map(t=>'<div class="task done"><span class="tick on" aria-hidden="true"></span><span class="tt">'+esc(t.text)+'</span><span class="small muted">'+esc(person(t.doneBy).name.split(' ')[0])+'</span></div>').join('')+'</div></details>';
   return h+'</div>';
 }
-function bindTasks(){const f=$('#tf');f&&(f.onsubmit=e=>{e.preventDefault();const text=$('#tf-t').value.trim();if(!text)return;const to=$('#tf-to');const t={id:uid('t'),text,to:to?to.value:'',sessionId:'',from:S.me.id,at:Date.now(),done:false};S.tasks[t.id]=t;queueWrite('tasks/'+t.id,strip(t));S.dirty=false;render();toast('Task sent')});bindCommon()}
+function bindTasks(){document.querySelectorAll('[data-taskdel]').forEach(b=>b.onclick=()=>{const id=b.dataset.taskdel;S.db.doc('tasks/'+id).delete().then(()=>{delete S.tasks[id];render()},e=>toast('Could not delete: '+(e.code||e.message)))});const f=$('#tf');f&&(f.onsubmit=e=>{e.preventDefault();const text=$('#tf-t').value.trim();if(!text)return;const to=$('#tf-to');const t={id:uid('t'),text,to:to?to.value:'',sessionId:'',from:S.me.id,at:Date.now(),done:false};S.tasks[t.id]=t;queueWrite('tasks/'+t.id,strip(t));S.dirty=false;render();toast('Task sent')});bindCommon()}
 
 /* ---------- SETUP: products, tests, formulas, limits ---------- */
 function draft(){if(!S.cfgDraft)S.cfgDraft=JSON.parse(JSON.stringify(S.cfg));return S.cfgDraft}
@@ -570,7 +578,7 @@ function setupView(){
     (t.kind==='chem'?'<button class="ghost" data-rule="'+t.id+'">Edit rule</button>':'')+'<button class="ghost danger" data-tdel title="Remove test">×</button></div>'};
   h+='<div class="card stack" style="gap:8px">'+((p.tests||[]).length?(p.tests||[]).map(row).join(''):'<p class="muted">No tests yet.</p>')+'</div>';
   h+='<div class="row"><button data-addtest="chem">+ Chemical test</button><button data-addtest="micro">+ Micro test</button><button data-addtest="org">+ Taste / smell check</button></div>';
-  h+='<details class="small"><summary>Product details</summary><div class="row" style="margin-top:8px"><label class="field"><span>Name</span><input data-pf="name" value="'+esc(p.name)+'"></label><label class="field"><span>Sticker code</span><input data-pf="code" value="'+esc(p.code)+'" style="width:90px"></label><label class="field"><span>Type</span><select data-pf="category">'+CATS.map(o=>'<option value="'+o[0]+'"'+(catOfP(p)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label><label class="field"><span>Standard</span><input data-pf="standard" value="'+esc(p.standard||'')+'"></label></div></details>';
+  h+='<details class="small"><summary>Product details</summary><div class="row" style="margin-top:8px"><label class="field"><span>Name</span><input data-pf="name" value="'+esc(p.name)+'"></label><label class="field"><span>Sticker code</span><input data-pf="code" value="'+esc(p.code)+'" style="width:90px"></label><label class="field"><span>Type</span><select data-pf="category">'+CATS.map(o=>'<option value="'+o[0]+'"'+(catOfP(p)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label><label class="field"><span>Standard</span><input data-pf="standard" value="'+esc(p.standard||'')+'"></label></div><button class="ghost danger" id="su-delp" style="margin-top:8px">Delete '+esc(p.name)+'</button></details>';
   return h+'</div>';
 }
 function bindSetup(){
@@ -581,6 +589,7 @@ function bindSetup(){
   const rs=$('#cfgReset');rs&&(rs.onclick=()=>{S.cfgDraft=null;render()});
   $('#su-addp').onclick=()=>modal('<h2>New product or sample</h2><form id="apf" class="stack"><label class="field"><span>Name</span><input id="ap-n" required></label><div class="row"><label class="field" style="flex:1"><span>Sticker code</span><input id="ap-c" required placeholder="e.g. HU"></label><label class="field" style="flex:1"><span>Type</span><select id="ap-t">'+CATS.map(o=>'<option value="'+o[0]+'">'+o[1]+'</option>').join('')+'</select></label></div><div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Add</button></div></form>',(bg,close)=>{bg.querySelector('#apf').onsubmit=e=>{e.preventDefault();const np={id:uid('p'),name:bg.querySelector('#ap-n').value.trim(),code:bg.querySelector('#ap-c').value.trim().toUpperCase(),category:bg.querySelector('#ap-t').value,tests:[]};c.products.push(np);S.setupProduct=np.id;close();render()}});
   if(!p)return;
+  const dp=$('#su-delp');dp&&(dp.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again, then Save, to delete '+p.name;return}c.products=c.products.filter(x=>x.id!==p.id);S.setupProduct=null;rerender()});
   document.querySelectorAll('[data-pf]').forEach(i=>i.addEventListener('change',()=>{p[i.dataset.pf]=i.dataset.pf==='code'?i.value.trim().toUpperCase():i.value;rerender()}));
   document.querySelectorAll('[data-addtest]').forEach(b=>b.onclick=()=>{const k=b.dataset.addtest;p.tests=p.tests||[];
     if(k==='chem'){if(JSON.stringify(c)!==JSON.stringify(S.cfg)){toast('Press Save first');return}S.fb={pid:p.id,tid:'',t:newTest()};S.fb.tid=S.fb.t.id;S.chemTab='fb';S.view='chem';render();return}
@@ -602,7 +611,7 @@ function chemView(){
   if(!S.chemTab)S.chemTab='sol';
   let h='<div class="stack"><h1>Solutions &amp; formulas</h1><div class="kindbar"><button class="kind'+(S.chemTab==='sol'?' on':'')+'" data-ctab="sol">Solutions</button>'+(ed?'<button class="kind'+(S.chemTab==='fb'?' on':'')+'" data-ctab="fb">Make or change a test</button>':'')+'</div>';
   if(S.chemTab==='sol'||!ed){
-    h+='<div class="card sollist">'+sol.map(x=>'<div class="solline" data-sol="'+x.id+'"><span class="flaskmini" aria-hidden="true"></span><b>'+esc(x.name)+'</b><input class="num big" data-solf="conc" value="'+esc(x.conc)+'" inputmode="decimal"'+(ed?'':' disabled')+' aria-label="Concentration of '+esc(x.name)+'"><span class="muted">'+esc(x.unit||'N')+'</span></div>').join('')+'</div>';
+    h+='<div class="card sollist">'+sol.map(x=>'<div class="solline" data-sol="'+x.id+'"><span class="flaskmini" aria-hidden="true"></span><b>'+esc(x.name)+'</b><input class="num big" data-solf="conc" value="'+esc(x.conc)+'" inputmode="decimal"'+(ed?'':' disabled')+' aria-label="Concentration of '+esc(x.name)+'"><span class="muted">'+esc(x.unit||'N')+'</span>'+(ed?'<button class="ghost danger" data-soldel="'+x.id+'" title="Delete">×</button>':'')+'</div>').join('')+'</div>';
     h+='<p class="small muted">After you standardise a solution, type the new concentration. Tests use it from now on; old results stay as they were.</p>';
     if(ed)h+='<form id="solAdd" class="row"><input id="sa-n" placeholder="New solution, e.g. HCl 0.1 N" required style="flex:1;max-width:280px"><input id="sa-v" class="num" placeholder="Concentration" required inputmode="decimal" style="width:130px"><button>Add</button></form>';
   } else h+=builderHTML();
@@ -637,13 +646,13 @@ function builderHTML(){
     '<form id="fb-newin" class="row"><input id="fb-inname" placeholder="e.g. Volume, Sample weight" style="width:200px"><button>+ Add box</button></form></div></div></div>';
   (t.outputs||[]).forEach((o,k)=>{
     h+='<div class="step"><span class="stepn">'+(k+2)+'</span><div class="stack" style="flex:1"><div class="row"><b>Rule for</b><input data-ol="'+k+'" value="'+esc(o.label)+'" style="width:200px">'+((t.outputs||[]).length>1?'<button class="ghost danger" data-odel="'+k+'">Remove this result</button>':'')+'</div>'+
-      '<div class="rule" data-rule="'+k+'"><span class="eq">=</span>'+(o.rule.length?o.rule.map((x,i)=>tokHTML(t,x,i)).join(''):'<span class="muted">Tap the buttons below</span>')+'</div>'+
+      '<label class="small row">Unit <span class="muted">(optional)</span><input data-ou="'+k+'" value="'+esc(o.unit||'')+'" placeholder="e.g. %, g/mL" style="width:110px"></label><div class="rule" data-rule="'+k+'"><span class="eq">=</span>'+(o.rule.length?o.rule.map((x,i)=>tokHTML(t,x,i)).join(''):'<span class="muted">Tap the buttons below</span>')+'</div>'+
       '<div class="pad"><div class="padg"><span class="small muted">What the lab types</span>'+(t.inputs||[]).map(x=>'<button type="button" class="tok tk-in" data-add="'+k+'" data-t="in" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>'+
       '<div class="padg"><span class="small muted">Solutions</span>'+(S.sol||[]).map(x=>'<button type="button" class="tok tk-sol" data-add="'+k+'" data-t="sol" data-v="'+x.id+'">'+esc(x.name)+'</button>').join('')+'</div>'+
       ((t.outputs||[]).slice(0,k).length?'<div class="padg"><span class="small muted">Results above</span>'+t.outputs.slice(0,k).map(x=>'<button type="button" class="tok tk-res" data-add="'+k+'" data-t="res" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>':'')+
       '<div class="padg">'+['*','/','+','-','(',')'].map(x=>'<button type="button" class="tok tk-op big" data-add="'+k+'" data-t="op" data-v="'+x+'">'+OPV[x]+'</button>').join('')+'<span class="row"><input class="num" data-numin="'+k+'" placeholder="number" style="width:100px" inputmode="decimal"><button type="button" data-numadd="'+k+'">Add number</button></span><button type="button" class="ghost" data-back="'+k+'">⌫ Undo</button></div></div>'+
       '<details class="small"><summary>Limit and decimals</summary><div class="row">'+(lim?'Limit: min <input data-om="min" data-k="'+k+'" class="num" value="'+esc(o.min==null?'':o.min)+'" style="width:70px"> max <input data-om="max" data-k="'+k+'" class="num" value="'+esc(o.max==null?'':o.max)+'" style="width:70px">':'Limit: '+(esc(limitText(o))||'none'))+' · decimals <input data-om="dp" data-k="'+k+'" type="number" class="num" value="'+esc(o.dp==null?2:o.dp)+'" style="width:56px"></div></details></div></div>'});
-  h+='<div><button class="ghost small" id="fb-addout">+ Another result</button></div>';
+  h+='<div class="row"><button class="ghost small" id="fb-addout">+ Another result</button>'+((t.outputs||[]).length>1?'<label class="row pickopt"><input type="checkbox" id="fb-pick"'+(t.pick?' checked':'')+'> The lab chooses <b>one</b> of these results each time (e.g. anhydrous or monohydrate)</label>':'')+'</div>';
   const ex=S.fb.ex||{};
   h+='<div class="fbcheck"><b>Try it</b>'+(t.inputs||[]).map(x=>'<label class="row small">'+esc(x.label)+' <input class="num" data-fex="'+esc(x.key)+'" value="'+esc(ex[x.key]||'')+'" style="width:90px" inputmode="decimal"></label>').join('')+'<span id="fb-out">'+fbOuts(computeTest(t,ex))+'</span></div>';
   h+='<div class="row between"><span class="small" id="fb-msg" style="color:var(--bad)"></span><div class="row"><button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save test</button></div></div></div>';
@@ -656,6 +665,7 @@ function bindChem(){
   const saveSol=async()=>{try{await S.db.doc('config/solutions').set({list:S.sol});toast('Saved')}catch(e){toast('Could not save: '+(e.code||e.message))}};
   document.querySelectorAll('[data-sol]').forEach(card=>{const x=S.sol.find(o=>o.id===card.dataset.sol);
     card.querySelectorAll('[data-solf]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.solf;let v=i.value.trim();if(k==='conc'){v=v.replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number');i.value=x.conc;return}if(v===String(x.conc))return;x.history=(x.history||[]).concat([{conc:x.conc,by:S.me.id,at:Date.now()}]).slice(-30)}if(k==='nominal')v=v===''?null:Number(v.replace(',','.'));x[k]=v;x.at=Date.now();x.by=S.me.id;saveSol();keep()}))});
+  document.querySelectorAll('[data-soldel]').forEach(b=>b.onclick=function(){const id=b.dataset.soldel;const u=solUsedIn(id);if(u.length){toast('Used in '+u.join(', ')+'. Take it out of those rules first.');return}if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Delete?';return}S.sol=S.sol.filter(x=>x.id!==id);saveSol();keep()});
   document.querySelectorAll('[data-ctab]').forEach(b=>b.onclick=()=>{S.chemTab=b.dataset.ctab;keep()});
   const sa=$('#solAdd');sa&&(sa.onsubmit=e=>{e.preventDefault();const v=$('#sa-v').value.trim().replace(',','.');if(isNaN(Number(v))){toast('Concentration must be a number');return}S.sol=(S.sol||[]).concat([{id:uid('sol'),name:$('#sa-n').value.trim(),chem:'',nominal:null,conc:v,unit:'N',at:Date.now(),by:S.me.id,history:[]}]);S.dirty=false;saveSol();keep()});
   const fb=S.fb;if(!fb||!fb.t)return;const t=fb.t;
@@ -674,6 +684,8 @@ function bindChem(){
   document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{t.outputs[Number(b.dataset.back)].rule.pop();upd()});
   document.querySelectorAll('[data-rule]').forEach(r=>r.querySelectorAll('[data-tokdel]').forEach(b=>b.onclick=()=>{t.outputs[Number(r.dataset.rule)].rule.splice(Number(b.dataset.tokdel),1);upd()}));
   document.querySelectorAll('[data-om]').forEach(i=>i.addEventListener('change',()=>{const o=t.outputs[Number(i.dataset.k)];const k=i.dataset.om;o[k]=k==='dp'?Number(i.value)||0:i.value.trim().replace(',','.');keep()}));
+  document.querySelectorAll('[data-ou]').forEach(i=>i.addEventListener('change',()=>{t.outputs[Number(i.dataset.ou)].unit=i.value.trim();keep()}));
+  const pk=$('#fb-pick');pk&&(pk.onchange=()=>{t.pick=pk.checked;keep()});
   $('#fb-addout').onclick=()=>{t.outputs.push({key:keyOf('r',fbKeys(t)),label:'Result '+(t.outputs.length+1),rule:[],formula:'',unit:'',min:'',max:'',dp:2});keep()};
   document.querySelectorAll('[data-fex]').forEach(i=>i.addEventListener('input',()=>{S.fb.ex=S.fb.ex||{};S.fb.ex[i.dataset.fex]=i.value.trim().replace(',','.');$('#fb-out').innerHTML=fbOuts(computeTest(t,S.fb.ex))}));
   $('#fb-reset').onclick=()=>{S.fb.t=null;if(t._new)S.fb.tid='';keep()};
