@@ -192,3 +192,8 @@ span.chip{cursor:default}
 .filters .fl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#55666d;font-weight:700}
 .filters .fl.row{flex-direction:row;align-items:center;gap:6px;padding-bottom:8px}
 .filters input,.filters select{padding:7px 9px;border-radius:10px;border:1px solid #cfe3ea;font-size:14px}
+.filters{flex-direction:column;align-items:stretch}
+.filters .fsearch{font-size:16px;padding:11px 14px;border-radius:12px;border:2px solid #cfe3ea;width:100%;box-sizing:border-box}
+.filters .fsearch:focus{border-color:#0f6e8c;outline:none}
+.filters>.kindbar{margin-right:8px}
+.filters{display:flex;gap:10px}
