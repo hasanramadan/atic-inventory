@@ -36,7 +36,7 @@ function needsPE(p){const c=catOfP(p);return c==='product'||c==='raw'}
 function logAct(txt){if(!S.me)return;const id=uid('a');const v={at:Date.now(),by:S.me.id,txt};S.acts=S.acts||{};S.acts[id]=v;S.db.doc('activity/'+id).set(v).catch(()=>{})}
 function freezeSample(x){const p=product(x.productId);(p&&p.tests||[]).forEach(t=>{const r=(x.results||{})[t.id];if(!r||r.kf)return;const k=constSnap(t);if(k){r.k=k}r.kf=true})}
 function lotOf(d){try{return (window.ATIC_PARENT&&window.ATIC_PARENT.lot)?String(window.ATIC_PARENT.lot(d)):''}catch(e){return''}}
-function lockedT(s,t){if(isDoctor())return false;const ss=s&&S.sessions[s.sessionId];if(!ss)return false;if(t.kind==='micro')return !!(ss.microVal&&ss.microVal[readDay(s,t)]);return !!ss.validated}
+function lockedT(s,t){if(isDoctor())return false;const ss=s&&S.sessions[s.sessionId];if(!ss)return false;if(ss.finalVal)return true;if(t.kind==='micro')return !!(ss.microVal&&ss.microVal[t.id]);return !!ss.validated}
 function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
 function constVal(c,snap){if(snap&&snap[c.key]!=null)return Number(snap[c.key]);if(c.sol){const x=solOf(c.sol);if(x&&x.conc!==''&&x.conc!=null)return Number(x.conc)}return Number(c.value)}
 function constSnap(t){const k={};(t.consts||[]).forEach(c=>{if(c.sol)k[c.key]=constVal(c)});return Object.keys(k).length?k:null}
@@ -314,7 +314,7 @@ function sessCard(s){const p=product(s.productId);const pr=sessionProgress(s);co
   return '<button class="card stack" style="text-align:left;cursor:pointer" data-open-session="'+s.id+'"><div class="row between"><h3>'+esc(p?p.name:'?')+'</h3>'+statusPill(s)+'</div>'+
   '<div class="row small muted"><span>'+esc(s.section)+'</span><span>Lot <span class="num">'+esc(s.lot||'–')+'</span></span><span>'+niceDate(s.date)+'</span></div>'+
   '<div class="bar"><i style="width:'+pct+'%"></i></div><div class="row small"><span class="num">'+pr.done+' / '+pr.target+'</span> samples tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+(pr.micro?'<span class="pill warn">'+pr.micro+' micro pending</span>':'')+'</div></button>'}
-function statusPill(s){const mg=microGroups(s);const mv=mg.filter(g=>(s.microVal||{})[g.day]).length;if(s.validated)return'<span class="pill ok">Chemical validated</span>'+(mg.length?' <span class="pill '+(mv===mg.length?'ok':'warn')+'">Micro '+mv+'/'+mg.length+'</span>':'');if(s.tested&&s.tested.length)return'<span class="pill acc">Tested</span>';return'<span class="pill">In progress</span>'}
+function statusPill(s){const mg=microGroups(s);const mv=mg.filter(g=>(s.microVal||{})[g.day]).length;if(s.finalVal)return'<span class="pill ok">Fully validated</span>';if(s.validated)return'<span class="pill ok">Chemical validated</span>'+(mg.length?' <span class="pill '+(mv===mg.length?'ok':'warn')+'">Micro '+mv+'/'+mg.length+'</span>':'');if(s.tested&&s.tested.length)return'<span class="pill acc">Tested</span>';return'<span class="pill">In progress</span>'}
 function bindToday(){
   const n=$('#newSess');n&&(n.onclick=()=>{const p=(S.cfg.products||[]).find(p=>catSel()==='all'||catOfP(p)===catSel());newSessionModal(p?{productId:p.id,section:catSel()==='product'||catSel()==='all'?'':'Lab'}:{})});
   document.querySelectorAll('[data-startp]').forEach(b=>b.onclick=()=>newSessionModal({productId:b.dataset.startp,section:'Lab'}));
@@ -435,8 +435,10 @@ function notesPanel(s){
     '<div class="notes-list">'+(notes.length?notes.slice().reverse().map(n=>'<div class="note"><div class="small muted">'+esc(person(n.by).name)+' · '+hhmm(n.at)+'</div>'+esc(n.text).replace(/\n/g,'<br>')+filesHTML(n.files)+'</div>').join(''):'<p class="small muted">No notes on this sample.</p>')+'</div></div>';
 }
 function microGroups(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const g={};
-  smp.forEach(x=>testsOf(p,'micro').forEach(t=>{if(!testActive(x,t))return;const d=readDay(x,t);(g[d]=g[d]||{day:d,tests:new Set(),need:0,done:0}).tests.add(t.name);g[d].need++;if(testDone(x,t))g[d].done++}));
-  return Object.values(g).sort((a,b)=>a.day.localeCompare(b.day))}
+  smp.forEach(x=>testsOf(p,'micro').forEach(t=>{if(!testActive(x,t))return;const k=t.id;(g[k]=g[k]||{day:k,name:t.name,days:new Set(),need:0,done:0}).days.add(readDay(x,t));g[k].need++;if(testDone(x,t))g[k].done++}));
+  return Object.values(g).map(x=>Object.assign(x,{first:[...x.days].sort()[0]})).sort((a,b)=>a.first.localeCompare(b.first)||a.name.localeCompare(b.name))}
+function microName(ss,key){const t=(product(ss.productId)||{tests:[]}).tests.find(x=>x.id===key);return t?t.name:key}
+function allValidated(ss){const mg=microGroups(ss);return !!ss.validated&&mg.every(g=>(ss.microVal||{})[g.day])}
 function chemState(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);let need=0,done=0;smp.forEach(x=>testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional).forEach(t=>{need++;if(testDone(x,t))done++}));return{need,done}}
 function valLine(v){return '<span class="pill ok">Validated</span> <b>'+esc(person(v.by).name)+'</b> <span class="muted small">'+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(v.at)+(v.comment?' · '+esc(v.comment):'')+'</span>'}
 function signoffHTML(ss,smp){
@@ -448,9 +450,15 @@ function signoffHTML(ss,smp){
   else{if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';if(cs.need&&cs.done>=cs.need)h+=repBtns+'<span class="small muted">The report says "Not validated yet" until it is validated.</span>'}
   h+='</div>';
   if(mg.length){h+='<div class="sgrp"><h3>Microbiology</h3>';
-    mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>Read on '+niceDate(g.day)+'</b><div class="small muted">'+esc([...g.tests].join(', '))+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
+    mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>'+esc(g.name)+'</b><div class="small muted">Read on '+[...g.days].sort().map(niceDate).join(', ')+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
       (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):((g.done>=g.need?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
     h+='</div>'}
+  {const ready=allValidated(ss);const fb='<div class="row"><button data-rep="all" data-fmt="pdf">Full report · PDF</button><button data-rep="all" data-fmt="doc">Full report · Word</button></div>';
+   h+='<div class="sgrp final"><h3>Final validation</h3>';
+   if(ss.finalVal)h+='<div class="row">'+valLine(ss.finalVal)+(isDoctor()?'<button class="ghost" id="unfinal">Reopen</button>':'')+'</div>'+fb;
+   else if(ready)h+='<div class="small muted">Chemical and every microbiology test are validated. Check everything once more and close the record.</div>'+(can?'<button class="primary" data-val="final">Final validation</button>':'')+fb;
+   else h+='<div class="small muted">After chemical and every microbiology test are validated, the whole record is validated one last time here.</div>';
+   h+='</div>'}
   if(isDoctor()||(!ss.validated&&!isAdmin()))h+='<div class="sgrp"><button class="ghost danger" id="delSess">Delete this record</button></div>';
   return h+'</div>';
 }
@@ -465,10 +473,11 @@ function bindSession(){
   
   document.querySelectorAll('[data-val]').forEach(b=>b.onclick=()=>validateModal(ss,b.dataset.val,b.dataset.day));
   document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>report(ss,b.dataset.rep,b.dataset.day,b.dataset.fmt));
-  document.querySelectorAll('[data-unmv]').forEach(b=>b.onclick=()=>{const m=Object.assign({},ss.microVal);delete m[b.dataset.unmv];ss.microVal=m;saveSession(ss);render()});
+  document.querySelectorAll('[data-unmv]').forEach(b=>b.onclick=()=>{const m=Object.assign({},ss.microVal);delete m[b.dataset.unmv];ss.microVal=m;ss.finalVal=null;saveSession(ss);render()});
   const dss=$('#delSess');dss&&(dss.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete this record and its '+sessionSamples(ss.id).length+' samples';return}
     Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();logAct('deleted the record <b>'+esc((product(ss.productId)||{}).name||'')+'</b> '+esc(ss.section||'')+(ss.lot?' lot '+esc(ss.lot):''));toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
-  const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;saveSession(ss);render()});
+  const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;ss.finalVal=null;saveSession(ss);render()});
+  const uf=$('#unfinal');uf&&(uf.onclick=()=>{ss.finalVal=null;saveSession(ss);render()});
   const s=S.samples[S.sampleId]; if(!s)return;
   const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()};presence()};
   document.querySelectorAll('[data-in]').forEach(inp=>{
@@ -542,15 +551,15 @@ function testedModal(ss){
 }
 function validateModal(ss,kind,day){
   const vals=Object.values(S.people).filter(p=>p.active!==false&&p.canValidate);
-  const cs=chemState(ss);const title=kind==='micro'?'Validate microbiology · read on '+niceDate(day):'Validate chemical';
+  const cs=chemState(ss);const title=kind==='micro'?'Validate '+microName(ss,day):kind==='final'?'Final validation · whole record':'Validate chemical';
   modal('<h2>'+title+'</h2>'+(kind!=='micro'&&cs.done<cs.need?'<p class="note-banner">'+(cs.need-cs.done)+' chemical result(s) are still empty.</p>':'')+
     '<form id="vf" class="stack"><label class="field"><span>Validated by</span><select id="v-p">'+vals.map(p=>'<option value="'+p.id+'"'+(p.id===S.me.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label><label class="field"><span>Comment (optional)</span><input id="v-c"></label><label class="field"><span>PIN</span><input id="v-pin" type="password" inputmode="numeric" autocomplete="off"></label><p id="v-err" class="small" style="color:var(--bad)"></p>'+
     '<div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Validate</button></div></form>',(bg,close)=>{
     if(!vals.length)bg.querySelector('#v-err').textContent='Nobody is set up to validate yet. The admin can tick "Can validate" under People.';
     bg.querySelector('#vf').onsubmit=e=>{e.preventDefault();const pid=bg.querySelector('#v-p').value;if(!pinCheck(pid,bg.querySelector('#v-pin').value)){bg.querySelector('#v-err').textContent='PIN does not match.';return}
       const v={by:pid,at:Date.now(),comment:bg.querySelector('#v-c').value.trim()};
-      if(kind!=='micro')sessionSamples(ss.id).forEach(x=>{freezeSample(x);saveSample(x)});
-      if(kind==='micro'){ss.microVal=Object.assign({},ss.microVal,{[day]:v})}else ss.validated=v;
+      if(kind==='chem')sessionSamples(ss.id).forEach(x=>{freezeSample(x);saveSample(x)});
+      if(kind==='micro'){ss.microVal=Object.assign({},ss.microVal,{[day]:v})}else if(kind==='final')ss.finalVal=v;else ss.validated=v;
       saveSession(ss);close();render();toast('Validated · the report is ready')}});
 }
 /* ---------- printing: PDF (print → Save as PDF) and Word ---------- */
@@ -560,20 +569,22 @@ function openPrint(title,body,css){const w=window.open('','_blank');if(!w){toast
 function saveWord(name,title,body,css){const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'</body></html>';
   const blob=new Blob(['﻿'+html],{type:'application/msword'});S.downloads.save({filename:name+'.doc',data:blob});toast('Saved '+name+'.doc')}
 function reportBody(ss,kind,day){const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);
-  const tests=kind==='micro'?testsOf(p,'micro').filter(t=>smp.some(x=>testActive(x,t)&&readDay(x,t)===day)):testsOf(p).filter(t=>t.kind!=='micro');
-  const v=kind==='micro'?(ss.microVal||{})[day]:ss.validated;
+  const tests=kind==='micro'?testsOf(p,'micro').filter(t=>t.id===day):kind==='all'?testsOf(p).filter(t=>t.kind!=='micro'||smp.some(x=>testActive(x,t))):testsOf(p).filter(t=>t.kind!=='micro');
+  const v=kind==='micro'?(ss.microVal||{})[day]:kind==='all'?ss.finalVal:ss.validated;
   const cols=[];tests.forEach(t=>{if(t.kind==='org')cols.push({t,o:null,label:t.name});else (t.outputs||[]).forEach(o=>cols.push({t,o,label:o.label+(o.unit?' ('+o.unit+')':'')}))});
-  let h='<h1>ATIC Oman · Laboratory report</h1><div class="muted">'+(kind==='micro'?'Microbiology · read on '+niceDate(day):'Chemical analysis')+'</div>';
-  h+='<table class="meta"><tr><td><b>Product</b></td><td>'+esc(p.name||'')+(p.standard?' · '+esc(p.standard):'')+'</td><td><b>Filling date</b></td><td>'+niceDate(ss.date)+'</td></tr><tr><td><b>Lot</b></td><td>'+esc(ss.lot||'–')+'</td><td><b>Section</b></td><td>'+esc(ss.section||'')+'</td></tr></table>';
+  let h='<h1>ATIC Oman · Laboratory report</h1><div class="muted">'+(kind==='micro'?'Microbiology · '+esc(microName(ss,day)):kind==='all'?'Full report · chemical and microbiology':'Chemical analysis')+'</div>';
+  h+='<table class="meta"><tr><td><b>Product</b></td><td>'+esc(p.name||'')+(p.standard?' · '+esc(p.standard):'')+'</td><td><b>Filling date</b></td><td>'+niceDate(ss.date)+'</td></tr><tr><td><b>Lot</b></td><td>'+esc(ss.lot||'–')+'</td><td><b>Section</b></td><td>'+esc(ss.section||'')+'</td></tr><tr><td><b>Production</b></td><td>'+(ss.prod?niceDate(ss.prod):'–')+'</td><td><b>Expiry</b></td><td>'+(ss.exp?niceDate(ss.exp):'–')+'</td></tr></table>';
   h+='<table><tr><th>Sample</th><th>Tank</th><th>Batch</th><th>Production</th><th>Expiry</th><th>Taken by</th>'+cols.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'<th>Tested by</th></tr>';
   smp.forEach(x=>{h+='<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.tank||'')+'</td><td>'+esc(x.batch||'')+'</td><td>'+(x.prod?niceDate(x.prod):'')+'</td><td>'+(x.exp?niceDate(x.exp):'')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td>'+cols.map(c=>{const r=resultOf(x,c.t);
     if(!c.o)return '<td'+(r.value==='Not acceptable'?' class="bad"':'')+'>'+esc(r.value||'–')+(r.comment?' · '+esc(r.comment):'')+'</td>';
-    if(kind==='micro'&&!testActive(x,c.t))return '<td class="muted">not due</td>';
+    if(c.t.kind==='micro'&&!testActive(x,c.t))return '<td class="muted">not due</td>';
     const o=resOuts(c.t,r).find(y=>y.key===c.o.key);if(!o||o.value==null)return '<td class="muted">–</td>';return '<td'+(o.state==='bad'?' class="bad"':'')+'>'+fmt(o.value,o.dp)+'</td>'}).join('')+'<td>'+esc(x.testedBy?person(x.testedBy).name:'')+'</td></tr>'});
   h+='<tr><td colspan="6"><b>Limit</b></td>'+cols.map(c=>'<td>'+esc(c.o?limitText(c.o)||'–':'Acceptable')+'</td>').join('')+'<td></td></tr></table>';
-  h+='<div class="sign">'+(v?'Validated by <b>'+esc(person(v.by).name)+'</b> on '+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' at '+hhmm(v.at)+(v.comment?'<br>Comment: '+esc(v.comment):''):'<b>Not validated yet</b>')+'</div>';
+  if(kind==='all'){const line=(lab,x)=>'<tr><td>'+lab+'</td><td>'+(x?esc(person(x.by).name)+' · '+niceDate(new Date(x.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(x.at)+(x.comment?' · '+esc(x.comment):''):'<b>not validated</b>')+'</td></tr>';
+    h+='<h2>Validation</h2><table>'+line('Chemical',ss.validated)+microGroups(ss).map(g=>line('Microbiology · '+esc(g.name),(ss.microVal||{})[g.day])).join('')+'</table>'}
+  h+='<div class="sign">'+(kind==='all'?'Final validation: ':'')+(v?'Validated by <b>'+esc(person(v.by).name)+'</b> on '+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' at '+hhmm(v.at)+(v.comment?'<br>Comment: '+esc(v.comment):''):'<b>Not validated yet</b>')+'</div>';
   return h}
-function report(ss,kind,day,fmtx){const p=product(ss.productId)||{};const name='ATIC-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'-'+(kind==='micro'?'micro-'+day:'chemical');
+function report(ss,kind,day,fmtx){const p=product(ss.productId)||{};const name='ATIC-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'-'+(kind==='micro'?'micro-'+microName(ss,day).replace(/\W+/g,'-'):kind==='all'?'full-report':'chemical');
   const body=reportBody(ss,kind,day);if(fmtx==='doc')saveWord(name,name,body);else openPrint(name,body)}
 
 /* ---------- STICKERS (A4, 3 x 8 labels of 70 x 37 mm) ---------- */
@@ -610,7 +621,7 @@ function overviewView(){
   const tiles=CATS.map(([k,n])=>{const ss=sessAll.filter(x=>catOfS(x)===k);const pr=ss.map(sessionProgress);const t=pr.reduce((a,x)=>a+x.target,0),dn=pr.reduce((a,x)=>a+x.done,0),b=pr.reduce((a,x)=>a+x.bad,0),m=pr.reduce((a,x)=>a+x.micro,0);
     return '<button class="ctile ct-'+k+(catSel()===k?' on':'')+'" data-cat="'+k+'"><span class="ci ci-'+k+'" aria-hidden="true"></span><b>'+n+'</b><span class="num big">'+dn+' / '+t+'</span><span class="small">'+(ss.length?ss.length+' running':'Nothing today')+'</span><span class="row small">'+(b?'<span class="pill bad">'+b+' out of limit</span>':'')+(m?'<span class="pill warn">'+m+' micro pending</span>':'')+'</span></button>'}).join('');
   const now=Date.now();const pres=Object.entries(S.pres||{}).map(([id,v])=>Object.assign({id},v)).filter(v=>now-v.at<5*60000).sort((a,b)=>b.at-a.at);
-  const acts=[];Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);if(x.createdAt)acts.push({at:x.createdAt,by:x.createdBy,txt:'started <b>'+esc(p?p.name:'')+'</b> '+esc(x.section||''),sid:x.id});if(x.validated)acts.push({at:x.validated.at,by:x.validated.by,txt:'validated chemical of <b>'+esc(p?p.name:'')+'</b>',sid:x.id,rep:'chem'});Object.entries(x.microVal||{}).forEach(([day,v])=>acts.push({at:v.at,by:v.by,txt:'validated micro (read '+niceDate(day)+') of <b>'+esc(p?p.name:'')+'</b>',sid:x.id,rep:'micro',day}))});
+  const acts=[];Object.values(S.sessions).filter(x=>x.date===d||[x.validated,x.finalVal].concat(Object.values(x.microVal||{})).some(v=>v&&v.at>now-86400000)).forEach(x=>{const p=product(x.productId);if(x.createdAt&&x.date===d)acts.push({at:x.createdAt,by:x.createdBy,txt:'started <b>'+esc(p?p.name:'')+'</b> '+esc(x.section||''),sid:x.id});if(x.validated)acts.push({at:x.validated.at,by:x.validated.by,txt:'validated chemical of <b>'+esc(p?p.name:'')+'</b>',sid:x.id,rep:'chem'});Object.entries(x.microVal||{}).forEach(([day,v])=>acts.push({at:v.at,by:v.by,txt:'validated <b>'+esc(microName(x,day))+'</b> of <b>'+esc(p?p.name:'')+'</b>',sid:x.id,rep:'micro',day}));if(x.finalVal)acts.push({at:x.finalVal.at,by:x.finalVal.by,txt:'<span class="pill ok">Final</span> validated the whole record of <b>'+esc(p?p.name:'')+'</b>'+(x.lot?' lot '+esc(x.lot):''),sid:x.id,rep:'all'})});
   Object.values(S.samples).filter(x=>x.date===d||(x.testedAt&&x.testedAt>now-86400000)).forEach(x=>{const p=product(x.productId);if(x.testedAt)acts.push({at:x.testedAt,by:x.testedBy,txt:'finished sample <b class="mono">'+esc(x.code)+'</b>',mid:x.id});Object.entries(x.results||{}).forEach(([tid,r])=>{const t=p&&(p.tests||[]).find(y=>y.id===tid);if(t&&r.at&&r.at>now-86400000)acts.push({at:r.at,by:r.by,txt:'entered <b>'+esc(t.name)+'</b> on <b class="mono">'+esc(x.code)+'</b>',mid:x.id})})});
   Object.values(S.acts||{}).filter(a=>a.at>now-86400000).forEach(a=>acts.push({at:a.at,by:a.by,txt:'<span class="pill bad">Deleted</span> '+a.txt.replace(/^deleted /,'')}));
   acts.sort((a,b)=>b.at-a.at);

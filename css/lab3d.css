@@ -197,3 +197,4 @@ span.chip{cursor:default}
 .filters .fsearch:focus{border-color:#0f6e8c;outline:none}
 .filters>.kindbar{margin-right:8px}
 .filters{display:flex;gap:10px}
+.sgrp.final{box-shadow:inset 0 0 0 2px #9fd8b8,0 14px 26px -20px rgba(10,40,60,.9)}
