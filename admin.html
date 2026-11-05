@@ -4,7 +4,7 @@
 <title>ATIC Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611051012">
+<link rel="stylesheet" href="css/app.css?v=202611051014">
 <style>
 .people{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
 .person{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow)}
@@ -28,11 +28,11 @@
 <main id="main"><div class="boot"><div><i></i>Loading…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611051012"></script>
-<script src="js/shell.js?v=202611051012"></script>
-<script src="js/backup.js?v=202611051012" defer></script>
-<script src="js/assistant.js?v=202611051012" defer></script>
-<script src="js/io.js?v=202611051012"></script>
+<script src="config.js?v=202611051014"></script>
+<script src="js/shell.js?v=202611051014"></script>
+<script src="js/backup.js?v=202611051014" defer></script>
+<script src="js/assistant.js?v=202611051014" defer></script>
+<script src="js/io.js?v=202611051014"></script>
 <script>
 (function () {
 var A, USERS = [], DRAFT = {};
@@ -46,7 +46,7 @@ function pagesOf(u) { // [{key, on}] in the person's order
 }
 function label(k) { return A.PAGES.filter(function (p) { return p.key === k; })[0].label; }
 /* areas: Production / Lab / Preparation. Only the owner changes them (needs the 2026-11 setup script in Supabase). */
-var AREA_DESC = { production: 'This website', lab: 'Quality per lot (coming soon)', preparation: 'Raw materials to prepare (coming soon)' };
+var AREA_DESC = { production: 'This website', lab: 'Quality control (lab)', preparation: 'Raw materials to prepare' };
 function areasHTML(u) {
   var on = A.areasOf(u), owner = !!A.profile.is_owner, setUp = A.profile.areas !== undefined;
   if (u.is_owner) return '<div class="small muted">The creator opens every area and is hidden from everyone else.</div>';
