@@ -317,6 +317,7 @@ function bindToday(){
   bindCommon();
 }
 function bindCommon(){
+  document.querySelectorAll('[data-frep]').forEach(b=>b.onclick=()=>{const[sid,k,day,fm]=b.dataset.frep.split('|');const ss=S.sessions[sid];if(ss)report(ss,k,day,fm)});
   document.querySelectorAll('[data-open-session]').forEach(b=>b.onclick=()=>{S.sessionId=b.dataset.openSession;S.sampleId=null;S.back=S.view==='session'?S.back:S.view;S.view='session';render()});
   document.querySelectorAll('[data-open-sample]').forEach(b=>b.onclick=()=>{const s=S.samples[b.dataset.openSample];if(!s)return;S.sessionId=s.sessionId;S.sampleId=s.id;S.back=S.view==='session'?S.back:S.view;S.view='session';render()});
   document.querySelectorAll('[data-taskdone]').forEach(b=>b.onclick=()=>{const t=S.tasks[b.dataset.taskdone];t.done=true;t.doneBy=S.me.id;t.doneAt=Date.now();queueWrite('tasks/'+t.id,strip(t));render()});
@@ -436,12 +437,13 @@ function signoffHTML(ss,smp){
   if(!smp.length)return '';
   const can=canValidateHere();const cs=chemState(ss);const mg=microGroups(ss);
   let h='<div class="signoff"><div class="sgrp"><h3>Chemical</h3><div class="small muted">'+cs.done+' of '+cs.need+' results entered</div>';
-  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+'</div><div class="row"><button data-rep="chem" data-fmt="pdf">Report · PDF</button><button data-rep="chem" data-fmt="doc">Report · Word</button>'+(isDoctor()?'<button class="ghost" id="unvalidate">Reopen</button>':'')+'</div>';
-  else if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';
+  const repBtns='<div class="row"><button data-rep="chem" data-fmt="pdf">Report · PDF</button><button data-rep="chem" data-fmt="doc">Report · Word</button></div>';
+  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+(isDoctor()?'<button class="ghost" id="unvalidate">Reopen</button>':'')+'</div>'+repBtns;
+  else{if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';if(cs.need&&cs.done>=cs.need)h+=repBtns+'<span class="small muted">The report says "Not validated yet" until it is validated.</span>'}
   h+='</div>';
   if(mg.length){h+='<div class="sgrp"><h3>Microbiology</h3>';
     mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>Read on '+niceDate(g.day)+'</b><div class="small muted">'+esc([...g.tests].join(', '))+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
-      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>'))+'</div></div>'});
+      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):((g.done>=g.need?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
     h+='</div>'}
   if(isDoctor()||(!ss.validated&&!isAdmin()))h+='<div class="sgrp"><button class="ghost danger" id="delSess">Delete this record</button></div>';
   return h+'</div>';
@@ -596,12 +598,12 @@ function overviewView(){
   const tiles=CATS.map(([k,n])=>{const ss=sessAll.filter(x=>catOfS(x)===k);const pr=ss.map(sessionProgress);const t=pr.reduce((a,x)=>a+x.target,0),dn=pr.reduce((a,x)=>a+x.done,0),b=pr.reduce((a,x)=>a+x.bad,0),m=pr.reduce((a,x)=>a+x.micro,0);
     return '<button class="ctile ct-'+k+(catSel()===k?' on':'')+'" data-cat="'+k+'"><span class="ci ci-'+k+'" aria-hidden="true"></span><b>'+n+'</b><span class="num big">'+dn+' / '+t+'</span><span class="small">'+(ss.length?ss.length+' running':'Nothing today')+'</span><span class="row small">'+(b?'<span class="pill bad">'+b+' out of limit</span>':'')+(m?'<span class="pill warn">'+m+' micro pending</span>':'')+'</span></button>'}).join('');
   const now=Date.now();const pres=Object.entries(S.pres||{}).map(([id,v])=>Object.assign({id},v)).filter(v=>now-v.at<5*60000).sort((a,b)=>b.at-a.at);
-  const acts=[];Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);if(x.createdAt)acts.push({at:x.createdAt,by:x.createdBy,txt:'started <b>'+esc(p?p.name:'')+'</b> '+esc(x.section||''),sid:x.id});if(x.validated)acts.push({at:x.validated.at,by:x.validated.by,txt:'validated chemical of <b>'+esc(p?p.name:'')+'</b>',sid:x.id});Object.entries(x.microVal||{}).forEach(([day,v])=>acts.push({at:v.at,by:v.by,txt:'validated micro (read '+niceDate(day)+') of <b>'+esc(p?p.name:'')+'</b>',sid:x.id}))});
+  const acts=[];Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);if(x.createdAt)acts.push({at:x.createdAt,by:x.createdBy,txt:'started <b>'+esc(p?p.name:'')+'</b> '+esc(x.section||''),sid:x.id});if(x.validated)acts.push({at:x.validated.at,by:x.validated.by,txt:'validated chemical of <b>'+esc(p?p.name:'')+'</b>',sid:x.id,rep:'chem'});Object.entries(x.microVal||{}).forEach(([day,v])=>acts.push({at:v.at,by:v.by,txt:'validated micro (read '+niceDate(day)+') of <b>'+esc(p?p.name:'')+'</b>',sid:x.id,rep:'micro',day}))});
   Object.values(S.samples).filter(x=>x.date===d||(x.testedAt&&x.testedAt>now-86400000)).forEach(x=>{const p=product(x.productId);if(x.testedAt)acts.push({at:x.testedAt,by:x.testedBy,txt:'finished sample <b class="mono">'+esc(x.code)+'</b>',mid:x.id});Object.entries(x.results||{}).forEach(([tid,r])=>{const t=p&&(p.tests||[]).find(y=>y.id===tid);if(t&&r.at&&r.at>now-86400000)acts.push({at:r.at,by:r.by,txt:'entered <b>'+esc(t.name)+'</b> on <b class="mono">'+esc(x.code)+'</b>',mid:x.id})})});
   Object.values(S.acts||{}).filter(a=>a.at>now-86400000).forEach(a=>acts.push({at:a.at,by:a.by,txt:'<span class="pill bad">Deleted</span> '+a.txt.replace(/^deleted /,'')}));
   acts.sort((a,b)=>b.at-a.at);
   const watch=isDoctor()?'<div class="watch" id="watchBox"><div class="card stack"><div class="row between"><h3>In the lab now</h3><span class="small muted">What each person has open</span></div>'+(pres.length?pres.map(v=>'<div class="who"><span class="av">'+esc((v.name||'?').split(' ').map(x=>x[0]).join('').slice(0,2))+'</span><div style="flex:1"><b>'+esc(v.name)+'</b> <span class="small muted">'+esc(roleName(v.role))+'</span><div class="small">'+where(v)+'</div></div><span class="small muted">'+(now-v.at<90000?'<span class="live-dot"></span> now':ago(v.at))+'</span>'+(v.sampleId&&S.samples[v.sampleId]?'<button class="ghost" data-open-sample="'+v.sampleId+'">Look</button>':v.sessionId&&S.sessions[v.sessionId]?'<button class="ghost" data-open-session="'+v.sessionId+'">Look</button>':'')+'</div>').join(''):'<p class="muted small">Nobody has the lab open right now.</p>')+'</div>'+
-    '<div class="card stack"><div class="row between"><h3>What happened today</h3><span class="small muted">Newest first</span></div><div class="feed">'+(acts.length?acts.slice(0,40).map(a=>'<div class="ev"><span class="num small muted">'+hhmm(a.at)+'</span><span><b>'+esc(person(a.by).name)+'</b> '+a.txt+'</span>'+(a.mid&&S.samples[a.mid]?'<button class="ghost small" data-open-sample="'+a.mid+'">Open</button>':a.sid&&S.sessions[a.sid]?'<button class="ghost small" data-open-session="'+a.sid+'">Open</button>':'')+'</div>').join(''):'<p class="muted small">Nothing yet today.</p>')+'</div></div></div>':'';
+    '<div class="card stack"><div class="row between"><h3>What happened today</h3><span class="small muted">Newest first</span></div><div class="feed">'+(acts.length?acts.slice(0,40).map(a=>'<div class="ev"><span class="num small muted">'+hhmm(a.at)+'</span><span><b>'+esc(person(a.by).name)+'</b> '+a.txt+'</span>'+(a.rep&&S.sessions[a.sid]?'<button class="ghost small" data-frep="'+a.sid+'|'+a.rep+'|'+(a.day||'')+'|pdf">PDF</button><button class="ghost small" data-frep="'+a.sid+'|'+a.rep+'|'+(a.day||'')+'|doc">Word</button>':'')+(a.mid&&S.samples[a.mid]?'<button class="ghost small" data-open-sample="'+a.mid+'">Open</button>':a.sid&&S.sessions[a.sid]?'<button class="ghost small" data-open-session="'+a.sid+'">Open</button>':'')+'</div>').join(''):'<p class="muted small">Nothing yet today.</p>')+'</div></div></div>':'';
   let h='<div class="stack"><h1>Live overview · '+niceDate(d)+'</h1>'+watch+'<div class="ctiles">'+tiles+'</div>'+catBar()+kindBar()+'<h2>'+esc(catLabel(catSel()))+'</h2>';
   h+='<div class="card row between"><div class="row"><b class="num" style="font-size:22px">'+done+' / '+tgt+'</b><span>samples tested today</span>'+(bad?'<span class="pill bad">'+bad+' out of limit</span>':'<span class="pill ok">No results out of limit</span>')+'</div><div class="bar" style="flex:1;min-width:120px;max-width:360px"><i style="width:'+(tgt?Math.round(100*done/tgt):0)+'%"></i></div></div>';
   h+='<div class="card stack"><h3>Note for the lab today</h3><textarea id="dn" placeholder="Shown at the top of the lab’s Today page">'+esc(note.text||'')+'</textarea><div class="row between"><span class="small muted">'+(note.at?'Last saved '+hhmm(note.at):'')+'</span><button class="primary" id="dnSave">Save note</button></div></div>';
@@ -618,10 +620,11 @@ function bindOverview(){
 }
 
 /* ---------- RECORDS ---------- */
-let histFilter={product:'',from:addDays(dubaiToday(),-30)};
+let histFilter={product:'',from:addDays(dubaiToday(),-30),to:'',lot:'',prod:'',exp:'',status:''};
+let microF={from:'',to:'',lot:'',prod:'',exp:'',product:'',test:'',ready:false};
 function historyView(){
-  const ss=Object.values(S.sessions).filter(s=>inCat(s)&&(!histFilter.product||s.productId===histFilter.product)&&s.date>=histFilter.from).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
-  let h='<div class="stack">'+catBar()+'<div class="row between"><h1>Records · '+esc(catLabel(catSel()))+'</h1><div class="row"><select id="hf-p"><option value="">All</option>'+(S.cfg.products||[]).filter(p=>catSel()==='all'||catOfP(p)===catSel()).map(p=>'<option value="'+p.id+'"'+(histFilter.product===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select><label class="row small">From <input id="hf-f" type="date" value="'+histFilter.from+'"></label></div></div>';
+  const F=histFilter;const ss=Object.values(S.sessions).filter(s=>inCat(s)&&(!F.product||s.productId===F.product)&&(!F.from||s.date>=F.from)&&(!F.to||s.date<=F.to)&&(!F.lot||String(s.lot||'').includes(F.lot))&&peMatch(F,s)&&(!F.status||(F.status==='val'?!!s.validated:!s.validated))).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  let h='<div class="stack">'+catBar()+'<h1>Records · '+esc(catLabel(catSel()))+' <span class="small muted">'+ss.length+'</span></h1>'+fBar(histFilter,'hfBar',{more:'<label class="fl"><span>Status</span><select data-f="status"><option value="">All</option><option value="val"'+(histFilter.status==='val'?' selected':'')+'>Chemical validated</option><option value="open"'+(histFilter.status==='open'?' selected':'')+'>Not validated</option></select></label>'});
   if(!ss.length)return h+'<div class="card muted">No records in this period.</div></div>';
   if(isDoctor())h+='<div class="row delbar"><label class="row small"><input type="checkbox" id="hs-all"> Select all</label><button class="ghost danger" id="hs-del" disabled>Delete selected</button></div>';
   h+='<div class="card tablewrap"><table><tr>'+(isDoctor()?'<th></th>':'')+'<th>Date</th><th>Product</th><th>Section</th><th>Lot</th><th>Samples</th><th>Out of limit</th><th>Micro</th><th>Status</th></tr>'+ss.map(s=>{const p=product(s.productId);const pr=sessionProgress(s);
@@ -633,20 +636,31 @@ function bindHistory(){
     boxes.forEach(b=>b.onchange=upd);$('#hs-all').onchange=e=>{boxes.forEach(b=>b.checked=e.target.checked);upd()};
     del.onclick=async function(){const ids=boxes.filter(b=>b.checked).map(b=>b.value);if(!ids.length)return;if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete '+ids.length+' record(s) and their samples';return}
       this.disabled=true;try{for(const id of ids){for(const x of sessionSamples(id)){await S.db.doc('samples/'+x.id).delete();delete S.samples[x.id]}await S.db.doc('sessions/'+id).delete();delete S.sessions[id]}logAct('deleted '+ids.length+' record(s) from Records');toast('Deleted')}catch(e){toast('Could not delete: '+(e.code||e.message))}render()}}
-$('#hf-p').onchange=e=>{histFilter.product=e.target.value;render()};$('#hf-f').onchange=e=>{histFilter.from=e.target.value||histFilter.from;render()};bindCommon()}
+fBind(histFilter,'hfBar');bindCommon()}
 
+
+/* ---------- filters (Records, Micro pending) ---------- */
+function fBar(F,id,extra){const i=(k,l,type,w)=>'<label class="fl"><span>'+l+'</span><input data-f="'+k+'" type="'+(type||'text')+'" value="'+esc(F[k]||'')+'"'+(w?' style="width:'+w+'"':'')+'></label>';
+  return '<div class="filters" id="'+id+'">'+i('from',extra&&extra.dateLabel?extra.dateLabel+' from':'From','date')+i('to','to','date')+i('lot','Lot','text','90px')+i('prod','Production','date')+i('exp','Expiry','date')+
+    '<label class="fl"><span>Product</span><select data-f="product"><option value="">All</option>'+(S.cfg.products||[]).filter(p=>catSel()==='all'||catOfP(p)===catSel()).map(p=>'<option value="'+p.id+'"'+(F.product===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label>'+
+    (extra&&extra.more||'')+'<button class="ghost small" data-fclear>Clear</button></div>'}
+function fBind(F,id,keepFrom){const box=$('#'+id);if(!box)return;box.querySelectorAll('[data-f]').forEach(i=>i.onchange=()=>{F[i.dataset.f]=i.type==='checkbox'?i.checked:i.value.trim();render()});
+  const c=box.querySelector('[data-fclear]');c.onclick=()=>{Object.keys(F).forEach(k=>F[k]=k==='from'&&keepFrom?keepFrom():'');render()}}
+function peMatch(F,ss){const smp=sessionSamples(ss.id);const has=(k,v)=>!v||ss[k]===v||smp.some(x=>x[k]===v);return has('prod',F.prod)&&has('exp',F.exp)}
 /* ---------- MICRO PENDING ---------- */
 function microList(){return Object.values(S.samples).flatMap(s=>{const p=product(s.productId);return sampleMicroPending(s,p).map(t=>({s,p,t,ready:readDay(s,t)}))}).sort((a,b)=>a.ready.localeCompare(b.ready))}
 function microPendingCount(){const d=today();return microList().filter(x=>x.ready<=d).length}
 function microView(){
-  const L=microList().filter(x=>catSel()==='all'||catOfP(x.p)===catSel());const d=today();
-  let h='<div class="stack">'+catBar()+'<div><h1>Microbiology pending · '+esc(catLabel(catSel()))+'</h1><p class="muted">Plates waiting to be read. Ready items are counted on the tab.</p></div>';
-  if(!L.length)return h+'<div class="card muted">No microbiology results are waiting.</div></div>';
-  h+='<div class="card tablewrap"><table><tr><th>Read on</th><th>Sample</th><th>Product</th><th>Lot</th><th>Test</th><th></th></tr>'+L.map(x=>{const ss=S.sessions[x.s.sessionId]||{};
-    return '<tr><td class="num">'+(x.ready<=d?'<span class="pill warn">'+niceDate(x.ready)+'</span>':niceDate(x.ready))+'</td><td class="mono"><b>'+esc(x.s.code)+'</b> <span class="small muted">'+esc(x.s.date)+'</span></td><td>'+esc(x.p?x.p.name:'')+'</td><td class="num">'+esc(ss.lot||'–')+'</td><td>'+esc(x.t.name)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'">Enter result</button></td></tr>'}).join('')+'</table></div>';
+  const F=microF;const d=today();const all=microList().filter(x=>catSel()==='all'||catOfP(x.p)===catSel());
+  const L=all.filter(x=>{const ss=S.sessions[x.s.sessionId]||{};return (!F.from||x.ready>=F.from)&&(!F.to||x.ready<=F.to)&&(!F.lot||String(ss.lot||'').includes(F.lot))&&(!F.prod||(x.s.prod||ss.prod)===F.prod)&&(!F.exp||(x.s.exp||ss.exp)===F.exp)&&(!F.product||x.s.productId===F.product)&&(!F.test||x.t.name===F.test)&&(!F.ready||x.ready<=d)});
+  const tests=[...new Set(all.map(x=>x.t.name))].sort();
+  let h='<div class="stack">'+catBar()+'<div><h1>Microbiology pending · '+esc(catLabel(catSel()))+'</h1><p class="muted">Plates waiting to be read. A line disappears as soon as its result is entered.</p></div>'+fBar(microF,'mfBar',{dateLabel:'Read',more:'<label class="fl"><span>Test</span><select data-f="test"><option value="">All</option>'+tests.map(t=>'<option'+(microF.test===t?' selected':'')+'>'+esc(t)+'</option>').join('')+'</select></label><label class="fl row"><input type="checkbox" data-f="ready"'+(microF.ready?' checked':'')+'> Ready to read</label>'});
+  if(!L.length)return h+'<div class="card muted">'+(all.length?'Nothing matches these filters.':'No microbiology results are waiting.')+'</div></div>';
+  h+='<div class="card tablewrap"><table><tr><th>Read on</th><th>Sample</th><th>Product</th><th>Lot</th><th>Production</th><th>Expiry</th><th>Test</th><th></th></tr>'+L.map(x=>{const ss=S.sessions[x.s.sessionId]||{};
+    return '<tr><td class="num">'+(x.ready<=d?'<span class="pill warn">'+niceDate(x.ready)+'</span>':niceDate(x.ready))+'</td><td class="mono"><b>'+esc(x.s.code)+'</b> <span class="small muted">'+esc(x.s.date)+'</span></td><td>'+esc(x.p?x.p.name:'')+'</td><td class="num">'+esc(ss.lot||'–')+'</td><td class="num small">'+((x.s.prod||ss.prod)?niceDate(x.s.prod||ss.prod):'–')+'</td><td class="num small">'+((x.s.exp||ss.exp)?niceDate(x.s.exp||ss.exp):'–')+'</td><td>'+esc(x.t.name)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'">Enter result</button></td></tr>'}).join('')+'</table></div>';
   return h+'</div>';
 }
-function bindMicro(){bindCommon()}
+function bindMicro(){fBind(microF,'mfBar');bindCommon()}
 
 /* ---------- TASKS ---------- */
 function tasksView(){

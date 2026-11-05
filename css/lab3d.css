@@ -188,3 +188,7 @@ span.chip{cursor:default}
 .ev>span:nth-child(2){flex:1}
 .forlab{box-shadow:inset 0 0 0 2px #f4c35a,0 14px 26px -20px rgba(10,40,60,.9);background:linear-gradient(160deg,#fffaf0,#fff)}
 .pe{gap:14px;padding:8px 12px;border-radius:12px;background:#fff8e8;margin:6px 0}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;padding:12px 14px;border-radius:16px;background:#fff;box-shadow:0 12px 24px -20px rgba(10,40,60,.9),inset 0 0 0 1px #e1ecf0}
+.filters .fl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#55666d;font-weight:700}
+.filters .fl.row{flex-direction:row;align-items:center;gap:6px;padding-bottom:8px}
+.filters input,.filters select{padding:7px 9px;border-radius:10px;border:1px solid #cfe3ea;font-size:14px}
