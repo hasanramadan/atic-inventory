@@ -691,7 +691,15 @@ function ruleOf(t,o,k){if(o.rule)return o.rule;const ins=(t.inputs||[]).map(x=>x
     if(ins.includes(x))return{k:'in',key:x};const c=cs.find(y=>y.key===x);if(c)return c.sol?{k:'sol',id:c.sol,key:c.key}:{k:'num',v:String(c.value),label:c.label||''};
     if(prev.includes(x))return{k:'res',key:x};if(/^[\d.]+$/.test(x))return{k:'num',v:x};if(OPV[x])return{k:'op',v:x};return{k:'raw',v:x}})}
 function tokHTML(t,x,i){const lab=x.k==='in'?((t.inputs||[]).find(y=>y.key===x.key)||{}).label||x.key:x.k==='sol'?(solOf(x.id)||{}).name||'solution':x.k==='res'?((t.outputs||[]).find(y=>y.key===x.key)||{}).label||x.key:x.k==='op'?OPV[x.v]:x.k==='num'?(x.label?x.label+' ':'')+x.v:x.v;
-  return '<button type="button" class="tok tk-'+x.k+'" data-tokdel="'+i+'" title="Tap to remove">'+esc(lab)+'</button>'}
+  return '<button type="button" class="tok tk-'+x.k+(t._selK!=null&&S.fb.sel&&S.fb.sel.k===t._selK&&S.fb.sel.i===i?' sel':'')+'" data-toksel="'+i+'" title="Tap to change">'+esc(lab)+'</button>'}
+function editBar(t,o,k){const sel=S.fb.sel;if(!sel||sel.k!==k||!o.rule[sel.i])return'<div class="small muted">Tap any part of the rule to change it, move it or remove it.</div>';const x=o.rule[sel.i];
+  let h='<div class="editbar"><b>Change:</b>';
+  if(x.k==='num')h+='<input class="num" id="eb-v" value="'+esc(x.v)+'" style="width:110px" inputmode="decimal"><input id="eb-l" value="'+esc(x.label||'')+'" placeholder="name (optional)" style="width:150px"><button id="eb-ok">OK</button>';
+  if(x.k==='sol')h+='<select id="eb-s">'+(S.sol||[]).map(y=>'<option value="'+y.id+'"'+(y.id===x.id?' selected':'')+'>'+esc(y.name)+'</option>').join('')+'</select>';
+  if(x.k==='in')h+='<select id="eb-i">'+(t.inputs||[]).map(y=>'<option value="'+esc(y.key)+'"'+(y.key===x.key?' selected':'')+'>'+esc(y.label)+'</option>').join('')+'</select>';
+  if(x.k==='op')h+=['*','/','+','-','(',')'].map(v=>'<button type="button" class="tok tk-op'+(v===x.v?' sel':'')+'" data-ebop="'+v+'">'+OPV[v]+'</button>').join('');
+  h+='<span class="sep"></span><button type="button" id="eb-l1" title="Move left">◀</button><button type="button" id="eb-r1" title="Move right">▶</button><button type="button" class="ghost danger" id="eb-del">Remove</button><button type="button" class="ghost" id="eb-done">Done</button><span class="small muted">New buttons go after this part.</span></div>';
+  return h}
 function compile(t){const used={};(t.outputs||[]).forEach(o=>(o.rule||[]).forEach(x=>{if(x.k==='sol'){x.key=x.key||('S_'+x.id).replace(/\W/g,'_');used[x.key]=x.id}}));
   t.consts=Object.keys(used).map(k=>{const x=solOf(used[k])||{};return{key:k,label:x.name||'',sol:used[k],value:x.conc||'',unit:x.unit||''}});
   (t.outputs||[]).forEach(o=>{if(o.rule)o.formula=o.rule.map(x=>x.k==='in'||x.k==='res'||x.k==='sol'?x.key:x.k==='num'?(Number(x.v)<0?'('+x.v+')':x.v):x.v).join('')});
@@ -713,7 +721,8 @@ function builderHTML(){
     '<form id="fb-newin" class="row"><input id="fb-inname" placeholder="e.g. Volume, Sample weight" style="width:200px"><button>+ Add box</button></form></div></div></div>';
   (t.outputs||[]).forEach((o,k)=>{
     h+='<div class="step"><span class="stepn">'+(k+2)+'</span><div class="stack" style="flex:1"><div class="row"><b>Rule for</b><input data-ol="'+k+'" value="'+esc(o.label)+'" style="width:200px">'+((t.outputs||[]).length>1?'<button class="ghost danger" data-odel="'+k+'">Remove this result</button>':'')+'</div>'+
-      '<label class="small row">Unit <span class="muted">(optional)</span><input data-ou="'+k+'" value="'+esc(o.unit||'')+'" placeholder="e.g. %, g/mL" style="width:110px"></label><div class="rule" data-rule="'+k+'"><span class="eq">=</span>'+(o.rule.length?o.rule.map((x,i)=>tokHTML(t,x,i)).join(''):'<span class="muted">Tap the buttons below</span>')+'</div>'+
+      '<label class="small row">Unit <span class="muted">(optional)</span><input data-ou="'+k+'" value="'+esc(o.unit||'')+'" placeholder="e.g. %, g/mL" style="width:110px"></label><div class="rule" data-rule="'+k+'"><span class="eq">=</span>'+(t._selK=k,o.rule.length?o.rule.map((x,i)=>tokHTML(t,x,i)).join(''):'<span class="muted">Tap the buttons below</span>')+'</div>'+editBar(t,o,k)+
+      '<label class="small row">Start from another rule <select data-copy="'+k+'"><option value="">Choose…</option>'+(S.cfg.products||[]).flatMap(pp=>(pp.tests||[]).filter(tt=>tt.kind==='chem').flatMap(tt=>(tt.outputs||[]).map((oo,oi)=>'<option value="'+esc(pp.id+'|'+tt.id+'|'+oi)+'">'+esc(pp.name+' · '+(tt.outputs.length>1?oo.label:tt.name))+'</option>'))).join('')+'</select></label>'+
       '<div class="pad"><div class="padg"><span class="small muted">What the lab types</span>'+(t.inputs||[]).map(x=>'<button type="button" class="tok tk-in" data-add="'+k+'" data-t="in" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>'+
       '<div class="padg"><span class="small muted">Solutions</span>'+(S.sol||[]).map(x=>'<button type="button" class="tok tk-sol" data-add="'+k+'" data-t="sol" data-v="'+x.id+'">'+esc(x.name)+'</button>').join('')+'</div>'+
       ((t.outputs||[]).slice(0,k).length?'<div class="padg"><span class="small muted">Results above</span>'+t.outputs.slice(0,k).map(x=>'<button type="button" class="tok tk-res" data-add="'+k+'" data-t="res" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>':'')+
@@ -727,6 +736,7 @@ function builderHTML(){
 }
 function newTest(){return{id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume'}],consts:[],outputs:[{key:'r',label:'Result',rule:[],formula:'',unit:'',min:'',max:'',dp:2}],_new:1}}
 function fbOuts(outs){return outs.map(o=>'<span class="out '+o.state+'">'+esc(o.label)+': '+(o.value==null?'type numbers':isNaN(o.value)?'rule not finished':fmt(o.value,o.dp))+'</span>').join('')}
+function insTok(k,tok){const o=S.fb.t.outputs[k];const sel=S.fb.sel;if(sel&&sel.k===k&&sel.i<o.rule.length){o.rule.splice(sel.i+1,0,tok);sel.i++}else{o.rule.push(tok)}}
 function bindChem(){
   const keep=()=>{const y=window.scrollY;render();window.scrollTo(0,y)};
   const saveSol=async()=>{try{await S.db.doc('config/solutions').set({list:S.sol});toast('Saved')}catch(e){toast('Could not save: '+(e.code||e.message))}};
@@ -745,11 +755,25 @@ function bindChem(){
   $('#fb-newin').onsubmit=e=>{e.preventDefault();const n=$('#fb-inname').value.trim();if(!n)return;t.inputs.push({key:keyOf(n,fbKeys(t)),label:n});S.dirty=false;keep()};
   document.querySelectorAll('[data-ol]').forEach(i=>i.addEventListener('change',()=>{t.outputs[Number(i.dataset.ol)].label=i.value.trim()||'Result';keep()}));
   document.querySelectorAll('[data-odel]').forEach(b=>b.onclick=()=>{t.outputs.splice(Number(b.dataset.odel),1);upd()});
-  document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const o=t.outputs[Number(b.dataset.add)];const ty=b.dataset.t,v=b.dataset.v;o.rule.push(ty==='in'||ty==='res'?{k:ty,key:v}:ty==='sol'?{k:'sol',id:v}:{k:'op',v});upd()});
-  document.querySelectorAll('[data-numadd]').forEach(b=>b.onclick=()=>{const k=b.dataset.numadd;const i=document.querySelector('[data-numin="'+k+'"]');const v=i.value.trim().replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number first');return}t.outputs[Number(k)].rule.push({k:'num',v});S.dirty=false;upd()});
+  document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const o=t.outputs[Number(b.dataset.add)];const ty=b.dataset.t,v=b.dataset.v;insTok(Number(b.dataset.add),ty==='in'||ty==='res'?{k:ty,key:v}:ty==='sol'?{k:'sol',id:v}:{k:'op',v});upd()});
+  document.querySelectorAll('[data-numadd]').forEach(b=>b.onclick=()=>{const k=b.dataset.numadd;const i=document.querySelector('[data-numin="'+k+'"]');const v=i.value.trim().replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number first');return}insTok(Number(k),{k:'num',v});S.dirty=false;upd()});
   document.querySelectorAll('[data-numin]').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.querySelector('[data-numadd="'+i.dataset.numin+'"]').click()}}));
-  document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{t.outputs[Number(b.dataset.back)].rule.pop();upd()});
-  document.querySelectorAll('[data-rule]').forEach(r=>r.querySelectorAll('[data-tokdel]').forEach(b=>b.onclick=()=>{t.outputs[Number(r.dataset.rule)].rule.splice(Number(b.dataset.tokdel),1);upd()}));
+  document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{t.outputs[Number(b.dataset.back)].rule.pop();S.fb.sel=null;upd()});
+  document.querySelectorAll('[data-rule]').forEach(r=>r.querySelectorAll('[data-toksel]').forEach(b=>b.onclick=()=>{const k=Number(r.dataset.rule),i=Number(b.dataset.toksel);S.fb.sel=S.fb.sel&&S.fb.sel.k===k&&S.fb.sel.i===i?null:{k,i};keep()}));
+  const sel=S.fb.sel;if(sel&&t.outputs[sel.k]&&t.outputs[sel.k].rule[sel.i]){const R=t.outputs[sel.k].rule;const x=R[sel.i];
+    const ok=$('#eb-ok');ok&&(ok.onclick=()=>{const v=$('#eb-v').value.trim().replace(',','.');if(v===''||isNaN(Number(v))){toast('Type a number');return}x.v=v;x.label=$('#eb-l').value.trim();upd()});
+    const ev=$('#eb-v');ev&&ev.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#eb-ok').click()}});
+    const es=$('#eb-s');es&&(es.onchange=()=>{x.id=es.value;delete x.key;upd()});
+    const ei=$('#eb-i');ei&&(ei.onchange=()=>{x.key=ei.value;upd()});
+    document.querySelectorAll('[data-ebop]').forEach(b=>b.onclick=()=>{x.v=b.dataset.ebop;upd()});
+    $('#eb-l1').onclick=()=>{if(sel.i>0){R.splice(sel.i,1);R.splice(sel.i-1,0,x);sel.i--;upd()}};
+    $('#eb-r1').onclick=()=>{if(sel.i<R.length-1){R.splice(sel.i,1);R.splice(sel.i+1,0,x);sel.i++;upd()}};
+    $('#eb-del').onclick=()=>{R.splice(sel.i,1);S.fb.sel=R.length?{k:sel.k,i:Math.max(0,sel.i-1)}:null;if(!R.length)S.fb.sel=null;upd()};
+    $('#eb-done').onclick=()=>{S.fb.sel=null;keep()}}
+  document.querySelectorAll('[data-copy]').forEach(se=>se.onchange=()=>{if(!se.value)return;const[pid,tid,oi]=se.value.split('|');const pp=(S.cfg.products||[]).find(x=>x.id===pid);const st=pp&&pp.tests.find(x=>x.id===tid);if(!st)return;
+    const so=st.outputs[Number(oi)];const toks=JSON.parse(JSON.stringify(ruleOf(st,so,Number(oi))));const o=t.outputs[Number(se.dataset.copy)];
+    o.rule=toks.filter(x=>x.k!=='res'&&x.k!=='raw').map(x=>{if(x.k!=='in')return x;const lab=((st.inputs||[]).find(y=>y.key===x.key)||{}).label||x.key;let mine=t.inputs.find(y=>y.label===lab);if(!mine){mine={key:keyOf(lab,fbKeys(t)),label:lab};t.inputs.push(mine)}return{k:'in',key:mine.key}});
+    if(!o.unit)o.unit=so.unit||'';S.fb.sel=null;upd();toast('Rule copied, now change what you need')});
   document.querySelectorAll('[data-om]').forEach(i=>i.addEventListener('change',()=>{const o=t.outputs[Number(i.dataset.k)];const k=i.dataset.om;o[k]=k==='dp'?Number(i.value)||0:i.value.trim().replace(',','.');keep()}));
   document.querySelectorAll('[data-ou]').forEach(i=>i.addEventListener('change',()=>{t.outputs[Number(i.dataset.ou)].unit=i.value.trim();keep()}));
   const pk=$('#fb-pick');pk&&(pk.onchange=()=>{t.pick=pk.checked;keep()});
@@ -759,7 +783,7 @@ function bindChem(){
   $('#fb-save').onclick=async()=>{compile(t);if(!t.inputs.length){$('#fb-msg').textContent='Add at least one box the lab types.';return}
     const vals=Object.fromEntries(fbKeys(t).map((k,j)=>[k,1.3+j*0.37]));const bad=t.outputs.find(o=>!o.formula||isNaN(evalFormula(o.formula,vals)));
     if(bad){$('#fb-msg').textContent='The rule for '+bad.label+' is not finished (check the signs and brackets).';return}
-    const c=JSON.parse(JSON.stringify(S.cfg));const p=(c.products||[]).find(x=>x.id===S.fb.pid);const clean=JSON.parse(JSON.stringify(t));delete clean._new;
+    const c=JSON.parse(JSON.stringify(S.cfg));const p=(c.products||[]).find(x=>x.id===S.fb.pid);const clean=JSON.parse(JSON.stringify(t));delete clean._new;delete clean._selK;
     p.tests=p.tests||[];const i=p.tests.findIndex(x=>x.id===clean.id);if(i>=0)p.tests[i]=clean;else p.tests.push(clean);
     try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb.t=null;toast('Saved: '+clean.name+' for '+p.name);keep()}catch(e){$('#fb-msg').textContent='Could not save: '+(e.code||e.message)}};
 }
