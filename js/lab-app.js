@@ -136,7 +136,8 @@ const SOL_LINKS={'t03|C':'naoh01','t05|C':'agno301','t15|C':'naoh05','t20|C':'ko
 let seeding=false;
 let migW=false;
 let migA=false;
-async function migrateAcid(){if(migA||!S.cfg||S.cfg.mAcid1||!(window.LAB_ME||{}).id)return;migA=true;const c=JSON.parse(JSON.stringify(S.cfg));
+async function migratePair(){if(!S.cfg||!S.cfg.mAcid1||S.cfg.mPair1||!(window.LAB_ME||{}).id)return;const c=JSON.parse(JSON.stringify(S.cfg));const g=(c.products||[]).find(x=>x.id==='GM');if(g)g.microPair=true;c.mPair1=1;S.cfg.mPair1=1;try{await S.db.doc('config/main').set(c)}catch(e){S.cfg.mPair1=0}}
+async function migrateAcid(){migratePair();if(migA||!S.cfg||S.cfg.mAcid1||!(window.LAB_ME||{}).id)return;migA=true;const c=JSON.parse(JSON.stringify(S.cfg));
   [['GM','t03',5],['GCN','t53','']].forEach(([pid,tid,mn])=>{const p=(c.products||[]).find(x=>x.id===pid);const t=p&&(p.tests||[]).find(x=>x.id===tid);if(!t)return;delete t.pick;
     t.outputs=[{key:'acid',label:'Acidity',formula:'C*V/30*192.12',unit:'%',min:mn,max:'',dp:2}]});
   c.mAcid1=1;try{await S.db.doc('config/main').set(c)}catch(e){migA=false}}
@@ -174,7 +175,10 @@ function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.
 /* tests done every N days (water micro: weekly): only due when N days passed since the last time it was done */
 function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(x=>{if(x.productId!==pid||x.date>=date)return;const p=product(pid);const t=p&&p.tests.find(y=>y.id===tid);if(t&&testDone(x,t)&&x.date>L)L=x.date});return L}
 function nextDue(s,t){if(!t.everyDays)return s.date;const L=lastDoneBefore(s.productId,t.id,s.date);return L?addDays(L,Number(t.everyDays)):s.date}
-function testActive(s,t){if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
+function pairSkip(s){const p=product(s.productId);return !!(p&&p.microPair&&s.n%2===0)}
+function pairMate(s){return Object.values(S.samples).find(x=>x.sessionId===s.sessionId&&x.n===s.n+1)}
+function microCode(s){const p=product(s.productId);if(p&&p.microPair&&s.n%2===1){const m=pairMate(s);return m?s.code+'+'+(s.n+1):s.code}return s.code}
+function testActive(s,t){if(t.kind==='micro'&&pairSkip(s))return false;if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
 function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>testActive(s,t)&&!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
 function myTasks(){return Object.values(S.tasks).filter(t=>!t.done&&(!t.to||t.to===S.me.id))}
@@ -396,11 +400,12 @@ function sampleForm(s,p,ss){
   if(s.extra)h+='<p class="small"><span class="pill warn">Extra sample</span> '+esc(s.reason||'')+'</p>';
   const pe=needsPE(p);
   if(pe)h+='<div class="row small pe"><label class="row">Production <input type="date" data-pe="prod" value="'+esc(s.prod||'')+'"></label><label class="row">Expiry <input type="date" data-pe="exp" value="'+esc(s.exp||'')+'"></label>'+(!s.prod||!s.exp?'<span class="pill warn">Enter both dates</span>':'')+'</div>';
-  if(s.testedBy)h+='<div class="finished"><span class="pill ok">Finished</span> by <b>'+esc(person(s.testedBy).name)+'</b>'+(s.testedAt?' · '+hhmm(s.testedAt):'')+'</div>';
+  if(s.testedBy)h+='<div class="finished row"><span><span class="pill ok">Finished</span> by <b>'+esc(person(s.testedBy).name)+'</b>'+(s.testedAt?' · '+hhmm(s.testedAt):'')+'</span><button class="ghost small" data-srep="pdf">Sample report · PDF</button><button class="ghost small" data-srep="doc">Word</button></div>';
+  else if(Object.keys(s.results||{}).length)h+='<div class="row small" style="justify-content:flex-end"><button class="ghost small" data-srep="pdf">Results so far · PDF</button><button class="ghost small" data-srep="doc">Word</button></div>';
   const groups=[['chem','Chemical'],['org','Organoleptic'],['micro','Microbiology']];
   if(testsOf(p,'micro').length&&testsOf(p).some(t=>t.kind!=='micro'))h+=kindBar();
   groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length||!kindOk({kind:k}))return;
-    h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?'<label class="row small">Micro started on <input type="date" id="sm-mdate" value="'+esc(s.microDate||s.date)+'"'+(lockedT(s,{kind:'chem'})&&!isDoctor()?' disabled':'')+'></label>':'')+'</div>';
+    h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?(microCode(s)!==s.code?'<span class="pill acc">For '+esc(microCode(s))+'</span> ':'')+'<label class="row small">Micro started on <input type="date" id="sm-mdate" value="'+esc(s.microDate||s.date)+'"'+(lockedT(s,{kind:'chem'})&&!isDoctor()?' disabled':'')+'></label>':'')+'</div>';
     ts.forEach(t=>h+=testRow(s,t))});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
   if(!s.testedBy&&!isAdmin()&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
@@ -410,6 +415,7 @@ function sampleForm(s,p,ss){
 }
 function testRow(s,t){
   const r=resultOf(s,t);
+  if(t.kind==='micro'&&pairSkip(s)){const o=Object.values(S.samples).find(x=>x.sessionId===s.sessionId&&x.n===s.n-1);return '<div class="test off" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b><div class="small muted">Done together with '+esc(o?o.code:'the sample before')+' ('+esc(o?microCode(o):'')+')</div></div><div></div><div class="row">'+(o?'<button class="ghost" data-sample="'+o.id+'">Open '+esc(o.code)+'</button>':'')+'</div></div>'}
   if(t.everyDays&&!testActive(s,t))return '<div class="test off" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b> <span class="pill">every '+esc(everyText(t.everyDays))+'</span><div class="small muted">Not due today · next on '+niceDate(nextDue(s,t))+'</div></div><div></div><div class="row"><button class="ghost" data-mon="'+t.id+'">Do it today</button></div></div>';
   let h='<div class="test" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b>'+(t.optional?' <span class="pill">'+esc(t.freq||'optional')+'</span>':'')+
     '<div class="small muted">'+esc([t.method,t.solution].filter(Boolean).join(' · '))+'</div>'+
@@ -447,11 +453,11 @@ function signoffHTML(ss,smp){
   let h='<div class="signoff"><div class="sgrp"><h3>Chemical</h3><div class="small muted">'+cs.done+' of '+cs.need+' results entered</div>';
   const repBtns='<div class="row"><button data-rep="chem" data-fmt="pdf">Report · PDF</button><button data-rep="chem" data-fmt="doc">Report · Word</button></div>';
   if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+(isDoctor()?'<button class="ghost" id="unvalidate">Reopen</button>':'')+'</div>'+repBtns;
-  else{if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';if(cs.need&&cs.done>=cs.need)h+=repBtns+'<span class="small muted">The report says "Not validated yet" until it is validated.</span>'}
+  else{if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';if(cs.done)h+=repBtns+'<span class="small muted">Report of the results so far. It says "Not validated yet" until it is validated.</span>'}
   h+='</div>';
   if(mg.length){h+='<div class="sgrp"><h3>Microbiology</h3>';
     mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>'+esc(g.name)+'</b><div class="small muted">Read on '+[...g.days].sort().map(niceDate).join(', ')+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
-      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):((g.done>=g.need?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
+      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):((g.done?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
     h+='</div>'}
   {const ready=allValidated(ss);const fb='<div class="row"><button data-rep="all" data-fmt="pdf">Full report · PDF</button><button data-rep="all" data-fmt="doc">Full report · Word</button></div>';
    h+='<div class="sgrp final"><h3>Final validation</h3>';
@@ -503,6 +509,7 @@ function bindSession(){
       bg.querySelector('#fsf').onsubmit=e=>{e.preventDefault();const pid=bg.querySelector('#fs-p').value;if(!pinCheck(pid,bg.querySelector('#fs-pin').value)){bg.querySelector('#fs-err').textContent='PIN does not match.';return}
         freezeSample(s);s.testedBy=pid;s.testedAt=Date.now();saveSample(s);ss.tested=(ss.tested||[]).concat([{by:pid,samples:[s.id],at:Date.now()}]);saveSession(ss);close();
         const next=sessionSamples(ss.id).find(x=>!x.testedBy&&x.id!==s.id);if(next)S.sampleId=next.id;render();toast(s.code+' finished')}})});
+  document.querySelectorAll('[data-srep]').forEach(b=>b.onclick=()=>report(ss,'sample',s.id,b.dataset.srep));
   document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{s.results=s.results||{};const r=s.results[b.dataset.pick]=s.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(s);render()});
   const dsm=$('#delSample');dsm&&(dsm.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+s.code;return}S.db.doc('samples/'+s.id).delete().then(()=>{delete S.samples[s.id];S.sampleId=null;render();logAct('deleted sample <b class="mono">'+esc(s.code)+'</b> of <b>'+esc((product(s.productId)||{}).name||'')+'</b>');toast('Sample deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{s.on=Object.assign({},s.on,{[b.dataset.mon]:true});if(s.off)delete s.off[b.dataset.mon];saveSample(s);render()});
@@ -568,23 +575,23 @@ function openPrint(title,body,css){const w=window.open('','_blank');if(!w){toast
   w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');w.document.close()}
 function saveWord(name,title,body,css){const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'</body></html>';
   const blob=new Blob(['﻿'+html],{type:'application/msword'});S.downloads.save({filename:name+'.doc',data:blob});toast('Saved '+name+'.doc')}
-function reportBody(ss,kind,day){const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);
-  const tests=kind==='micro'?testsOf(p,'micro').filter(t=>t.id===day):kind==='all'?testsOf(p).filter(t=>t.kind!=='micro'||smp.some(x=>testActive(x,t))):testsOf(p).filter(t=>t.kind!=='micro');
-  const v=kind==='micro'?(ss.microVal||{})[day]:kind==='all'?ss.finalVal:ss.validated;
+function reportBody(ss,kind,day){const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);const only=kind==='sample'?day:null;
+  const tests=kind==='sample'?testsOf(p).filter(t=>t.kind!=='micro'||smp.some(x=>x.id===only&&testActive(x,t))):kind==='micro'?testsOf(p,'micro').filter(t=>t.id===day):kind==='all'?testsOf(p).filter(t=>t.kind!=='micro'||smp.some(x=>testActive(x,t))):testsOf(p).filter(t=>t.kind!=='micro');
+  const v=kind==='micro'?(ss.microVal||{})[day]:kind==='all'?ss.finalVal:kind==='sample'?null:ss.validated;
   const cols=[];tests.forEach(t=>{if(t.kind==='org')cols.push({t,o:null,label:t.name});else (t.outputs||[]).forEach(o=>cols.push({t,o,label:o.label+(o.unit?' ('+o.unit+')':'')}))});
-  let h='<h1>ATIC Oman · Laboratory report</h1><div class="muted">'+(kind==='micro'?'Microbiology · '+esc(microName(ss,day)):kind==='all'?'Full report · chemical and microbiology':'Chemical analysis')+'</div>';
+  let h='<h1>ATIC Oman · Laboratory report</h1><div class="muted">'+(kind==='sample'?'Sample '+esc((S.samples[only]||{}).code||'')+' · results so far':kind==='micro'?'Microbiology · '+esc(microName(ss,day)):kind==='all'?'Full report · chemical and microbiology':'Chemical analysis')+'</div>';
   h+='<table class="meta"><tr><td><b>Product</b></td><td>'+esc(p.name||'')+(p.standard?' · '+esc(p.standard):'')+'</td><td><b>Filling date</b></td><td>'+niceDate(ss.date)+'</td></tr><tr><td><b>Lot</b></td><td>'+esc(ss.lot||'–')+'</td><td><b>Section</b></td><td>'+esc(ss.section||'')+'</td></tr><tr><td><b>Production</b></td><td>'+(ss.prod?niceDate(ss.prod):'–')+'</td><td><b>Expiry</b></td><td>'+(ss.exp?niceDate(ss.exp):'–')+'</td></tr></table>';
   h+='<table><tr><th>Sample</th><th>Tank</th><th>Batch</th><th>Production</th><th>Expiry</th><th>Taken by</th>'+cols.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'<th>Tested by</th></tr>';
-  smp.forEach(x=>{h+='<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.tank||'')+'</td><td>'+esc(x.batch||'')+'</td><td>'+(x.prod?niceDate(x.prod):'')+'</td><td>'+(x.exp?niceDate(x.exp):'')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td>'+cols.map(c=>{const r=resultOf(x,c.t);
+  (only?smp.filter(x=>x.id===only):kind==='micro'?smp.filter(x=>!pairSkip(x)):smp).forEach(x=>{h+='<tr><td><b>'+esc(kind==='micro'?microCode(x):x.code)+'</b></td><td>'+esc(x.tank||'')+'</td><td>'+esc(x.batch||'')+'</td><td>'+(x.prod?niceDate(x.prod):'')+'</td><td>'+(x.exp?niceDate(x.exp):'')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td>'+cols.map(c=>{const r=resultOf(x,c.t);
     if(!c.o)return '<td'+(r.value==='Not acceptable'?' class="bad"':'')+'>'+esc(r.value||'–')+(r.comment?' · '+esc(r.comment):'')+'</td>';
     if(c.t.kind==='micro'&&!testActive(x,c.t))return '<td class="muted">not due</td>';
     const o=resOuts(c.t,r).find(y=>y.key===c.o.key);if(!o||o.value==null)return '<td class="muted">–</td>';return '<td'+(o.state==='bad'?' class="bad"':'')+'>'+fmt(o.value,o.dp)+'</td>'}).join('')+'<td>'+esc(x.testedBy?person(x.testedBy).name:'')+'</td></tr>'});
   h+='<tr><td colspan="6"><b>Limit</b></td>'+cols.map(c=>'<td>'+esc(c.o?limitText(c.o)||'–':'Acceptable')+'</td>').join('')+'<td></td></tr></table>';
   if(kind==='all'){const line=(lab,x)=>'<tr><td>'+lab+'</td><td>'+(x?esc(person(x.by).name)+' · '+niceDate(new Date(x.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(x.at)+(x.comment?' · '+esc(x.comment):''):'<b>not validated</b>')+'</td></tr>';
     h+='<h2>Validation</h2><table>'+line('Chemical',ss.validated)+microGroups(ss).map(g=>line('Microbiology · '+esc(g.name),(ss.microVal||{})[g.day])).join('')+'</table>'}
-  h+='<div class="sign">'+(kind==='all'?'Final validation: ':'')+(v?'Validated by <b>'+esc(person(v.by).name)+'</b> on '+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' at '+hhmm(v.at)+(v.comment?'<br>Comment: '+esc(v.comment):''):'<b>Not validated yet</b>')+'</div>';
+  h+='<div class="sign">'+(kind==='sample'?((S.samples[only]||{}).testedBy?'Finished by <b>'+esc(person(S.samples[only].testedBy).name)+'</b>':'<b>Sample not finished yet</b>'):(kind==='all'?'Final validation: ':'')+(v?'Validated by <b>'+esc(person(v.by).name)+'</b> on '+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' at '+hhmm(v.at)+(v.comment?'<br>Comment: '+esc(v.comment):''):'<b>Not validated yet · '+smp.length+' sample(s) so far</b>'))+'</div>';
   return h}
-function report(ss,kind,day,fmtx){const p=product(ss.productId)||{};const name='ATIC-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'-'+(kind==='micro'?'micro-'+microName(ss,day).replace(/\W+/g,'-'):kind==='all'?'full-report':'chemical');
+function report(ss,kind,day,fmtx){const p=product(ss.productId)||{};const name='ATIC-'+(p.code||'')+'-'+ss.date+(ss.lot?'-lot'+ss.lot:'')+'-'+(kind==='sample'?'sample-'+((S.samples[day]||{}).code||''):kind==='micro'?'micro-'+microName(ss,day).replace(/\W+/g,'-'):kind==='all'?'full-report':'chemical');
   const body=reportBody(ss,kind,day);if(fmtx==='doc')saveWord(name,name,body);else openPrint(name,body)}
 
 /* ---------- STICKERS (A4, 3 x 8 labels of 70 x 37 mm) ---------- */
@@ -689,7 +696,7 @@ function microView(){
   let h='<div class="stack">'+catBar()+'<div><h1>Microbiology pending · '+esc(catLabel(catSel()))+'</h1><p class="muted">Plates waiting to be read. A line disappears as soon as its result is entered.</p></div>'+fBar(microF,'mfBar',{dateLabel:'Read on',quick:'<div class="kindbar"><button type="button" class="kind'+(!microF.ready?' on':'')+'" data-fr="0">All waiting</button><button type="button" class="kind'+(microF.ready?' on':'')+'" data-fr="1">Ready to read now</button></div>',more:'<label class="fl"><span>Test</span><select data-f="test"><option value="">All</option>'+tests.map(t=>'<option'+(microF.test===t?' selected':'')+'>'+esc(t)+'</option>').join('')+'</select></label>'});
   if(!L.length)return h+'<div class="card muted">'+(all.length?'Nothing matches these filters.':'No microbiology results are waiting.')+'</div></div>';
   h+='<div class="card tablewrap"><table><tr><th>Read on</th><th>Sample</th><th>Product</th><th>Lot</th><th>Production</th><th>Expiry</th><th>Test</th><th></th></tr>'+L.map(x=>{const ss=S.sessions[x.s.sessionId]||{};
-    return '<tr><td class="num">'+(x.ready<=d?'<span class="pill warn">'+niceDate(x.ready)+'</span>':niceDate(x.ready))+'</td><td class="mono"><b>'+esc(x.s.code)+'</b> <span class="small muted">'+esc(x.s.date)+'</span></td><td>'+esc(x.p?x.p.name:'')+'</td><td class="num">'+esc(ss.lot||'–')+'</td><td class="num small">'+((x.s.prod||ss.prod)?niceDate(x.s.prod||ss.prod):'–')+'</td><td class="num small">'+((x.s.exp||ss.exp)?niceDate(x.s.exp||ss.exp):'–')+'</td><td>'+esc(x.t.name)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'">Enter result</button></td></tr>'}).join('')+'</table></div>';
+    return '<tr><td class="num">'+(x.ready<=d?'<span class="pill warn">'+niceDate(x.ready)+'</span>':niceDate(x.ready))+'</td><td class="mono"><b>'+esc(microCode(x.s))+'</b> <span class="small muted">'+esc(x.s.date)+'</span></td><td>'+esc(x.p?x.p.name:'')+'</td><td class="num">'+esc(ss.lot||'–')+'</td><td class="num small">'+((x.s.prod||ss.prod)?niceDate(x.s.prod||ss.prod):'–')+'</td><td class="num small">'+((x.s.exp||ss.exp)?niceDate(x.s.exp||ss.exp):'–')+'</td><td>'+esc(x.t.name)+'</td><td><button class="ghost" data-open-sample="'+x.s.id+'">Enter result</button></td></tr>'}).join('')+'</table></div>';
   return h+'</div>';
 }
 function bindMicro(){fBind(microF,'mfBar');document.querySelectorAll('[data-fr]').forEach(b=>b.onclick=()=>{microF.ready=b.dataset.fr==='1';render()});bindCommon()}
@@ -726,7 +733,7 @@ function setupView(){
     (t.kind==='chem'?'<button class="ghost" data-rule="'+t.id+'">Edit rule</button>':'')+'<button class="ghost danger" data-tdel title="Remove test">×</button></div>'};
   h+='<div class="card stack" style="gap:8px">'+((p.tests||[]).length?(p.tests||[]).map(row).join(''):'<p class="muted">No tests yet.</p>')+'</div>';
   h+='<div class="row"><button data-addtest="chem">+ Chemical test</button><button data-addtest="micro">+ Micro test</button><button data-addtest="org">+ Taste / smell check</button></div>';
-  h+='<details class="small"><summary>Product details</summary><div class="row" style="margin-top:8px"><label class="field"><span>Name</span><input data-pf="name" value="'+esc(p.name)+'"></label><label class="field"><span>Sticker code</span><input data-pf="code" value="'+esc(p.code)+'" style="width:90px"></label><label class="field"><span>Type</span><select data-pf="category">'+CATS.map(o=>'<option value="'+o[0]+'"'+(catOfP(p)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label><label class="field"><span>Standard</span><input data-pf="standard" value="'+esc(p.standard||'')+'"></label></div><button class="ghost danger" id="su-delp" style="margin-top:8px">Delete '+esc(p.name)+'</button></details>';
+  h+='<details class="small"><summary>Product details</summary><div class="row" style="margin-top:8px"><label class="field"><span>Name</span><input data-pf="name" value="'+esc(p.name)+'"></label><label class="field"><span>Sticker code</span><input data-pf="code" value="'+esc(p.code)+'" style="width:90px"></label><label class="field"><span>Type</span><select data-pf="category">'+CATS.map(o=>'<option value="'+o[0]+'"'+(catOfP(p)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label><label class="field"><span>Standard</span><input data-pf="standard" value="'+esc(p.standard||'')+'"></label></div><label class="row small" style="margin-top:8px"><input type="checkbox" id="su-pair"'+(p.microPair?' checked':'')+'> Microbiology: one result for every 2 samples (1+2, 3+4…)</label><button class="ghost danger" id="su-delp" style="margin-top:8px">Delete '+esc(p.name)+'</button></details>';
   return h+'</div>';
 }
 function bindSetup(){
@@ -737,6 +744,7 @@ function bindSetup(){
   const rs=$('#cfgReset');rs&&(rs.onclick=()=>{S.cfgDraft=null;render()});
   $('#su-addp').onclick=()=>modal('<h2>New product or sample</h2><form id="apf" class="stack"><label class="field"><span>Name</span><input id="ap-n" required></label><div class="row"><label class="field" style="flex:1"><span>Sticker code</span><input id="ap-c" required placeholder="e.g. HU"></label><label class="field" style="flex:1"><span>Type</span><select id="ap-t">'+CATS.map(o=>'<option value="'+o[0]+'">'+o[1]+'</option>').join('')+'</select></label></div><div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="primary">Add</button></div></form>',(bg,close)=>{bg.querySelector('#apf').onsubmit=e=>{e.preventDefault();const np={id:uid('p'),name:bg.querySelector('#ap-n').value.trim(),code:bg.querySelector('#ap-c').value.trim().toUpperCase(),category:bg.querySelector('#ap-t').value,tests:[]};c.products.push(np);S.setupProduct=np.id;close();render()}});
   if(!p)return;
+  const sp=$('#su-pair');sp&&(sp.onchange=()=>{p.microPair=sp.checked;rerender()});
   const dp=$('#su-delp');dp&&(dp.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again, then Save, to delete '+p.name;return}c.products=c.products.filter(x=>x.id!==p.id);S.setupProduct=null;rerender()});
   document.querySelectorAll('[data-pf]').forEach(i=>i.addEventListener('change',()=>{p[i.dataset.pf]=i.dataset.pf==='code'?i.value.trim().toUpperCase():i.value;rerender()}));
   document.querySelectorAll('[data-addtest]').forEach(b=>b.onclick=()=>{const k=b.dataset.addtest;p.tests=p.tests||[];
