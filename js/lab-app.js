@@ -108,6 +108,7 @@ async function boot(){
     const ids=new Set(snap.docs.map(d=>d.id));Object.keys(S.samples).forEach(k=>{if(!ids.has(k)&&!(Q['samples/'+k]&&(Q['samples/'+k].busy||Q['samples/'+k].next)))delete S.samples[k]});
     changed('samples')},err);
   S.db.doc('config/solutions').onSnapshot(snap=>{const d=snap.exists?snap.data():null;S.sol=d&&d.list||null;if(!S.sol)seedSolutions();else migrateWaterWeekly();changed('sol')},()=>{});
+  S.db.doc('config/lab').onSnapshot(snap=>{S.labPin=snap.exists?String(snap.data().pin||''):'';changed('lab')},()=>{});
   S.db.collection('tasks').orderBy('at','desc').limit(300).onSnapshot(snap=>{S.tasks={};snap.docs.forEach(d=>S.tasks[d.id]=Object.assign({id:d.id},d.data()));changed('tasks')},()=>{});
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
@@ -229,7 +230,7 @@ function bindLogin(){
 /* ---------- modal ---------- */
 function modal(html,onMount){const bg=document.createElement('div');bg.className='modal-bg';bg.innerHTML='<div class="modal" role="dialog" aria-modal="true">'+html+'</div>';document.body.appendChild(bg);
   const close=()=>{bg.remove();if(S.dirty){S.dirty=false;render()}};bg.addEventListener('click',e=>{if(e.target===bg)close()});bg.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);onMount&&onMount(bg,close);const f=bg.querySelector('input,textarea,select');f&&f.focus();return close}
-function pinCheck(personId,pin){const p=S.people[personId];return p&&String(p.pin||'')===String(pin||'').trim()}
+function pinCheck(personId,pin){const p=S.people[personId];if(!p)return false;const v=String(pin||'').trim();if(!v)return false;const own=String(p.pin||'');return own?own===v:!!(S.labPin&&S.labPin===v)}
 
 /* ---------- uploads ---------- */
 async function uploadFiles(files){
@@ -337,7 +338,7 @@ function everyText(n){n=Number(n);return n===7?'week':n===14?'2 weeks':n===30||n
 function kv(k,v,cls){return '<div class="kv"><span class="label">'+k+'</span><b>'+esc(v)+'</b></div>'}
 function sampleForm(s,p,ss){
   let h='<div class="row between"><div><span class="label">Sample</span><h2 class="mono">'+esc(s.code)+'</h2></div><div class="row small">'+
-    '<label class="row">Tank <input id="sm-tank" value="'+esc(s.tank||'')+'" style="width:70px"></label><label class="row">Batch <input id="sm-batch" value="'+esc(s.batch||'')+'" style="width:70px"></label>'+
+    '<label class="row">Taken by <select id="sm-taken"><option value="">–</option>'+Object.values(S.people).filter(x=>x.active!==false&&x.canTest).map(x=>'<option value="'+x.id+'"'+(s.takenBy===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label><label class="row">Tank <input id="sm-tank" value="'+esc(s.tank||'')+'" style="width:70px"></label><label class="row">Batch <input id="sm-batch" value="'+esc(s.batch||'')+'" style="width:70px"></label>'+
     (isDoctor()?'<label class="row">Assign <select id="sm-assign"><option value="">Anyone</option>'+Object.values(S.people).filter(x=>x.active!==false&&x.canTest).map(x=>'<option value="'+x.id+'"'+(s.assignedTo===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label>':(s.assignedTo?'<span class="pill acc">Assigned to '+esc(person(s.assignedTo).name)+'</span>':''))+
     '</div></div>';
   if(s.extra)h+='<p class="small"><span class="pill warn">Extra sample</span> '+esc(s.reason||'')+'</p>';
@@ -415,6 +416,7 @@ function bindSession(){
   document.querySelectorAll('[data-org]').forEach(sel=>sel.onchange=()=>{s.results=s.results||{};const r=s.results[sel.dataset.org]=s.results[sel.dataset.org]||{};r.value=sel.value;r.by=S.me.id;r.at=Date.now();live(sel.dataset.org,'result');saveSample(s);S.dirty=true});
   document.querySelectorAll('[data-orgc]').forEach(inp=>inp.addEventListener('input',()=>{s.results=s.results||{};const r=s.results[inp.dataset.orgc]=s.results[inp.dataset.orgc]||{};r.comment=inp.value;live(inp.dataset.orgc,'comment');liveSave(s)}));
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
+  const tb=$('#sm-taken');tb&&(tb.onchange=()=>{s.takenBy=tb.value;saveSample(s)});
   const bt=$('#sm-batch');bt.addEventListener('input',()=>{s.batch=bt.value.trim();liveSave(s)});
   const as=$('#sm-assign');as&&(as.onchange=()=>{s.assignedTo=as.value;saveSample(s);toast(as.value?'Assigned to '+person(as.value).name:'Assignment cleared')});
   document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{s.results=s.results||{};const r=s.results[b.dataset.pick]=s.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(s);render()});
@@ -702,12 +704,14 @@ function peopleView(){
   const ps=Object.values(S.people).sort((a,b)=>(a.active===false)-(b.active===false)||a.name.localeCompare(b.name));
   return '<div class="stack"><div><h1>People</h1><p class="muted">Who can sign in, who appears in "Tested by" and who can validate. PINs are a simple lock for the shared laptop.</p></div>'+
   '<div class="card stack" style="gap:6px"><b>Who sees what</b><span class="small muted"><b>Lab technician</b>: Today, Records, Micro pending and their tasks. <b>Lab manager (doctor)</b>: everything above plus the <b>Live overview</b> of all testing as it happens, assigning tasks, Tests &amp; limits. <b>Lab account (shared, username lab)</b>: opens straight into the lab with its own simple screen: Testing, Micro to read, Records, Solutions &amp; formulas. No tasks, no live overview, no people. Who tested is still signed with each person’s PIN. <b>Admin</b>: everything, plus this page. Only people whose website account has the <b>Lab</b> area (Admin page of the website) can open the lab at all.</span></div>'+
+  '<form id="lpf" class="card row"><b>Shared lab PIN</b><span class="small muted" style="flex:1">Used to sign "Tested by" and "Validate" for anyone who has no PIN of their own (the shared lab account).</span><input id="lp-pin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="'+(S.labPin?'PIN is set · type to change':'Set a PIN')+'" style="width:190px"><button class="primary">Save PIN</button></form>'+
   '<div class="card tablewrap"><table><tr><th>Name</th><th>Website account</th><th>Role</th><th>Can test</th><th>Can validate</th><th>PIN</th><th>Active</th></tr>'+ps.map(p=>'<tr data-pid="'+p.id+'"><td><input data-pp="name" value="'+esc(p.name)+'"></td><td><select data-pp="uid"><option value="">— not linked —</option>'+(window.LAB_ACCOUNTS||[]).map(a=>'<option value="'+a.id+'"'+(p.uid===a.id?' selected':'')+'>'+esc(a.full_name||a.username)+((a.areas||[]).indexOf('lab')<0&&!a.is_owner?' (no Lab area)':'')+'</option>').join('')+'</select></td><td><select data-pp="role">'+[['lab','Lab technician'],['station','Lab account (shared)'],['doctor','Lab manager'],['admin','Admin']].map(o=>'<option value="'+o[0]+'"'+(p.role===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></td><td><input type="checkbox" data-pp="canTest"'+(p.canTest?' checked':'')+'></td><td><input type="checkbox" data-pp="canValidate"'+(p.canValidate?' checked':'')+'></td><td><input data-pp="pin" value="'+esc(p.pin||'')+'" style="width:90px" inputmode="numeric"></td><td><input type="checkbox" data-pp="active"'+(p.active!==false?' checked':'')+'></td></tr>').join('')+'</table></div>'+
-  '<form id="npf" class="card row"><input id="np-n" placeholder="Full name" required style="flex:1"><select id="np-r"><option value="lab">Lab technician</option><option value="doctor">Lab manager</option><option value="admin">Admin</option></select><input id="np-pin" placeholder="PIN" inputmode="numeric" style="width:90px" required><button class="primary">Add person</button></form></div>';
+  '<form id="npf" class="card row"><input id="np-n" placeholder="Full name" required style="flex:1"><select id="np-r"><option value="lab">Lab technician</option><option value="doctor">Lab manager</option><option value="admin">Admin</option></select><input id="np-pin" placeholder="Own PIN (optional)" inputmode="numeric" style="width:150px"><button class="primary">Add person</button></form></div>';
 }
 function bindPeople(){
   document.querySelectorAll('[data-pid]').forEach(tr=>{const p=S.people[tr.dataset.pid];tr.querySelectorAll('[data-pp]').forEach(i=>i.addEventListener('change',()=>{const k=i.dataset.pp;p[k]=i.type==='checkbox'?i.checked:i.value.trim();queueWrite('people/'+p.id,strip(p));toast('Saved')}))});
-  $('#npf').onsubmit=e=>{e.preventDefault();const r=$('#np-r').value;const p={id:uid('u'),name:$('#np-n').value.trim(),role:r,canTest:r==='lab',canValidate:r!=='lab',pin:$('#np-pin').value.trim(),active:true};if(!p.name||!p.pin)return;S.people[p.id]=p;queueWrite('people/'+p.id,strip(p));S.dirty=false;render();toast(p.name+' added')};
+  $('#lpf').onsubmit=e=>{e.preventDefault();const v=$('#lp-pin').value.trim();if(v.length<4){toast('At least 4 digits');return}S.db.doc('config/lab').set({pin:v}).then(()=>{S.labPin=v;S.dirty=false;render();toast('Lab PIN saved')},er=>toast('Could not save: '+(er.code||er.message)))};
+  $('#npf').onsubmit=e=>{e.preventDefault();const r=$('#np-r').value;const p={id:uid('u'),name:$('#np-n').value.trim(),role:r,canTest:r==='lab',canValidate:r!=='lab',pin:$('#np-pin').value.trim(),active:true};if(!p.name)return;S.people[p.id]=p;queueWrite('people/'+p.id,strip(p));S.dirty=false;render();toast(p.name+' added')};
 }
 
 boot();

@@ -32,11 +32,11 @@
     var list = (r.data || []).filter(function (x) { return x.data && x.data.app; }).sort(function (a, b) { return a.id < b.id ? 1 : -1; });
     if (!list.length) list = [{ id: today, data: await snapshot() }];
     var zip = new JSZip();
-    zip.file('README.txt', 'ATIC Oman · data backup made ' + new Date().toLocaleString('en-GB') + '\r\n\r\nOne folder per day (the last ' + KEEP + ' days). In each day:\r\n  pages/   the data of every page (inventory, stock, orders, plan, recipes, materials, settings, ...)\r\n  line-planner/   forecasts (plans), actuals and model, one file per day and section\r\n  team/   messages and tasks\r\nFiles are JSON: they open in any text editor, and the website can be restored from them.\r\n');
+    zip.file('README.txt', 'ATIC Oman · data backup made ' + new Date().toLocaleString('en-GB') + '\r\n\r\nOne folder per day (the last ' + KEEP + ' days). In each day:\r\n  pages/   the data of every page (inventory, stock, orders, plan, recipes, materials, settings, ...)\r\n  line-planner/   forecasts (plans), actuals and model, one file per day and section\r\n  team/   messages and tasks\r\n  lab/   the lab: records, samples and results, people, tests, formulas and solutions\r\nFiles are JSON: they open in any text editor, and the website can be restored from them.\r\n');
     list.forEach(function (b) {
       var f = zip.folder(b.id), s = b.data;
       Object.keys(s.app || {}).forEach(function (k) { f.file('pages/' + k + '.json', JSON.stringify(s.app[k], null, 1)); });
-      Object.keys(s.planner || {}).forEach(function (c) { var dir = c === 'team' ? 'team/' : 'line-planner/' + c + '/'; Object.keys(s.planner[c]).forEach(function (id) { f.file(dir + String(id).replace(/[\\/:*?"<>|]/g, '_') + '.json', JSON.stringify(s.planner[c][id], null, 1)); }); });
+      Object.keys(s.planner || {}).forEach(function (c) { var dir = c === 'team' ? 'team/' : c.indexOf('lab_') === 0 ? 'lab/' + c.slice(4) + '/' : 'line-planner/' + c + '/'; Object.keys(s.planner[c]).forEach(function (id) { f.file(dir + String(id).replace(/[\\/:*?"<>|]/g, '_') + '.json', JSON.stringify(s.planner[c][id], null, 1)); }); });
       f.file('saved.txt', 'Saved ' + (s.at || '') + (s.by ? ' (opened by ' + s.by + ')' : ''));
     });
     var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
