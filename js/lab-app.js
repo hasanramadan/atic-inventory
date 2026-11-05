@@ -181,7 +181,7 @@ function render(){
   if(isDoctor())tabs.push(['setup','Tests & limits','']);
   if(isAdmin())tabs.push(['people','People','']);
   if(S.view==='session'&&!S.sessions[S.sessionId])S.view='today';
-  const cur=S.view==='session'?'today':S.view;
+  const cur=S.view==='session'?(S.back||'today'):S.view;
   root.innerHTML='<div class="app"><nav class="rail" aria-label="Sections"><div class="brand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div>ATIC Lab<small>Quality control · '+niceDate(today())+'</small></div>'+
     tabs.map(t=>'<button class="tab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'"><span>'+t[1]+'</span>'+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+
     '<div class="me"><div><div class="label">Signed in</div><b>'+esc(S.me.name)+'</b> <span class="muted small">'+esc(roleName(S.me.role))+'</span></div></div></nav><main id="main">'+viewHTML()+'</main></div>';
@@ -203,7 +203,7 @@ function roleName(r){return r==='admin'?'Admin':r==='doctor'?'Lab manager':r==='
 function renderStation(){
   const root=$('#root');
   if(!['today','session','micro','history','chem'].includes(S.view))S.view='today';
-  const cur=S.view==='session'?'today':S.view;const mp=microPendingCount();
+  const cur=S.view==='session'?(S.back||'today'):S.view;const mp=microPendingCount();
   const tabs=[['today','Testing',Object.values(S.tasks).filter(t=>!t.done).length||''],['micro','Micro to read',mp||''],['history','Records',''],['chem','Solutions & formulas','']];
   root.innerHTML='<div class="station"><header class="stbar"><div class="stbrand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div><div><b>ATIC Lab</b><small>'+niceDate(today())+'</small></div></div><nav class="sttabs" aria-label="Sections">'+
     tabs.map(t=>'<button class="sttab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'">'+t[1]+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+'</nav></header><main id="main">'+viewHTML()+'</main></div>';
@@ -308,8 +308,8 @@ function bindToday(){
   bindCommon();
 }
 function bindCommon(){
-  document.querySelectorAll('[data-open-session]').forEach(b=>b.onclick=()=>{S.sessionId=b.dataset.openSession;S.sampleId=null;S.view='session';render()});
-  document.querySelectorAll('[data-open-sample]').forEach(b=>b.onclick=()=>{const s=S.samples[b.dataset.openSample];if(!s)return;S.sessionId=s.sessionId;S.sampleId=s.id;S.view='session';render()});
+  document.querySelectorAll('[data-open-session]').forEach(b=>b.onclick=()=>{S.sessionId=b.dataset.openSession;S.sampleId=null;S.back=S.view==='session'?S.back:S.view;S.view='session';render()});
+  document.querySelectorAll('[data-open-sample]').forEach(b=>b.onclick=()=>{const s=S.samples[b.dataset.openSample];if(!s)return;S.sessionId=s.sessionId;S.sampleId=s.id;S.back=S.view==='session'?S.back:S.view;S.view='session';render()});
   document.querySelectorAll('[data-taskdone]').forEach(b=>b.onclick=()=>{const t=S.tasks[b.dataset.taskdone];t.done=true;t.doneBy=S.me.id;t.doneAt=Date.now();queueWrite('tasks/'+t.id,strip(t));render()});
 }
 function lastLot(pid){const s=Object.values(S.sessions).filter(x=>x.productId===pid&&x.lot).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];return s?s.lot:''}
@@ -330,7 +330,7 @@ function newSessionModal(pre){
       const hint=()=>{const ll=lastLot(bg.querySelector('#ns-p').value);bg.querySelector('#ns-hint').textContent=ll?'Last lot used for this product: '+ll:''};hint();bg.querySelector('#ns-p').onchange=hint;
       bg.querySelector('#nsf').onsubmit=e=>{e.preventDefault();
         const s={id:uid('s'),productId:bg.querySelector('#ns-p').value,date:bg.querySelector('#ns-d').value||today(),section:bg.querySelector('#ns-s').value,lot:bg.querySelector('#ns-l').value.trim(),batches:Number(bg.querySelector('#ns-b').value)||0,tank:bg.querySelector('#ns-t').value.trim(),createdBy:S.me.id,createdAt:Date.now(),tested:[],validated:null};
-        saveSession(s);close();S.sessionId=s.id;S.sampleId=null;S.view='session';render()}})
+        saveSession(s);close();S.sessionId=s.id;S.sampleId=null;S.back=S.view==='session'?S.back:S.view;S.view='session';render()}})
 }
 
 /* ---------- SESSION (testing) ---------- */
@@ -433,7 +433,7 @@ function signoffHTML(ss,smp){
 }
 function bindSession(){
   const ss=S.sessions[S.sessionId];const p=product(ss.productId);
-  $('[data-tab-back]').onclick=()=>{S.view=role()==='lab'?'today':'today';render()};
+  $('[data-tab-back]').onclick=()=>{S.view=S.back||'today';render()};
   if(isAdmin()){const a0=$('#addSample');a0&&a0.remove()}
   const ad=$('#addSample');ad&&(ad.onclick=()=>addSample(ss,p));
   const es=$('#editSess');es&&(es.onclick=()=>editSessionModal(ss));
