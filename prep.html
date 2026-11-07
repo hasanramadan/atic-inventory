@@ -4,7 +4,7 @@
 <title>ATIC Preparation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611070900">
+<link rel="stylesheet" href="css/app.css?v=202611070903">
 <style>
 .pp{max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 /* ---------- hero ---------- */
@@ -107,11 +107,11 @@
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js?v=202611070900"></script>
-<script src="js/shell.js?v=202611070900"></script>
-<script src="js/backup.js?v=202611070900" defer></script>
-<script src="js/assistant.js?v=202611070900" defer></script>
-<script src="js/materials-engine.js?v=202611070900"></script>
+<script src="config.js?v=202611070903"></script>
+<script src="js/shell.js?v=202611070903"></script>
+<script src="js/backup.js?v=202611070903" defer></script>
+<script src="js/assistant.js?v=202611070903" defer></script>
+<script src="js/materials-engine.js?v=202611070903"></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'prep', area: 'preparation' }); if (!A) return;
@@ -177,7 +177,7 @@
   function store() { try { localStorage.setItem(key(), JSON.stringify(S.rows)); } catch (e) {} }
   function fromLP(date) {
     var out = { 'SEC-1': [], 'SEC-2': [] }, src = '';
-    var put = function (sec, runs) { runs.forEach(function (q) { var b = Math.round(Number(q.batches) || 0); if (q.product && b > 0 && PN[q.product]) { var e = out[sec].filter(function (x) { return x.p === q.product && (x.z || '') === (q.size || ''); })[0]; if (e) e.b += b; else out[sec].push({ p: q.product, z: q.size || '', b: b }); } }); };
+    var put = function (sec, runs) { runs.forEach(function (q) { var b = Math.round((Number(q.batches) || 0) * 1000) / 1000; if (q.product && b > 0 && PN[q.product]) { var e = out[sec].filter(function (x) { return x.p === q.product && (x.z || '') === (q.size || ''); })[0]; if (e) e.b += b; else out[sec].push({ p: q.product, z: q.size || '', b: b }); } }); };
     ['S1', 'S2'].forEach(function (s) {
       var sec = s === 'S1' ? 'SEC-1' : 'SEC-2';
       var a = acts.filter(function (x) { return x.date === date && x.sec === s; })[0], pl = plans.filter(function (x) { return x.date === date && x.sec === s; })[0];
@@ -186,7 +186,7 @@
     });
     if (!out['SEC-1'].length && !out['SEC-2'].length) {
       var ld = docs.plan && docs.plan.lineDays && docs.plan.lineDays[date];
-      if (ld) ['SEC-1', 'SEC-2'].forEach(function (sc) { (ld[sc] || []).forEach(function (x) { if (PN[x.product] && Math.round(x.batches) > 0) out[sc].push({ p: x.product, z: x.size || '', v: x.recipe || '', b: Math.round(x.batches) }); }); });
+      if (ld) ['SEC-1', 'SEC-2'].forEach(function (sc) { (ld[sc] || []).forEach(function (x) { if (PN[x.product] && Number(x.batches) > 0) out[sc].push({ p: x.product, z: x.size || '', v: x.recipe || '', b: Math.round(Number(x.batches) * 1000) / 1000 }); }); });
       if (out['SEC-1'].length || out['SEC-2'].length) src = 'factory';
       var fp = !src && docs.plan && docs.plan.days && docs.plan.days[date];
       if (fp) { Object.keys(fp).forEach(function (k) { var q = k.split('|'); if (q[1] && out[q[1]] && Math.round(fp[k]) > 0 && PN[q[0]]) out[q[1]].push({ p: q[0], b: Math.round(fp[k]) }); }); if (out['SEC-1'].length || out['SEC-2'].length) src = 'factory'; }
@@ -254,7 +254,7 @@
       '<select data-s="' + sec + '" data-i="' + i + '" aria-label="Product"><option value="">Choose a product…</option>' + PRODS.map(function (p) { return '<option value="' + p + '"' + (p === r.p ? ' selected' : '') + '>' + PN[p] + '</option>'; }).join('') + '</select>' +
       (recList(r.p).length > 1 ? '<select class="rv" data-s="' + sec + '" data-i="' + i + '" aria-label="Recipe" style="width:auto">' + recList(r.p).map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === (r.v || '') ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select>' : '') +
       '<select class="zs" data-s="' + sec + '" data-i="' + i + '" aria-label="Size" style="width:auto">' + ((SIZES[r.p] || []).length ? SIZES[r.p].map(function (z) { return '<option' + (z === r.z ? ' selected' : '') + '>' + z + '</option>'; }).join('') : '<option value="">–</option>') + '</select>' +
-      '<div class="step"><button type="button" data-d="-1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch less">−</button><input type="number" min="0" step="1" inputmode="numeric" value="' + (r.b || 0) + '" data-s="' + sec + '" data-i="' + i + '" aria-label="Batches"><button type="button" data-d="1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch more">+</button></div>' +
+      '<div class="step"><button type="button" data-d="-1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch less">−</button><input type="number" min="0" step="any" inputmode="decimal" value="' + (r.b || 0) + '" data-s="' + sec + '" data-i="' + i + '" aria-label="Batches"><button type="button" data-d="1" data-s="' + sec + '" data-i="' + i + '" aria-label="One batch more">+</button></div>' +
       '<button type="button" class="x" data-rm="' + i + '" data-s="' + sec + '" aria-label="Remove">×</button></div>';
   }
   function secHtml(sec) {
@@ -304,7 +304,7 @@
     document.querySelectorAll('.prow select:not(.zs):not(.rv)').forEach(function (el) { el.onchange = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.p = el.value; r.v = ''; r.z = (SIZES[r.p] || [''])[SIZES[r.p] && SIZES[r.p].length > 1 ? SIZES[r.p].length - 1 : 0]; S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.prow select.rv').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].v = el.value; S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.prow select.zs').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].z = el.value; S.src = 'mine'; store(); render(); }; });
-    document.querySelectorAll('.step input').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].b = Math.max(0, Math.round(Number(el.value) || 0)); S.src = 'mine'; store(); render(); }; });
+    document.querySelectorAll('.step input').forEach(function (el) { el.onchange = function () { S.rows[el.dataset.s][+el.dataset.i].b = Math.max(0, Math.round((Number(el.value) || 0) * 1000) / 1000); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('.step button').forEach(function (el) { el.onclick = function () { var r = S.rows[el.dataset.s][+el.dataset.i]; r.b = Math.max(0, (r.b || 0) + Number(el.dataset.d)); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('[data-rm]').forEach(function (el) { el.onclick = function () { S.rows[el.dataset.s].splice(+el.dataset.rm, 1); S.src = 'mine'; store(); render(); }; });
     document.querySelectorAll('[data-add]').forEach(function (el) { el.onclick = function () { var used = S.rows[el.dataset.add].map(function (r) { return r.p; }); var np = PRODS.filter(function (p) { return used.indexOf(p) < 0; })[0] || ''; S.rows[el.dataset.add].push({ p: np, z: (SIZES[np] || [''])[(SIZES[np] || ['']).length - 1], b: 1 }); S.src = 'mine'; store(); render(); }; });
