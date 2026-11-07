@@ -174,7 +174,17 @@ const ENGINE = (() => {
   //   batches = batches prepared today for this run; opening = balance of that product in the tank (batches);
   //   start = minutes after 07:00 (null = when the previous run finishes); target = optional box target.
   //   Old single-item inputs {product,size,batches,targetBoxes} are still accepted.
+  // overtime: when the day must finish a box target, stretch the shift (15-minute steps, up to 6 hours) until the target is reached
   function forecast(P, inp) {
+    const f0 = forecast0(P, inp, SHIFT);
+    if (!inp.overtime || !(f0.target > 0) || f0.boxes.p50 >= f0.target) return Object.assign(f0, { shiftMin: SHIFT, overtimeMin: 0 });
+    let best = f0, ext = 0;
+    for (ext = 15; ext <= 360; ext += 15) { best = forecast0(P, inp, SHIFT + ext); if (best.boxes.p50 >= best.target) break; }
+    ext = Math.min(ext, 360);
+    best.why = (best.why || []).concat([{ t: 'Overtime: about ' + ext + ' min after 17:00 to finish the target of ' + Math.round(best.target) + ' boxes today.', min: ext }]);
+    return Object.assign(best, { shiftMin: SHIFT + ext, overtimeMin: ext });
+  }
+  function forecast0(P, inp, SHIFT) {
     const sec = inp.sec;
     const runs = inputRuns(inp);
     for (const r of runs) { const sk = itemKey(r.product, r.size) + '|' + sec; if (!P.speed[sk] || !P.machineRate[sk] || !P.boxesPerBatch[itemKey(r.product, r.size)]) throw new Error('Unknown item ' + sk); }
@@ -375,7 +385,7 @@ const ENGINE = (() => {
 
   // ---------------------------------------------------------------- compare
   function planSummary(f) {
-    return { boxesP10: f.boxes.p10, boxesP50: f.boxes.p50, boxesP90: f.boxes.p90, fillMin: f.fillMin, stopMin: f.stopMin, stopPct: round(f.stopPct, 4),
+    return { overtimeMin: f.overtimeMin || 0, shiftMin: f.shiftMin || 600, boxesP10: f.boxes.p10, boxesP50: f.boxes.p50, boxesP90: f.boxes.p90, fillMin: f.fillMin, stopMin: f.stopMin, stopPct: round(f.stopPct, 4),
       workMin: f.workMin, changeType: f.changeType, changes: f.changes, changeMin: f.changeMin, cipMin: f.cipMin, prepMin: f.prepMin, prepBefore: f.prepBefore,
       routineMin: f.routineMin, deepMin: f.deepMin, machineMin: f.machineMin, finish: f.finish, batchesDone: f.batchesDone,
       batchesLeft: f.closingBatches ?? 0, closingBatches: f.closingBatches, openingBatches: f.openingBatches, closing: f.closing,

@@ -4,7 +4,7 @@
 <title>ATIC Line Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611051244">
+<link rel="stylesheet" href="css/app.css?v=202611070900">
 <style>
 
 .lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
@@ -349,14 +349,14 @@
 </main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611051244"></script>
-<script src="js/shell.js?v=202611051244"></script>
-<script src="js/backup.js?v=202611051244" defer></script>
-<script src="js/assistant.js?v=202611051244" defer></script>
-<script src="js/io.js?v=202611051244"></script>
-<script src="js/excel.js?v=202611051244"></script>
-<script src="js/word.js?v=202611051244"></script>
-<script src="js/line-engine.js?v=202611051244"></script>
+<script src="config.js?v=202611070900"></script>
+<script src="js/shell.js?v=202611070900"></script>
+<script src="js/backup.js?v=202611070900" defer></script>
+<script src="js/assistant.js?v=202611070900" defer></script>
+<script src="js/io.js?v=202611070900"></script>
+<script src="js/excel.js?v=202611070900"></script>
+<script src="js/word.js?v=202611070900"></script>
+<script src="js/line-engine.js?v=202611070900"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 // The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
@@ -466,7 +466,7 @@ function applySavedPlan() {
     const runs = pin.runs && pin.runs.length ? pin.runs : [{ product: pin.product, size: pin.size, batches: pin.batches, opening: 0, start: null, target: pin.targetBoxes }];
     i.runs = runs.map(r => ({ product: r.product, size: r.size, batches: r.batches ?? '', opening: r.opening ?? '', openingAuto: r.opening == null,
       startMode: r.start != null ? 'time' : 'after', startTime: r.start != null ? hhmm(r.start) : '', target: r.target ?? '' }));
-    i.targetOn = !!(pin.targetOn || runs.some(r => r.target > 0));
+    i.targetOn = !!(pin.targetOn || runs.some(r => r.target > 0)); i.overtime = !!pin.overtime;
     if (pin.prev) { i.prevProduct = pin.prev.product; i.prevSize = pin.prev.size; } else { i.prevProduct = ''; i.prevSize = ''; }
     i.prevAuto = false; i.prevSrc = 'From the saved forecast'; i.fromPlan = p.savedAt;
   }
@@ -480,6 +480,7 @@ function engineInput(sec) {
       return { product: r.product, size: r.size, batches: num(r.batches), opening: r.openingAuto ? (ao.chained ? null : ao.value) : (num(r.opening) ?? 0),
         start: r.startMode === 'time' ? ENGINE.parseHHMM(r.startTime) : null, target: i.targetOn && num(r.target) > 0 ? num(r.target) : null };
     }),
+    overtime: !!(i.targetOn && i.overtime),
   };
 }
 
@@ -501,6 +502,7 @@ function buildCards() {
         <div class="f w2"><label class="l" for="${sec}-pprod">Previous run (yesterday)</label><select id="${sec}-pprod"></select></div>
         <div class="f"><label class="l" for="${sec}-psize">Prev. size</label><select id="${sec}-psize"></select></div>
         <div class="f"><span class="l" id="${sec}-tgtl">Add a target?</span><div class="seg sm" id="${sec}-tgt" role="group" aria-labelledby="${sec}-tgtl"><button data-v="no">No</button><button data-v="yes">Yes</button></div></div>
+        <div class="f" id="${sec}-otw"><label class="l" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="${sec}-ot" style="width:16px;height:16px"> Finish the target today, even with overtime</label></div>
         <div class="prevsrc" id="${sec}-psrc"></div>
       </div>
       <div class="runs" id="${sec}-runs"></div>
@@ -512,6 +514,7 @@ function buildCards() {
     on(`${sec}-pprod`, 'change', e => { const i = S.inp[sec]; i.prevProduct = e.target.value; i.prevAuto = false; i.prevSrc = 'Set by you'; if (i.prevProduct && !P0.sizes[i.prevProduct].includes(i.prevSize)) i.prevSize = P0.sizes[i.prevProduct][0]; if (!i.prevProduct) i.prevSize = ''; update(); });
     on(`${sec}-psize`, 'change', e => { const i = S.inp[sec]; i.prevSize = e.target.value; i.prevAuto = false; i.prevSrc = 'Set by you'; update(); });
     on(`${sec}-tgt`, 'click', e => { const b = e.target.closest('button'); if (!b) return; S.inp[sec].targetOn = b.dataset.v === 'yes'; update(); });
+    on(`${sec}-ot`, 'change', e => { S.inp[sec].overtime = e.target.checked; update(); });
     on(`${sec}-add`, 'click', () => { const i = S.inp[sec], l = i.runs[i.runs.length - 1]; if (i.runs.length >= 6) return; const other = P0.sizes[l.product].find(z => z !== l.size); i.runs.push(newRun(l.product, other || l.size, 0)); i.runs[i.runs.length - 1].startMode = 'after'; update(); });
     on(`${sec}-save`, 'click', () => savePlan(sec));
     on(`${sec}-del`, 'click', () => deletePlan(sec));
@@ -563,6 +566,7 @@ function syncInputs() {
     setSel(`${sec}-psize`, i.prevProduct ? opts(sizeList(i.prevProduct), i.prevSize) : '<option value="">–</option>', i.prevProduct ? i.prevSize : '');
     $(`${sec}-psrc`).textContent = (i.prevAuto ? 'Previous run: ' : '') + i.prevSrc + (i.prevAuto ? '. Change it if you know better.' : '');
     $(`${sec}-tgt`).querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'yes') === i.targetOn));
+    $(`${sec}-otw`).style.display = i.targetOn ? '' : 'none'; $(`${sec}-ot`).checked = !!i.overtime;
     // rebuild the run blocks only when their structure changes, so typing keeps focus
     const box = $(`${sec}-runs`);
     const key = JSON.stringify([i.targetOn, i.runs.map(r => [r.product, r.startMode])]);
@@ -584,8 +588,9 @@ function syncInputs() {
   }
 }
 function miniBar(f) {
-  const marks = f.timeline.filter(x => x.g !== 'run').map(x => `<div style="left:${x.s / 6}%;width:${Math.max(x.d / 6, .3)}%;background:${COL[x.g]}"></div>`).join('');
-  const rb = f.runs.slice(1).map(r => `<div style="left:${r.start / 6}%;width:2px;background:rgba(255,255,255,.8)"></div>`).join('');
+  const SC = (f.shiftMin || 600) / 100;
+  const marks = f.timeline.filter(x => x.g !== 'run').map(x => `<div style="left:${x.s / SC}%;width:${Math.max(x.d / SC, .3)}%;background:${COL[x.g]}"></div>`).join('');
+  const rb = f.runs.slice(1).map(r => `<div style="left:${r.start / SC}%;width:2px;background:rgba(255,255,255,.8)"></div>`).join('');
   return `<div class="minibar" aria-hidden="true">${marks}${rb}</div>`;
 }
 function renderCards() {
@@ -611,7 +616,7 @@ function renderCards() {
         <div class="stats">
           <div class="stat"><span>Filling time</span><strong>${fmt(f.fillMin)} min</strong></div>
           <div class="stat"><span>Stoppage</span><strong>${fmt(f.stopMin)} min · ${pct(f.stopPct)}</strong></div>
-          <div class="stat"><span>Last box</span><strong>${f.finish}</strong></div>
+          <div class="stat"><span>Last box</span><strong>${f.finish}${f.overtimeMin ? ` <span class="tiny" style="color:#b45309">+${f.overtimeMin} min overtime</span>` : ''}</strong></div>
           <div class="stat"><span>Closing balance</span><strong>${f.closingBatches == null ? '–' : fmt1(f.closingBatches) + ' batches'}</strong></div>
         </div>
       </div>
@@ -673,7 +678,7 @@ async function savePlan(sec) {
   const doc = {
     kind: 'plan', schema: 2, date: S.date, sec, lot: ATIC.lot(S.date),
     inputs: { product: r0.product, size: r0.size, batches: f.batches, targetBoxes: f.target, // round-1 fields, kept so older readers still work
-      prev: inp.prev, prevSource: i.prevSrc, targetOn: i.targetOn,
+      prev: inp.prev, prevSource: i.prevSrc, targetOn: i.targetOn, overtime: !!inp.overtime,
       runs: inp.runs.map((r, k) => ({ product: r.product, size: r.size, batches: r.batches, opening: r.opening == null ? null : r.opening, openingResolved: f.runs[k].opening, start: r.start, target: r.target })) },
     out: { ...ENGINE.planSummary(f), timeline: f.timeline.map(x => [x.s, x.d, x.cat, x.run]) },
     why: f.why.map(w => w.t),
