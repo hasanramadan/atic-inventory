@@ -8,6 +8,7 @@
     { key: 'supply', href: 'supply.html', label: 'Supply Planner', more: true },
     { key: 'model', href: 'model.html', label: 'ATIC BETA 2.0', tag: '3D', more: true },
     { key: 'team', href: 'team.html', label: 'Team', icon: 'msg' },
+    { key: 'settings', href: 'materials.html?set=1#recipes', label: 'Settings' },
     { key: 'admin', href: 'admin.html', label: 'Admin' }
   ];
   var ROLE = { admin: 'Admin', editor: 'Can edit', viewer: 'View only' };
@@ -59,8 +60,8 @@
     var moreOpen = false; try { moreOpen = localStorage.getItem('atic.more') === '1'; } catch (e) {}
     var list = A.area === 'production' ? ordered(p) : [], main = list.filter(function (x) { return !x.more; }), more = list.filter(function (x) { return x.more; });
     if (more.some(function (x) { return x.key === A.page; })) moreOpen = true;
-    var ordered2 = main.filter(function (x) { return x.key !== 'team' && x.key !== 'admin'; }).concat(main.filter(function (x) { return x.key === 'team'; }));
-    var tailAdmin = main.filter(function (x) { return x.key === 'admin'; });
+    var ordered2 = main.filter(function (x) { return x.key !== 'team' && x.key !== 'admin' && x.key !== 'settings'; }).concat(main.filter(function (x) { return x.key === 'team'; }));
+    var tailAdmin = main.filter(function (x) { return x.key === 'settings'; }).concat(main.filter(function (x) { return x.key === 'admin'; }));
     var drawPart = function (x) {
       var on = x.key === A.page;
       h += '<div class="part"><a class="p' + (x.icon ? ' ic' : '') + '" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + (x.icon === 'msg' ? ICON_MSG : '') + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + (x.key === 'team' ? ' <span class="badge" id="teamBadge" hidden></span>' : '') + '</a>' + (on && A.subs.length ? '<button type="button" class="chev" id="railChev" aria-label="' + (subsClosed() ? 'Show' : 'Hide') + ' the sections of ' + esc(x.label) + '" aria-expanded="' + !subsClosed() + '">' + (subsClosed() ? '▸' : '▾') + '</button>' : '');

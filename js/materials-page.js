@@ -322,11 +322,15 @@ function fileBtn(id, label) { return '<label class="btn" for="' + id + '" style=
 
 /* ---------- start ---------- */
 (async function () {
-  A = await ATIC.boot({ page: 'materials', subs: [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'daily', label: 'Daily consumption' }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }] });
+  var ALLSUBS = [{ id: 'overview', label: 'Overview', badge: ' ', badgeHidden: true }, { id: 'forecast', label: 'Forecast & plan' }, { id: 'recipes', label: 'Recipes' }, { id: 'inventory', label: 'Inventory', badge: ' ', badgeHidden: true }, { id: 'daily', label: 'Daily consumption' }, { id: 'stock', label: 'Stock & lead times' }, { id: 'orders', label: 'Orders & receiving' }, { id: 'alerts', label: 'Email alerts' }, { id: 'history', label: 'History' }];
+  var SETV = ['recipes', 'stock', 'alerts', 'history'], h0 = location.hash.slice(1);
+  window.ATIC_MAT_SET = /[?&]set=1/.test(location.search) || SETV.indexOf(h0) >= 0;
+  A = await ATIC.boot({ page: window.ATIC_MAT_SET ? 'settings' : 'materials', subs: ALLSUBS.filter(function (x) { return (SETV.indexOf(x.id) >= 0) === window.ATIC_MAT_SET; }) });
+  window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (!h || h === 'material') return; var inSet = SETV.indexOf(h) >= 0; if (inSet !== window.ATIC_MAT_SET) location.href = 'materials.html' + (inSet ? '?set=1' : '') + '#' + h; }, true);
   if (!A) return;
   S.profile = A.profile; S.canWrite = A.canWrite;
   try { var acts = await A.planner.list('actuals'); buildLP(acts.map(function (x) { return x.data; })); } catch (e) { /* no Line Planner access: forecast uses plan / average pace */ }
-  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'daily', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h;
+  var h = location.hash.slice(1); if (['overview', 'forecast', 'recipes', 'inventory', 'daily', 'stock', 'orders', 'alerts', 'history'].indexOf(h) >= 0) S.view = h; if (window.ATIC_MAT_SET && ['recipes', 'stock', 'alerts', 'history'].indexOf(S.view) < 0) S.view = 'recipes';
   await loadDocs();
   if (!S.channel) S.channel = A.docs.subscribe(function () { loadDocs(); });
 })();
