@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611080930">
+<link rel="stylesheet" href="css/app.css?v=202611080935">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -29,6 +29,21 @@
 .pill.r{background:var(--red-soft);color:var(--red)}.pill.a{background:var(--amber-soft);color:var(--amber)}.pill.g{background:var(--green-soft);color:var(--green)}
 .more{font-size:13px;color:var(--muted);margin-top:10px}.more a{color:var(--brand);font-weight:600}
 .empty{color:var(--muted);font-size:14px}
+.mgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mc{border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;background:var(--surface)}
+.mc.r{border-left:4px solid var(--red)}.mc.a{border-left:4px solid var(--amber)}.mc.g{border-left:4px solid var(--green)}
+.mh{display:flex;justify-content:space-between;align-items:center;gap:8px}.mh b{font:600 16px var(--f-display)}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.flow>div{display:flex;flex-direction:column;background:var(--surface-2);border-radius:10px;padding:8px 10px;min-width:92px;flex:1}
+.flow>div span{font-size:11.5px;color:var(--muted)}.flow>div b{font:600 19px var(--f-mono)}.flow>div small{font-size:11.5px;color:var(--muted)}
+.flow>div.now{background:var(--brand);color:var(--brand-ink)}.flow>div.now span,.flow>div.now small{color:inherit;opacity:.8}
+.flow i{font-style:normal;color:var(--muted);font-weight:600}
+.mf{display:flex;flex-direction:column;gap:3px;font-size:13px}.mf small{color:var(--muted)}.muted{color:var(--muted)}
+details.allm,details.how{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+details.allm summary,details.how summary{cursor:pointer;font-weight:600;color:var(--brand)}
+details.how ol{font-size:13.5px;padding-left:20px;display:flex;flex-direction:column;gap:5px;margin:10px 0 0}
+details.allm .mgrid{margin-top:12px}
+@media (max-width:860px){.mgrid{grid-template-columns:1fr}}
 @media (max-width:860px){.secs{grid-template-columns:1fr}.tbl{font-size:13.5px}}
 </style>
 </head><body>
@@ -36,14 +51,14 @@
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611080930"></script>
-<script src="js/shell.js?v=202611080930"></script>
-<script src="js/backup.js?v=202611080930" defer></script>
-<script src="js/assistant.js?v=202611080930" defer></script>
-<script src="js/io.js?v=202611080930"></script>
-<script src="js/line-engine.js?v=202611080930"></script>
-<script src="js/materials-engine.js?v=202611080930"></script>
-<script src="js/supply-engine.js?v=202611080930"></script>
+<script src="config.js?v=202611080935"></script>
+<script src="js/shell.js?v=202611080935"></script>
+<script src="js/backup.js?v=202611080935" defer></script>
+<script src="js/assistant.js?v=202611080935" defer></script>
+<script src="js/io.js?v=202611080935"></script>
+<script src="js/line-engine.js?v=202611080935"></script>
+<script src="js/materials-engine.js?v=202611080935"></script>
+<script src="js/supply-engine.js?v=202611080935"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -117,24 +132,46 @@ function materials() {
     return Math.max(0, (Number(st.qty) || 0) + rec - used);
   }
   function outNoDelivery(r) { var cum = 0, act = null; (r.daily || []).forEach(function (x) { if (x.date < TODAY) return; cum += Number(x.received) || 0; if (act === null && r.weekly > 0 && x.closing - cum <= 0) act = x.date; }); return act; }
-  var lim = SP.util.addDays(TODAY, 30);
-  var rows = fc.results.filter(function (r) { return r.active && r.weekly > 0; }).map(function (r) { return { r: r, out: outNoDelivery(r) }; })
-    .filter(function (x) { return x.out && x.out <= lim; }).sort(function (a, b) { return a.out < b.out ? -1 : 1; });
-  var fine = fc.results.filter(function (r) { return r.active; }).length - rows.length;
-  var h = '<div class="card"><div class="ch"><h2>Raw materials · need attention</h2><span class="tag">Running out in the next 30 days</span></div>';
-  if (!rows.length) h += '<p class="empty">Nothing runs out in the next 30 days.</p>';
-  else {
-    h += '<table class="tbl"><thead><tr><th>Material</th><th class="n">Left now</th><th>Runs out</th><th>Next delivery</th><th>Order</th></tr></thead><tbody>';
-    rows.forEach(function (x) {
-      var r = x.r, cls = x.out <= SP.util.addDays(TODAY, 7) ? 'r' : 'a';
-      var due = (r.openOrders || []).filter(function (o) { return o.qty > 0 && o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
-      var nx = due.filter(function (o) { return o.eta >= TODAY; })[0], late = due.filter(function (o) { return o.eta < TODAY; })[0];
-      h += '<tr><td><b>' + esc(r.name) + '</b></td><td class="n">' + fmtq(leftNow(r)) + ' ' + esc(r.unit) + '</td><td><span class="pill ' + cls + '">' + nice(x.out) + '</span>' + (r.runOut !== x.out && nx ? '<div class="small muted">' + (r.runOut ? nice(r.runOut) : 'after 26 weeks') + ' if it arrives</div>' : '') + '</td>' +
-        '<td class="small">' + (nx ? '+' + fmtq(nx.qty) + ' ' + esc(r.unit) + ' on ' + nice(nx.eta) : late ? '<span class="dn">late · was due ' + nice(late.eta) + '</span>' : '<span class="dn">none on order</span>') + '</td><td class="small">' + (r.status === 'order' ? '<b class="dn">Order now</b>' : r.orderBy ? 'By ' + nice(r.orderBy) : '–') + '</td></tr>';
-    });
-    h += '</tbody></table>';
+  function nums(r) {
+    var st = fc.model && fc.model.stock && fc.model.stock[r.id]; if (!st || st.qty == null || !st.asOf) return null;
+    var used = r.usedSinceCount || 0, ws = r.weeks && r.weeks[0] ? r.weeks[0].start : null;
+    (r.daily || []).forEach(function (x) { if (x.date > st.asOf && x.date <= cut && (!ws || x.date >= ws)) used += x.use; });
+    var rec = 0; evs.forEach(function (o) { if (o.material === r.id && o.received && o.eta > st.asOf && o.eta <= cut) rec += Number(o.qty) || 0; });
+    return { counted: Number(st.qty) || 0, asOf: st.asOf, used: used, rec: rec, left: Math.max(0, (Number(st.qty) || 0) + rec - used) };
   }
-  h += '<div class="more">' + (fine ? fine + ' other materials are fine · ' : '') + link('materials', 'materials.html#overview', 'Show all materials →') + '</div>';
+  var lastDay = Object.keys(D.lpDays).filter(function (d) { return d <= TODAY; }).sort().pop();
+  var lim = SP.util.addDays(TODAY, 30);
+  var all = fc.results.filter(function (r) { return r.active; }).map(function (r) { return { r: r, out: outNoDelivery(r), n: nums(r) }; })
+    .sort(function (a, b) { return (a.out || '9999') < (b.out || '9999') ? -1 : (a.out || '9999') > (b.out || '9999') ? 1 : a.r.name.localeCompare(b.r.name); });
+  var urgent = all.filter(function (x) { return x.r.weekly > 0 && x.out && x.out <= lim; });
+  function card(x) {
+    var r = x.r, n = x.n, u = esc(r.unit), cls = x.out && x.out <= SP.util.addDays(TODAY, 7) ? 'r' : x.out && x.out <= lim ? 'a' : 'g';
+    var due = (r.openOrders || []).filter(function (o) { return o.qty > 0 && o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
+    var nx = due.filter(function (o) { return o.eta >= TODAY; })[0], late = due.filter(function (o) { return o.eta < TODAY; })[0];
+    var dl = lastDay && (r.daily || []).filter(function (d) { return d.date === lastDay; })[0];
+    var by = dl && dl.by ? Object.keys(dl.by).filter(function (k) { return dl.by[k] > 1e-9; }).map(function (k) { return pname(k.split('|')[0]) + ' ' + fmtq(dl.by[k]); }).join(' · ') : '';
+    var h = '<div class="mc ' + cls + '"><div class="mh"><b>' + esc(r.name) + '</b><span class="pill ' + cls + '">' + (x.out ? 'Runs out ' + nice(x.out) : 'Lasts 26+ weeks') + '</span></div>';
+    if (n) h += '<div class="flow"><div><span>Official count</span><b>' + fmtq(n.counted) + '</b><small>' + u + ' · ' + nice(n.asOf) + '</small></div><i>−</i>' +
+      '<div><span>Used since (est.)</span><b>' + fmtq(n.used) + '</b><small>' + u + '</small></div>' + (n.rec ? '<i>+</i><div><span>Received</span><b>' + fmtq(n.rec) + '</b><small>' + u + '</small></div>' : '') +
+      '<i>=</i><div class="now"><span>Left now (est.)</span><b>' + fmtq(n.left) + '</b><small>' + u + '</small></div></div>';
+    h += '<div class="mf"><span>' + (lastDay ? 'Used on ' + nice(lastDay) + ': <b>' + fmtq(dl ? dl.use : 0) + ' ' + u + '</b>' + (by ? ' <small>(' + esc(by) + ')</small>' : '') : '') + '</span>' +
+      '<span>' + (nx ? 'Delivery <b>+' + fmtq(nx.qty) + ' ' + u + '</b> on ' + nice(nx.eta) + (r.runOut && r.runOut !== x.out ? ' → lasts to ' + nice(r.runOut) : '') : late ? '<span class="dn">Delivery late · was due ' + nice(late.eta) + '</span>' : '<span class="muted">No delivery on order</span>') + '</span>' +
+      '<span>' + (r.status === 'order' ? '<b class="dn">Order now</b>' : r.orderBy ? 'Order by ' + nice(r.orderBy) : '') + '</span></div>';
+    return h + '</div>';
+  }
+  var h = '<div class="card" id="mats"><div class="ch"><h2>Raw materials</h2><span class="tag">' + (urgent.length ? urgent.length + ' run out in the next 30 days' : 'Nothing runs out in the next 30 days') + '</span></div>';
+  h += '<div class="mgrid">' + (urgent.length ? urgent : all.slice(0, 4)).map(card).join('') + '</div>';
+  var rest = all.filter(function (x) { return urgent.indexOf(x) < 0; });
+  if (rest.length) h += '<details class="allm"><summary>Show the other ' + rest.length + ' materials</summary><div class="mgrid">' + rest.map(card).join('') + '</div></details>';
+  h += '<details class="how"><summary>How are these numbers worked out?</summary><ol>' +
+    '<li><b>Official count.</b> The last stock count on the Inventory page, with its date. This is the only real number.</li>' +
+    '<li><b>Used since (estimated).</b> For every day after the count: the batches made that day (from the Line Planner actuals; the factory plan for days not entered yet) × each product\'s recipe. Corrections typed on Daily consumption replace the estimate for that day.</li>' +
+    '<li><b>Received.</b> Deliveries marked received on Orders &amp; receiving after the count.</li>' +
+    '<li><b>Left now.</b> Official count − used since + received.</li>' +
+    '<li><b>Runs out.</b> The factory plan, day by day, × the recipes, taken from what is left now, without counting deliveries. If a delivery is on order, the date it lasts to with that delivery is shown too.</li>' +
+    '<li><b>Order by.</b> The run-out date minus the supplier\'s lead time and the safety stock. When that date has passed, it says Order now.</li>' +
+    '<li><b>Learning.</b> Each new official count is compared with the estimate; if the line always uses more or less than the recipe says, the forecast adjusts (shown on each material as "Learned from counts").</li></ol></details>';
+  h += '<div class="more">' + link('materials', 'materials.html#overview', 'Open Raw Materials →') + '</div>';
   return h + '</div>';
 }
 function render() {
