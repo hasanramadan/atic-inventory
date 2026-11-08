@@ -31,7 +31,8 @@ function evalFormula(expr,vars){
 function locked(s){const ss=s&&S.sessions[s.sessionId];return !!(ss&&ss.validated&&!isDoctor())}
 function isFri(d){return new Date(d+'T00:00:00Z').getUTCDay()===5}
 function offFri(d){return isFri(d)?addDays(d,1):d}
-function readDay(s,t){return offFri(addDays(s.microDate||s.date,Number(t.incubDays)||0))}
+function microStart(s,t){return (s.microStart&&s.microStart[t.id])||s.microDate||s.date}
+function readDay(s,t){return offFri(addDays(microStart(s,t),Number(t.incubDays)||0))}
 function needsPE(p){const c=catOfP(p);return c==='product'||c==='raw'}
 function logAct(txt){if(!S.me)return;const id=uid('a');const v={at:Date.now(),by:S.me.id,txt};S.acts=S.acts||{};S.acts[id]=v;S.db.doc('activity/'+id).set(v).catch(()=>{})}
 function freezeSample(x){const p=product(x.productId);(p&&p.tests||[]).forEach(t=>{const r=(x.results||{})[t.id];if(!r||r.kf)return;const k=constSnap(t);if(k){r.k=k}r.kf=true})}
@@ -405,7 +406,7 @@ function sampleForm(s,p,ss){
   const groups=[['chem','Chemical'],['org','Organoleptic'],['micro','Microbiology']];
   if(testsOf(p,'micro').length&&testsOf(p).some(t=>t.kind!=='micro'))h+=kindBar();
   groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length||!kindOk({kind:k}))return;
-    h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?(microCode(s)!==s.code?'<span class="pill acc">For '+esc(microCode(s))+'</span> ':'')+'<label class="row small">Micro started on <input type="date" id="sm-mdate" value="'+esc(s.microDate||s.date)+'"'+(lockedT(s,{kind:'chem'})&&!isDoctor()?' disabled':'')+'></label>':'')+'</div>';
+    h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?(microCode(s)!==s.code?'<span class="pill acc">For '+esc(microCode(s))+'</span> ':'')+'<label class="row small">All micro started on <input type="date" id="sm-mdate" value="'+esc(s.microDate||s.date)+'"'+(lockedT(s,{kind:'chem'})&&!isDoctor()?' disabled':'')+'></label>':'')+'</div>';
     ts.forEach(t=>h+=testRow(s,t))});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
   if(!s.testedBy&&!isAdmin()&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
@@ -420,7 +421,7 @@ function testRow(s,t){
   let h='<div class="test" data-test="'+t.id+'"><div><b>'+esc(t.name)+'</b>'+(t.optional?' <span class="pill">'+esc(t.freq||'optional')+'</span>':'')+
     '<div class="small muted">'+esc([t.method,t.solution].filter(Boolean).join(' · '))+'</div>'+
     ((t.consts||[]).length?'<div class="small muted mono">'+t.consts.map(c=>{const x=c.sol&&solOf(c.sol);return x?'<span class="solchip">'+esc(x.name)+' '+esc(String(constVal(c,resultOf(s,t).kf?resultOf(s,t).k:null)))+' '+esc(x.unit||'N')+'</span>':esc(c.label||c.key)+' '+esc(c.value)}).join(' · ')+'</div>':'')+
-    (t.kind==='micro'&&t.incubDays?'<div class="small muted">Read on '+niceDate(readDay(s,t))+'</div>':'')+'</div><div>';
+    (t.kind==='micro'&&t.incubDays?'<div class="small muted"><label class="row" style="display:inline-flex;gap:6px">Started <input type="date" class="mstart" data-mst="'+t.id+'" value="'+esc(microStart(s,t))+'"'+(lockedT(s,t)?' disabled':'')+'></label> · read on '+niceDate(readDay(s,t))+'</div>':'')+'</div><div>';
   if(t.kind==='org'){
     h+='<div class="ins"><label>Result<select data-org="'+t.id+'"><option value="">–</option>'+['Acceptable','Not acceptable'].map(o=>'<option'+(r.value===o?' selected':'')+'>'+o+'</option>').join('')+'</select></label><label style="flex:1">Comment<input data-orgc="'+t.id+'" value="'+esc(r.comment||'')+'" style="width:100%"></label></div>';
     if(r.value==='Not acceptable')h+='<div class="outs"><span class="out bad">Not acceptable</span></div>';
@@ -499,7 +500,8 @@ function bindSession(){
   document.querySelectorAll('[data-org]').forEach(sel=>sel.onchange=()=>{s.results=s.results||{};const r=s.results[sel.dataset.org]=s.results[sel.dataset.org]||{};r.value=sel.value;r.by=S.me.id;r.at=Date.now();live(sel.dataset.org,'result');saveSample(s);S.dirty=true});
   document.querySelectorAll('[data-orgc]').forEach(inp=>inp.addEventListener('input',()=>{s.results=s.results||{};const r=s.results[inp.dataset.orgc]=s.results[inp.dataset.orgc]||{};r.comment=inp.value;live(inp.dataset.orgc,'comment');liveSave(s)}));
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
-  const md=$('#sm-mdate');md&&(md.onchange=()=>{s.microDate=md.value&&md.value!==s.date?md.value:'';saveSample(s);render();toast('Micro read dates updated')});
+  document.querySelectorAll('[data-mst]').forEach(i=>i.onchange=()=>{s.microStart=Object.assign({},s.microStart,{[i.dataset.mst]:i.value});saveSample(s);render();toast('Start date saved · read date updated')});
+  const md=$('#sm-mdate');md&&(md.onchange=()=>{s.microDate=md.value&&md.value!==s.date?md.value:'';s.microStart={};saveSample(s);render();toast('Micro read dates updated')});
   document.querySelectorAll('[data-pe]').forEach(i=>i.onchange=()=>{s[i.dataset.pe]=i.value;saveSample(s);toast('Saved · next samples use this date')});
   const tb=$('#sm-taken');tb&&(tb.onchange=()=>{s.takenBy=tb.value;saveSample(s)});
   const bt=$('#sm-batch');bt.addEventListener('input',()=>{s.batch=bt.value.trim();liveSave(s)});
