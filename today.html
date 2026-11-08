@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611080927">
+<link rel="stylesheet" href="css/app.css?v=202611080930">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -36,14 +36,14 @@
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611080927"></script>
-<script src="js/shell.js?v=202611080927"></script>
-<script src="js/backup.js?v=202611080927" defer></script>
-<script src="js/assistant.js?v=202611080927" defer></script>
-<script src="js/io.js?v=202611080927"></script>
-<script src="js/line-engine.js?v=202611080927"></script>
-<script src="js/materials-engine.js?v=202611080927"></script>
-<script src="js/supply-engine.js?v=202611080927"></script>
+<script src="config.js?v=202611080930"></script>
+<script src="js/shell.js?v=202611080930"></script>
+<script src="js/backup.js?v=202611080930" defer></script>
+<script src="js/assistant.js?v=202611080930" defer></script>
+<script src="js/io.js?v=202611080930"></script>
+<script src="js/line-engine.js?v=202611080930"></script>
+<script src="js/materials-engine.js?v=202611080930"></script>
+<script src="js/supply-engine.js?v=202611080930"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -108,18 +108,29 @@ function materials() {
   if (!D.docs.baseline) return '';
   var fc;
   try { fc = ME.forecast(D.docs.baseline, { materials: D.docs.materials, recipes: D.docs.recipes, stock: D.docs.stock, plan: D.docs.plan, orders: (D.docs.orders && D.docs.orders.items) || [], settings: D.docs.settings, actualDays: D.lpDays, actualSections: D.lpSecs }, TODAY); } catch (e) { return ''; }
-  var used = function (r) { return r.weekly > 0 || (r.perDay > 0); };
-  var att = fc.results.filter(function (r) { return r.active && used(r) && (r.status === 'order' || r.status === 'soon'); }).sort(function (a, b) { return (a.runOut || '9999') < (b.runOut || '9999') ? -1 : 1; });
-  var fine = fc.results.filter(function (r) { return r.active && att.indexOf(r) < 0; }).length;
-  var h = '<div class="card"><div class="ch"><h2>Raw materials · need attention</h2><span class="tag">Forecast from the last count, deliveries and the plan</span></div>';
-  if (!att.length) h += '<p class="empty">Everything lasts beyond the order dates.</p>';
+  var cut = D.lpDays[TODAY] ? TODAY : SP.util.addDays(TODAY, -1), evs = ME.orderEvents ? ME.orderEvents((D.docs.orders && D.docs.orders.items) || []) : [];
+  function leftNow(r) {
+    var st = fc.model && fc.model.stock && fc.model.stock[r.id]; if (!st || st.qty == null || !st.asOf) return r.stockNow;
+    var used = r.usedSinceCount || 0, ws = r.weeks && r.weeks[0] ? r.weeks[0].start : null;
+    (r.daily || []).forEach(function (x) { if (x.date > st.asOf && x.date <= cut && (!ws || x.date >= ws)) used += x.use; });
+    var rec = 0; evs.forEach(function (o) { if (o.material === r.id && o.received && o.eta > st.asOf && o.eta <= cut) rec += Number(o.qty) || 0; });
+    return Math.max(0, (Number(st.qty) || 0) + rec - used);
+  }
+  function outNoDelivery(r) { var cum = 0, act = null; (r.daily || []).forEach(function (x) { if (x.date < TODAY) return; cum += Number(x.received) || 0; if (act === null && r.weekly > 0 && x.closing - cum <= 0) act = x.date; }); return act; }
+  var lim = SP.util.addDays(TODAY, 30);
+  var rows = fc.results.filter(function (r) { return r.active && r.weekly > 0; }).map(function (r) { return { r: r, out: outNoDelivery(r) }; })
+    .filter(function (x) { return x.out && x.out <= lim; }).sort(function (a, b) { return a.out < b.out ? -1 : 1; });
+  var fine = fc.results.filter(function (r) { return r.active; }).length - rows.length;
+  var h = '<div class="card"><div class="ch"><h2>Raw materials · need attention</h2><span class="tag">Running out in the next 30 days</span></div>';
+  if (!rows.length) h += '<p class="empty">Nothing runs out in the next 30 days.</p>';
   else {
     h += '<table class="tbl"><thead><tr><th>Material</th><th class="n">Left now</th><th>Runs out</th><th>Next delivery</th><th>Order</th></tr></thead><tbody>';
-    att.forEach(function (r) {
-      var soon = r.runOut && r.runOut <= SP.util.addDays(TODAY, 7), cls = soon ? 'r' : 'a';
-      var nx = (r.openOrders || []).filter(function (o) { return o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; })[0];
-      h += '<tr><td><b>' + esc(r.name) + '</b></td><td class="n">' + fmtq(r.stockNow) + ' ' + esc(r.unit) + '</td><td><span class="pill ' + cls + '">' + (r.runOut ? nice(r.runOut) : 'not in 26 weeks') + '</span></td>' +
-        '<td class="small">' + (nx ? '+' + fmtq(nx.qty) + ' on ' + nice(nx.eta) : '<span class="dn">none on order</span>') + '</td><td class="small">' + (r.status === 'order' ? '<b class="dn">Order now</b>' : 'By ' + nice(r.orderBy)) + '</td></tr>';
+    rows.forEach(function (x) {
+      var r = x.r, cls = x.out <= SP.util.addDays(TODAY, 7) ? 'r' : 'a';
+      var due = (r.openOrders || []).filter(function (o) { return o.qty > 0 && o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
+      var nx = due.filter(function (o) { return o.eta >= TODAY; })[0], late = due.filter(function (o) { return o.eta < TODAY; })[0];
+      h += '<tr><td><b>' + esc(r.name) + '</b></td><td class="n">' + fmtq(leftNow(r)) + ' ' + esc(r.unit) + '</td><td><span class="pill ' + cls + '">' + nice(x.out) + '</span>' + (r.runOut !== x.out && nx ? '<div class="small muted">' + (r.runOut ? nice(r.runOut) : 'after 26 weeks') + ' if it arrives</div>' : '') + '</td>' +
+        '<td class="small">' + (nx ? '+' + fmtq(nx.qty) + ' ' + esc(r.unit) + ' on ' + nice(nx.eta) : late ? '<span class="dn">late · was due ' + nice(late.eta) + '</span>' : '<span class="dn">none on order</span>') + '</td><td class="small">' + (r.status === 'order' ? '<b class="dn">Order now</b>' : r.orderBy ? 'By ' + nice(r.orderBy) : '–') + '</td></tr>';
     });
     h += '</tbody></table>';
   }
