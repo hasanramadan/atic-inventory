@@ -57,7 +57,8 @@
     var p = A.profile, cur = curSub();
     var h = '<div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>' + (A.area === 'production' ? 'Planning &amp; forecasting' : esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '')) + '</small></div></div><nav id="shellNav" aria-label="Sections">';
     var moreOpen = false; try { moreOpen = localStorage.getItem('atic.more') === '1'; } catch (e) {}
-    var list = A.area === 'production' ? ordered(p) : [], main = list.filter(function (x) { return !x.more || x.key === A.page; }), more = list.filter(function (x) { return x.more && x.key !== A.page; });
+    var list = A.area === 'production' ? ordered(p) : [], main = list.filter(function (x) { return !x.more; }), more = list.filter(function (x) { return x.more; });
+    if (more.some(function (x) { return x.key === A.page; })) moreOpen = true;
     var ordered2 = main.filter(function (x) { return x.key !== 'team' && x.key !== 'admin'; }).concat(main.filter(function (x) { return x.key === 'team'; }));
     var tailAdmin = main.filter(function (x) { return x.key === 'admin'; });
     var drawPart = function (x) {

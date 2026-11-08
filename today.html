@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611080937">
+<link rel="stylesheet" href="css/app.css?v=202611080943">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -38,6 +38,7 @@
 .flow>div span{font-size:11.5px;color:var(--muted)}.flow>div b{font:600 19px var(--f-mono)}.flow>div small{font-size:11.5px;color:var(--muted)}
 .flow>div.now{background:var(--brand);color:var(--brand-ink)}.flow>div.now span,.flow>div.now small{color:inherit;opacity:.8}
 .flow i{font-style:normal;color:var(--muted);font-weight:600}
+.dv{display:block;padding:3px 8px;border-radius:8px;margin:2px 0;font-size:12.5px}.dv.ok{background:var(--green-soft);color:var(--green)}.dv.late{background:var(--red-soft);color:var(--red);font-weight:600}.dv.wait{background:var(--surface-2)}
 .mf{display:flex;flex-direction:column;gap:3px;font-size:13px}.mf small{color:var(--muted)}.muted{color:var(--muted)}
 details.allm,details.how{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 details.allm summary,details.how summary{cursor:pointer;font-weight:600;color:var(--brand)}
@@ -51,14 +52,14 @@ details.allm .mgrid{margin-top:12px}
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611080937"></script>
-<script src="js/shell.js?v=202611080937"></script>
-<script src="js/backup.js?v=202611080937" defer></script>
-<script src="js/assistant.js?v=202611080937" defer></script>
-<script src="js/io.js?v=202611080937"></script>
-<script src="js/line-engine.js?v=202611080937"></script>
-<script src="js/materials-engine.js?v=202611080937"></script>
-<script src="js/supply-engine.js?v=202611080937"></script>
+<script src="config.js?v=202611080943"></script>
+<script src="js/shell.js?v=202611080943"></script>
+<script src="js/backup.js?v=202611080943" defer></script>
+<script src="js/assistant.js?v=202611080943" defer></script>
+<script src="js/io.js?v=202611080943"></script>
+<script src="js/line-engine.js?v=202611080943"></script>
+<script src="js/materials-engine.js?v=202611080943"></script>
+<script src="js/supply-engine.js?v=202611080943"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -147,6 +148,16 @@ function materials() {
   var all = fc.results.filter(function (r) { return r.active; }).map(function (r) { return { r: r, out: outNoDelivery(r), n: nums(r) }; })
     .sort(function (a, b) { return (a.out || '9999') < (b.out || '9999') ? -1 : (a.out || '9999') > (b.out || '9999') ? 1 : a.r.name.localeCompare(b.r.name); });
   var urgent = all.filter(function (x) { return x.r.weekly > 0 && x.out && x.out <= lim; });
+  function delivHTML(r, due, u, out) {
+    var recent = evs.filter(function (o) { return o.material === r.id && o.received && o.eta >= SP.util.addDays(TODAY, -7) && o.eta <= TODAY; }).sort(function (a, b) { return a.eta < b.eta ? 1 : -1; })[0];
+    var parts = [];
+    if (recent) parts.push('<span class="dv ok">✓ Received +' + fmtq(recent.qty) + ' ' + u + ' on ' + nice(recent.eta) + '</span>');
+    due.filter(function (o) { return o.eta < TODAY; }).forEach(function (o) { parts.push('<span class="dv late">Not received · +' + fmtq(o.qty) + ' ' + u + ' was due ' + nice(o.eta) + ' (delayed)</span>'); });
+    var nx = due.filter(function (o) { return o.eta >= TODAY; })[0];
+    if (nx) parts.push('<span class="dv wait">Expected +' + fmtq(nx.qty) + ' ' + u + ' on ' + nice(nx.eta) + ' · not received yet' + (r.runOut && r.runOut !== out ? ', would last to ' + nice(r.runOut) : '') + '</span>');
+    if (!parts.length) parts.push('<span class="muted">No delivery on order</span>');
+    return parts.join('');
+  }
   function card(x) {
     var r = x.r, n = x.n, u = esc(r.unit), cls = x.out && x.out <= SP.util.addDays(TODAY, 7) ? 'r' : x.out && x.out <= lim ? 'a' : 'g';
     var due = (r.openOrders || []).filter(function (o) { return o.qty > 0 && o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
@@ -158,7 +169,7 @@ function materials() {
       '<div><span>Used since (est.)</span><b>' + fmtq(n.used) + '</b><small>' + u + '</small></div>' + (n.rec ? '<i>+</i><div><span>Received</span><b>' + fmtq(n.rec) + '</b><small>' + u + '</small></div>' : '') +
       '<i>=</i><div class="now"><span>Left now (est.)</span><b>' + fmtq(n.left) + '</b><small>' + u + '</small></div></div>';
     h += '<div class="mf"><span>' + (lastDay ? 'Used on ' + nice(lastDay) + ': <b>' + fmtq(dl ? dl.use : 0) + ' ' + u + '</b>' + (by ? ' <small>(' + esc(by) + ')</small>' : '') : '') + '</span>' +
-      '<span>' + (nx ? 'Delivery <b>+' + fmtq(nx.qty) + ' ' + u + '</b> on ' + nice(nx.eta) + (r.runOut && r.runOut !== x.out ? ' → lasts to ' + nice(r.runOut) : '') : late ? '<span class="dn">Delivery late · was due ' + nice(late.eta) + '</span>' : '<span class="muted">No delivery on order</span>') + '</span>' +
+      '<span class="dlv">' + delivHTML(r, due, u, x.out) + '</span>' +
       '<span>' + (r.status === 'order' ? '<b class="dn">Order now</b>' : r.orderBy ? 'Order by ' + nice(r.orderBy) : '') + '</span></div>';
     return h + '</div>';
   }
@@ -169,7 +180,7 @@ function materials() {
   h += '<details class="how"><summary>How are these numbers worked out?</summary><ol>' +
     '<li><b>Official count.</b> The last stock count on the Inventory page, with its date. This is the only real number.</li>' +
     '<li><b>Used since (estimated).</b> For every day after the count: the batches made that day (from the Line Planner actuals; the factory plan for days not entered yet) × each product\'s recipe. Corrections typed on Daily consumption replace the estimate for that day.</li>' +
-    '<li><b>Received.</b> Deliveries marked received on Orders &amp; receiving after the count.</li>' +
+    '<li><b>Received.</b> Only deliveries marked received on Orders &amp; receiving are added to the stock. An expected delivery is shown but not added until someone marks it received; if its date passes without that, it shows as delayed.</li>' +
     '<li><b>Left now.</b> Official count − used since + received.</li>' +
     '<li><b>Runs out.</b> The factory plan, day by day, × the recipes, taken from what is left now, without counting deliveries. If a delivery is on order, the date it lasts to with that delivery is shown too.</li>' +
     '<li><b>Order by.</b> The run-out date minus the supplier\'s lead time and the safety stock. When that date has passed, it says Order now.</li>' +
