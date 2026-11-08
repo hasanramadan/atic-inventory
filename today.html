@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611080943">
+<link rel="stylesheet" href="css/app.css?v=202611080944">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -52,14 +52,14 @@ details.allm .mgrid{margin-top:12px}
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611080943"></script>
-<script src="js/shell.js?v=202611080943"></script>
-<script src="js/backup.js?v=202611080943" defer></script>
-<script src="js/assistant.js?v=202611080943" defer></script>
-<script src="js/io.js?v=202611080943"></script>
-<script src="js/line-engine.js?v=202611080943"></script>
-<script src="js/materials-engine.js?v=202611080943"></script>
-<script src="js/supply-engine.js?v=202611080943"></script>
+<script src="config.js?v=202611080944"></script>
+<script src="js/shell.js?v=202611080944"></script>
+<script src="js/backup.js?v=202611080944" defer></script>
+<script src="js/assistant.js?v=202611080944" defer></script>
+<script src="js/io.js?v=202611080944"></script>
+<script src="js/line-engine.js?v=202611080944"></script>
+<script src="js/materials-engine.js?v=202611080944"></script>
+<script src="js/supply-engine.js?v=202611080944"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -149,9 +149,10 @@ function materials() {
     .sort(function (a, b) { return (a.out || '9999') < (b.out || '9999') ? -1 : (a.out || '9999') > (b.out || '9999') ? 1 : a.r.name.localeCompare(b.r.name); });
   var urgent = all.filter(function (x) { return x.r.weekly > 0 && x.out && x.out <= lim; });
   function delivHTML(r, due, u, out) {
-    var recent = evs.filter(function (o) { return o.material === r.id && o.received && o.eta >= SP.util.addDays(TODAY, -7) && o.eta <= TODAY; }).sort(function (a, b) { return a.eta < b.eta ? 1 : -1; })[0];
-    var parts = [];
-    if (recent) parts.push('<span class="dv ok">✓ Received +' + fmtq(recent.qty) + ' ' + u + ' on ' + nice(recent.eta) + '</span>');
+    var since = SP.util.addDays(TODAY, -7), recs = [];
+    ((D.docs.orders && D.docs.orders.items) || []).forEach(function (o) { if (o.material !== r.id) return; (o.receipts || []).forEach(function (x) { if (x.date >= since && x.date <= TODAY) recs.push({ date: x.date, qty: (Number(x.qty) || 0) * (Number(o.toApp) || 1) }); }); });
+    recs.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var parts = recs.slice(0, 2).map(function (x) { return '<span class="dv ok">✓ Received +' + fmtq(x.qty) + ' ' + u + ' on ' + nice(x.date) + '</span>'; });
     due.filter(function (o) { return o.eta < TODAY; }).forEach(function (o) { parts.push('<span class="dv late">Not received · +' + fmtq(o.qty) + ' ' + u + ' was due ' + nice(o.eta) + ' (delayed)</span>'); });
     var nx = due.filter(function (o) { return o.eta >= TODAY; })[0];
     if (nx) parts.push('<span class="dv wait">Expected +' + fmtq(nx.qty) + ' ' + u + ' on ' + nice(nx.eta) + ' · not received yet' + (r.runOut && r.runOut !== out ? ', would last to ' + nice(r.runOut) : '') + '</span>');
