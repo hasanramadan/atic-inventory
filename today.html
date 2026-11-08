@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611080935">
+<link rel="stylesheet" href="css/app.css?v=202611080937">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -51,14 +51,14 @@ details.allm .mgrid{margin-top:12px}
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611080935"></script>
-<script src="js/shell.js?v=202611080935"></script>
-<script src="js/backup.js?v=202611080935" defer></script>
-<script src="js/assistant.js?v=202611080935" defer></script>
-<script src="js/io.js?v=202611080935"></script>
-<script src="js/line-engine.js?v=202611080935"></script>
-<script src="js/materials-engine.js?v=202611080935"></script>
-<script src="js/supply-engine.js?v=202611080935"></script>
+<script src="config.js?v=202611080937"></script>
+<script src="js/shell.js?v=202611080937"></script>
+<script src="js/backup.js?v=202611080937" defer></script>
+<script src="js/assistant.js?v=202611080937" defer></script>
+<script src="js/io.js?v=202611080937"></script>
+<script src="js/line-engine.js?v=202611080937"></script>
+<script src="js/materials-engine.js?v=202611080937"></script>
+<script src="js/supply-engine.js?v=202611080937"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -140,6 +140,9 @@ function materials() {
     return { counted: Number(st.qty) || 0, asOf: st.asOf, used: used, rec: rec, left: Math.max(0, (Number(st.qty) || 0) + rec - used) };
   }
   var lastDay = Object.keys(D.lpDays).filter(function (d) { return d <= TODAY; }).sort().pop();
+  var dcd = lastDay && D.docs.daily && D.docs.daily.days && D.docs.daily.days[lastDay];
+  var dBatches = (dcd && dcd.batches) || (lastDay && D.lpDays[lastDay]) || {}, dAdj = (dcd && dcd.adj) || {};
+  function usedOn(id) { var tot = 0, by = {}; Object.keys(dBatches).forEach(function (k) { var p = k.split('|'), rc = ((fc.model.recipes || {})[p[0]] || {})[p[1]] || {}, q = (Number(rc[id]) || 0) * (Number(dBatches[k]) || 0); if (q) { tot += q; by[p[0]] = (by[p[0]] || 0) + q; } }); var a = Number(dAdj[id]) || 0; if (a) { tot += a; by.hand = a; } return { tot: tot, by: by }; }
   var lim = SP.util.addDays(TODAY, 30);
   var all = fc.results.filter(function (r) { return r.active; }).map(function (r) { return { r: r, out: outNoDelivery(r), n: nums(r) }; })
     .sort(function (a, b) { return (a.out || '9999') < (b.out || '9999') ? -1 : (a.out || '9999') > (b.out || '9999') ? 1 : a.r.name.localeCompare(b.r.name); });
@@ -148,8 +151,8 @@ function materials() {
     var r = x.r, n = x.n, u = esc(r.unit), cls = x.out && x.out <= SP.util.addDays(TODAY, 7) ? 'r' : x.out && x.out <= lim ? 'a' : 'g';
     var due = (r.openOrders || []).filter(function (o) { return o.qty > 0 && o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
     var nx = due.filter(function (o) { return o.eta >= TODAY; })[0], late = due.filter(function (o) { return o.eta < TODAY; })[0];
-    var dl = lastDay && (r.daily || []).filter(function (d) { return d.date === lastDay; })[0];
-    var by = dl && dl.by ? Object.keys(dl.by).filter(function (k) { return dl.by[k] > 1e-9; }).map(function (k) { return pname(k.split('|')[0]) + ' ' + fmtq(dl.by[k]); }).join(' · ') : '';
+    var uo = lastDay ? usedOn(r.id) : null, dl = uo ? { use: uo.tot } : null;
+    var by = uo ? Object.keys(uo.by).filter(function (k) { return Math.abs(uo.by[k]) > 1e-9; }).map(function (k) { return (k === 'hand' ? 'by hand' : pname(k)) + ' ' + fmtq(uo.by[k]); }).join(' · ') : '';
     var h = '<div class="mc ' + cls + '"><div class="mh"><b>' + esc(r.name) + '</b><span class="pill ' + cls + '">' + (x.out ? 'Runs out ' + nice(x.out) : 'Lasts 26+ weeks') + '</span></div>';
     if (n) h += '<div class="flow"><div><span>Official count</span><b>' + fmtq(n.counted) + '</b><small>' + u + ' · ' + nice(n.asOf) + '</small></div><i>−</i>' +
       '<div><span>Used since (est.)</span><b>' + fmtq(n.used) + '</b><small>' + u + '</small></div>' + (n.rec ? '<i>+</i><div><span>Received</span><b>' + fmtq(n.rec) + '</b><small>' + u + '</small></div>' : '') +
