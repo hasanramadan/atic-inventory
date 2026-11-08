@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" type="image/png" sizes="64x64" href="img/favicon-64.png"><link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png"><link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATIC · Today</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css?v=202611080927">
+<style>
+.wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
+.top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+.card>.ch{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.card>.ch h2{font-size:19px;margin:0}.tag{font-size:12px;color:var(--muted)}
+.secs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.sec{background:var(--surface-2);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.sec .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.sec .p{font:600 16px var(--f-display)}
+.sec .big{font:600 30px var(--f-display);line-height:1.1}.sec .big small{font:400 13px var(--f-body,inherit);color:var(--muted);margin-left:6px}
+.sec .s{font-size:13px;color:var(--muted)}
+.tbl{width:100%;border-collapse:collapse;font-size:14.5px}
+.tbl th{font-size:12px;color:var(--muted);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:8px;border-bottom:1px solid var(--line)}.tbl tr:last-child td{border-bottom:0}
+.tbl td.n,.tbl th.n{text-align:right;font-family:var(--f-mono)}
+.fc{color:var(--muted)}.rl{font-weight:600}
+.up{color:var(--green)}.dn{color:var(--red)}.eq{color:var(--muted)}
+.stops{font-size:13px;color:var(--muted);margin:6px 0 14px}
+.sname{font:600 14px var(--f-display);margin:4px 0 2px}
+.pill{display:inline-block;padding:2px 9px;border-radius:8px;font-size:12.5px;font-weight:600}
+.pill.r{background:var(--red-soft);color:var(--red)}.pill.a{background:var(--amber-soft);color:var(--amber)}.pill.g{background:var(--green-soft);color:var(--green)}
+.more{font-size:13px;color:var(--muted);margin-top:10px}.more a{color:var(--brand);font-weight:600}
+.empty{color:var(--muted);font-size:14px}
+@media (max-width:860px){.secs{grid-template-columns:1fr}.tbl{font-size:13.5px}}
+</style>
+</head><body>
+<div class="app"><aside class="rail" id="rail"></aside>
+<main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js?v=202611080927"></script>
+<script src="js/shell.js?v=202611080927"></script>
+<script src="js/backup.js?v=202611080927" defer></script>
+<script src="js/assistant.js?v=202611080927" defer></script>
+<script src="js/io.js?v=202611080927"></script>
+<script src="js/line-engine.js?v=202611080927"></script>
+<script src="js/materials-engine.js?v=202611080927"></script>
+<script src="js/supply-engine.js?v=202611080927"></script>
+<script>
+(function () {
+var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
+var TODAY = (function () { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+function $(s) { return document.querySelector(s); }
+var esc = function (s) { return A.esc(s); };
+function fmt(x, d) { if (x == null || !isFinite(x)) return '–'; d = d == null ? 0 : d; return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('en-US'); }
+function fmtq(x) { if (x == null || !isFinite(x)) return '–'; return (Math.round(x * 1000) / 1000).toLocaleString('en-US'); }
+function nice(d, long) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('en-GB', long ? { weekday: 'long', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short' }) : '–'; }
+function pname(c) { return (D.P0 && D.P0.products && D.P0.products[c]) || c; }
+function secName(s) { return s === 'S1' ? 'Section 1' : 'Section 2'; }
+function link(key, href, text) { return A.allowed(A.profile, key) ? '<a href="' + href + '">' + text + '</a>' : ''; }
+/* difference cell: good = up for boxes / filling, down for stoppage */
+function diff(f, r, unit, goodUp) {
+  if (f == null || r == null) return '<td class="n eq">–</td>';
+  var d = r - f, p = f ? d / f : null, good = goodUp ? d >= 0 : d <= 0, cls = Math.abs(d) < 0.5 ? 'eq' : good ? 'up' : 'dn';
+  return '<td class="n ' + cls + '">' + (d > 0 ? '+' : d < 0 ? '−' : '') + fmt(Math.abs(d)) + (unit || '') + (p != null && unit === '' ? ' · ' + (p > 0 ? '+' : p < 0 ? '−' : '') + Math.round(Math.abs(p) * 100) + '%' : '') + '</td>';
+}
+function topStops(txt) {
+  var parts = String(txt || '').split(/;\s*/).map(function (s) { var m = s.match(/(\d+)\s*min/); return { t: s.replace(/\.$/, '').trim(), m: m ? +m[1] : 0 }; })
+    .filter(function (x) { return x.t && !/^start-?up|^cleaning|^routine|^final arrangement/i.test(x.t); }).sort(function (a, b) { return b.m - a.m; });
+  return parts.slice(0, 3).map(function (x) { return x.t; }).join(' · ');
+}
+function planToday(sec) {
+  var p = D.plans.filter(function (x) { return x.date === TODAY && x.sec === sec; })[0];
+  var h = '<div class="sec"><span class="l">' + secName(sec) + '</span>';
+  if (p) {
+    var runs = (p.inputs && p.inputs.runs) || [], o = p.out || {};
+    h += '<span class="p">' + runs.map(function (r) { return esc(pname(r.product) + ' ' + r.size) + (r.batches != null ? ' · ' + fmtq(r.batches) + ' batches' : ''); }).join(' + ') + '</span>';
+    h += '<span class="big">' + fmt(o.boxesP50) + '<small>boxes expected</small></span>';
+    h += '<span class="s">Stoppage ' + fmt(o.stopMin) + ' min · last box ' + esc(o.finish || '–') + (o.overtimeMin ? ' · ' + o.overtimeMin + ' min overtime' : '') + '</span>';
+  } else {
+    var ld = D.fplan && D.fplan.lineDays && D.fplan.lineDays[TODAY], key = sec === 'S1' ? 'SEC-1' : 'SEC-2', rs = (ld && ld[key]) || [];
+    if (rs.length) {
+      h += '<span class="p">' + rs.map(function (r) { return esc(pname(r.product) + ' ' + r.size) + ' · ' + fmtq(r.batches) + ' batches'; }).join(' + ') + '</span>';
+      h += '<span class="s">From the factory plan. ' + link('line', 'line.html#timeline', 'Make the forecast in the Line Planner →') + '</span>';
+    } else h += '<span class="empty">Nothing planned on this line today.</span>';
+  }
+  return h + '</div>';
+}
+function lastResults() {
+  var dates = D.actuals.filter(function (a) { return a.date <= TODAY && a.kind !== 'plan'; }).map(function (a) { return a.date; }).sort();
+  var day = dates[dates.length - 1];
+  if (!day) return '<div class="card"><div class="ch"><h2>Last results</h2></div><p class="empty">No actuals entered yet.</p></div>';
+  var h = '<div class="card"><div class="ch"><h2>Last results · ' + nice(day, true) + '</h2><span class="tag">Forecast vs real</span></div>';
+  ['S1', 'S2'].forEach(function (sec) {
+    var a = D.actuals.filter(function (x) { return x.date === day && x.sec === sec; })[0]; if (!a) return;
+    var p = D.plans.filter(function (x) { return x.date === day && x.sec === sec; })[0], o = (p && p.out) || {};
+    var t = E.actualTotals(a), lineRuns = (a.runs || []).filter(function (r) { return !r.prepOnly && (r.boxes > 0 || r.fillMin > 0); });
+    h += '<div class="sname">' + secName(sec) + ' · ' + esc((lineRuns.length ? lineRuns : a.runs || []).map(function (r) { return pname(r.product) + ' ' + r.size; }).join(' + ')) + '</div>';
+    h += '<table class="tbl"><thead><tr><th></th><th class="n">Forecast</th><th class="n">Real</th><th class="n">Difference</th></tr></thead><tbody>';
+    h += '<tr><td>Boxes</td><td class="n fc">' + (p ? fmt(o.boxesP50) : 'not saved') + '</td><td class="n rl">' + fmt(t.boxes) + '</td>' + diff(p ? o.boxesP50 : null, t.boxes, '', true) + '</tr>';
+    h += '<tr><td>Stoppage</td><td class="n fc">' + (p ? fmt(o.stopMin) + ' min' : '–') + '</td><td class="n rl">' + (a.stopMin != null ? fmt(a.stopMin) + ' min' : '–') + '</td>' + diff(p ? o.stopMin : null, a.stopMin, ' min', false) + '</tr>';
+    h += '<tr><td>Filling time</td><td class="n fc">' + (p ? fmt(o.fillMin) + ' min' : '–') + '</td><td class="n rl">' + (a.fillMin != null ? fmt(a.fillMin) + ' min' : '–') + '</td>' + diff(p ? o.fillMin : null, a.fillMin, ' min', true) + '</tr>';
+    h += '</tbody></table>';
+    var ts = topStops(a.reasons); h += '<div class="stops">' + (ts ? 'Main stops: ' + esc(ts) : '') + ((a.runs || []).some(function (r) { return r.prepOnly; }) ? (ts ? ' · ' : '') + 'Prep only: ' + esc((a.runs || []).filter(function (r) { return r.prepOnly; }).map(function (r) { return pname(r.product) + ' ' + r.size; }).join(', ')) : '') + '</div>';
+  });
+  h += '<div class="more">' + link('line', 'line.html#compare', 'All days and the weekly report →') + '</div>';
+  return h + '</div>';
+}
+function materials() {
+  if (!D.docs.baseline) return '';
+  var fc;
+  try { fc = ME.forecast(D.docs.baseline, { materials: D.docs.materials, recipes: D.docs.recipes, stock: D.docs.stock, plan: D.docs.plan, orders: (D.docs.orders && D.docs.orders.items) || [], settings: D.docs.settings, actualDays: D.lpDays, actualSections: D.lpSecs }, TODAY); } catch (e) { return ''; }
+  var used = function (r) { return r.weekly > 0 || (r.perDay > 0); };
+  var att = fc.results.filter(function (r) { return r.active && used(r) && (r.status === 'order' || r.status === 'soon'); }).sort(function (a, b) { return (a.runOut || '9999') < (b.runOut || '9999') ? -1 : 1; });
+  var fine = fc.results.filter(function (r) { return r.active && att.indexOf(r) < 0; }).length;
+  var h = '<div class="card"><div class="ch"><h2>Raw materials · need attention</h2><span class="tag">Forecast from the last count, deliveries and the plan</span></div>';
+  if (!att.length) h += '<p class="empty">Everything lasts beyond the order dates.</p>';
+  else {
+    h += '<table class="tbl"><thead><tr><th>Material</th><th class="n">Left now</th><th>Runs out</th><th>Next delivery</th><th>Order</th></tr></thead><tbody>';
+    att.forEach(function (r) {
+      var soon = r.runOut && r.runOut <= SP.util.addDays(TODAY, 7), cls = soon ? 'r' : 'a';
+      var nx = (r.openOrders || []).filter(function (o) { return o.eta; }).sort(function (a, b) { return a.eta < b.eta ? -1 : 1; })[0];
+      h += '<tr><td><b>' + esc(r.name) + '</b></td><td class="n">' + fmtq(r.stockNow) + ' ' + esc(r.unit) + '</td><td><span class="pill ' + cls + '">' + (r.runOut ? nice(r.runOut) : 'not in 26 weeks') + '</span></td>' +
+        '<td class="small">' + (nx ? '+' + fmtq(nx.qty) + ' on ' + nice(nx.eta) : '<span class="dn">none on order</span>') + '</td><td class="small">' + (r.status === 'order' ? '<b class="dn">Order now</b>' : 'By ' + nice(r.orderBy)) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  h += '<div class="more">' + (fine ? fine + ' other materials are fine · ' : '') + link('materials', 'materials.html#overview', 'Show all materials →') + '</div>';
+  return h + '</div>';
+}
+function render() {
+  var fri = new Date(TODAY + 'T12:00:00').getDay() === 5;
+  var h = '<div class="wrap"><div class="top"><h1>Today</h1><p class="sub">' + nice(TODAY, true) + ' · Lot ' + esc(A.lot ? A.lot(TODAY) : '') + '</p></div>';
+  h += '<div class="card"><div class="ch"><h2>Plan · ' + nice(TODAY, true) + '</h2><span class="tag">Forecast</span></div>' + (fri ? '<p class="empty">Friday · the factory is off.</p>' : '<div class="secs">' + planToday('S1') + planToday('S2') + '</div>') + '</div>';
+  h += lastResults();
+  h += materials();
+  $('#main').innerHTML = h + '</div>';
+}
+(async function () {
+  A = await ATIC.boot({ page: 'today' }); if (!A) return;
+  try {
+    var r = await Promise.all([A.planner.config(), A.planner.list('actuals'), A.planner.list('plans'), A.docs.loadAll().catch(function () { return { data: {} }; })]);
+    D.P0 = r[0].params; D.actuals = r[1].map(function (x) { return x.data; }).filter(function (x) { return x && x.date; }); D.plans = r[2].map(function (x) { return x.data; }).filter(function (x) { return x && x.date; }); D.docs = r[3].data; D.fplan = D.docs.plan;
+    D.lpDays = {}; D.lpSecs = {}; D.actuals.forEach(function (a) { var s = a.sec === 'S1' ? 'SEC-1' : 'SEC-2'; (D.lpSecs[a.date] = D.lpSecs[a.date] || {})[s] = 1; (a.runs || []).forEach(function (x) { if (x.batches > 0) { D.lpDays[a.date] = D.lpDays[a.date] || {}; var k = x.product + '|' + s; D.lpDays[a.date][k] = (D.lpDays[a.date][k] || 0) + x.batches; } }); });
+  } catch (e) { $('#main').innerHTML = '<div class="card"><h2>Could not load</h2><p class="empty">' + esc(e.message || e) + '</p></div>'; return; }
+  render();
+  A.planner.subscribe(function () { clearTimeout(render.t); render.t = setTimeout(function () { location.reload(); }, 800); });
+})();
+})();
+</script>
+</body></html>

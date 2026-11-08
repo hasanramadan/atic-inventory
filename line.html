@@ -4,7 +4,7 @@
 <title>ATIC Line Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611080851">
+<link rel="stylesheet" href="css/app.css?v=202611080927">
 <style>
 
 .lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
@@ -57,6 +57,10 @@
 .lp .minibar div{position:absolute;top:0;bottom:0}
 .lp .why{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
 .lp .why b{color:var(--fg);font-weight:600}
+.lp .how{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--surface-2)}
+.lp .how summary{cursor:pointer;font-weight:600;color:var(--brand)}
+.lp .how .hw{font-size:13.5px;margin:8px 0}.lp .how .hs{font-size:13.5px;margin:0 0 6px;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.lp .how .hl{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:var(--brand)}
 .lp .cardfoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 
 .lp .viewer{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
@@ -349,14 +353,14 @@
 </main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611080851"></script>
-<script src="js/shell.js?v=202611080851"></script>
-<script src="js/backup.js?v=202611080851" defer></script>
-<script src="js/assistant.js?v=202611080851" defer></script>
-<script src="js/io.js?v=202611080851"></script>
-<script src="js/excel.js?v=202611080851"></script>
-<script src="js/word.js?v=202611080851"></script>
-<script src="js/line-engine.js?v=202611080851"></script>
+<script src="config.js?v=202611080927"></script>
+<script src="js/shell.js?v=202611080927"></script>
+<script src="js/backup.js?v=202611080927" defer></script>
+<script src="js/assistant.js?v=202611080927" defer></script>
+<script src="js/io.js?v=202611080927"></script>
+<script src="js/excel.js?v=202611080927"></script>
+<script src="js/word.js?v=202611080927"></script>
+<script src="js/line-engine.js?v=202611080927"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 // The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
@@ -624,7 +628,19 @@ function renderCards() {
       ${miniBar(f)}
       ${f.runs.length > 1 ? `<div class="tw"><table class="runtbl"><thead><tr><th>Run</th><th>Item</th><th class="n">Time</th><th class="n">Opening + prepared</th><th class="n">Boxes</th><th class="n">Closing</th></tr></thead><tbody>${runRows}</tbody></table></div>` : ''}
       <div class="closing"><span class="l" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600">Left in the tank for tomorrow</span>${closing}</div>
-      <ul class="why">${f.why.map(w => `<li>${esc(w.t)}</li>`).join('')}</ul>`;
+      <details class="how"><summary>How was this forecast made?</summary>
+        <p class="hw">The model (<b>ATIC BETA 2.0</b>) learned from <b>${fmt(f.learnedFrom || 0)} days</b> entered in this Line Planner, on top of the factory history (production register and stoppage logs since January 2025${P0 && P0.built ? ', model built ' + esc(String(P0.built).slice(0, 10)) : ''}). Each new actual you save makes it more accurate.</p>
+        <ol class="hs">
+          <li><b>Speed.</b> ${f.runs.map(o => `${esc(pname(o.product))} ${esc(o.size)}: <b>${fmt(o.ratePerHr)} boxes per filling hour</b>, the usual speed from ${fmt(o.speedN)} past runs on this line`).join('; ')}.</li>
+          <li><b>Stops.</b> Start-up ${fmt(f.morningMin)} min, cleaning ${fmt((f.routineMin || 0) + (f.deepMin || 0))} min, machine stops ${fmt(f.machineMin)} min${f.weekdayMin ? `, ${fmt(f.weekdayMin)} min for this weekday` : ''}${(f.changeMin || 0) + (f.cipMin || 0) ? `, changeover ${fmt((f.changeMin || 0) + (f.cipMin || 0))} min` : ''}: <b>${fmt(f.stopMin)} min</b> in total, from how long each kind of stop usually takes.</li>
+          <li><b>Filling time.</b> ${fmt(f.workMin)} working min − ${fmt(f.stopMin)} min of stops = <b>${fmt(f.fillMin)} min</b> of filling.</li>
+          <li><b>Boxes.</b> Filling time × speed, limited by the batches in the tank = <b>${fmt(f.boxes.p50)} boxes</b> (likely ${fmt(f.boxes.p10)}–${fmt(f.boxes.p90)}).</li>
+          ${f.overtimeMin ? `<li><b>Overtime.</b> The day was stretched by ${f.overtimeMin} min so the target is reached.</li>` : ''}
+        </ol>
+        <div class="l" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-top:6px">Every detail</div>
+        <ul class="why">${f.why.map(w => `<li>${esc(w.t)}</li>`).join('')}</ul>
+        <a class="hl" href="model.html">See how accurate the model is (ATIC BETA 2.0) →</a>
+      </details>`;
     const btn = $(`${sec}-save`);
     btn.disabled = !S.db || !S.canWrite || !!S.saving['plan' + sec] || isFriday(S.date);
     btn.textContent = saved ? 'Update saved forecast' : 'Save forecast';

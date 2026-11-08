@@ -1,11 +1,12 @@
 /* ATIC Oman website shell: sign-in check, left rail, page access, shared data helpers. Every page loads this after config.js. */
 (function () {
   var PAGES = [
-    { key: 'results', href: 'results.html', label: 'Forecast Results' },
+    { key: 'today', href: 'today.html', label: 'Today' },
     { key: 'line', href: 'line.html', label: 'Line Planner' },
-    { key: 'model', href: 'model.html', label: 'ATIC BETA 2.0', tag: '3D' },
     { key: 'materials', href: 'materials.html', label: 'Raw Materials' },
-    { key: 'supply', href: 'supply.html', label: 'Supply Planner' },
+    { key: 'results', href: 'results.html', label: 'Forecast Results', more: true },
+    { key: 'supply', href: 'supply.html', label: 'Supply Planner', more: true },
+    { key: 'model', href: 'model.html', label: 'ATIC BETA 2.0', tag: '3D', more: true },
     { key: 'team', href: 'team.html', label: 'Team', icon: 'msg' },
     { key: 'admin', href: 'admin.html', label: 'Admin' }
   ];
@@ -24,6 +25,7 @@
     if (!profile) return false;
     if (profile.role === 'admin') return true;
     if (key === 'admin') return false;
+    if (key === 'today') return true; // the Today page is for everyone in Production
     if (key === 'team' && profile.role === 'viewer') return false; // Team: admins and editors only
     if (!profile.tabs) return true;
     return profile.tabs.indexOf(key) >= 0;
@@ -35,7 +37,9 @@
     var list = (profile.tabs || []).map(function (k) { return byKey[k]; }).filter(Boolean);
     if (!profile.tabs || profile.role === 'admin') PAGES.forEach(function (x) { if (list.indexOf(x) < 0 && x.key !== 'admin') list.push(x); });
     if (profile.role === 'admin') { list = list.filter(function (x) { return x.key !== 'admin'; }); list.push(byKey.admin); }
-    return list.filter(function (x) { return allowed(profile, x.key); });
+    list = list.filter(function (x) { return allowed(profile, x.key); });
+    var t = list.filter(function (x) { return x.key === 'today'; }); if (!t.length && allowed(profile, 'today')) t = [byKey.today];
+    return t.concat(list.filter(function (x) { return x.key !== 'today'; }));
   }
   function firstPageOf(profile) { var p = ordered(profile)[0]; return p ? p.href : null; }
   function firstPage(profile) { return firstPageOf(profile); }
@@ -52,12 +56,19 @@
   function railHTML() {
     var p = A.profile, cur = curSub();
     var h = '<div class="logo"><div class="mark">AT</div><div><b>ATIC OMAN</b><small>' + (A.area === 'production' ? 'Planning &amp; forecasting' : esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '')) + '</small></div></div><nav id="shellNav" aria-label="Sections">';
-    (A.area === 'production' ? ordered(p) : []).forEach(function (x) {
+    var moreOpen = false; try { moreOpen = localStorage.getItem('atic.more') === '1'; } catch (e) {}
+    var list = A.area === 'production' ? ordered(p) : [], main = list.filter(function (x) { return !x.more || x.key === A.page; }), more = list.filter(function (x) { return x.more && x.key !== A.page; });
+    var ordered2 = main.filter(function (x) { return x.key !== 'team' && x.key !== 'admin'; }).concat(main.filter(function (x) { return x.key === 'team'; }));
+    var tailAdmin = main.filter(function (x) { return x.key === 'admin'; });
+    var drawPart = function (x) {
       var on = x.key === A.page;
       h += '<div class="part"><a class="p' + (x.icon ? ' ic' : '') + '" href="' + x.href + '"' + (on ? ' aria-current="page"' : '') + '>' + (x.icon === 'msg' ? ICON_MSG : '') + esc(x.label) + (x.tag ? ' <span class="tagx">' + x.tag + '</span>' : '') + (x.key === 'team' ? ' <span class="badge" id="teamBadge" hidden></span>' : '') + '</a>' + (on && A.subs.length ? '<button type="button" class="chev" id="railChev" aria-label="' + (subsClosed() ? 'Show' : 'Hide') + ' the sections of ' + esc(x.label) + '" aria-expanded="' + !subsClosed() + '">' + (subsClosed() ? '▸' : '▾') + '</button>' : '');
       if (on && A.subs.length) h += '<div class="subs"' + (subsClosed() ? ' hidden' : '') + '>' + A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === cur ? ' aria-current="page"' : '') + '>' + esc(s.label) + (s.badge ? ' <span class="badge" id="sb_' + s.id + '"' + (s.badgeHidden ? ' hidden' : '') + '>' + esc(s.badge) + '</span>' : '') + '</a>'; }).join('') + '</div>';
       h += '</div>';
-    });
+    };
+    ordered2.forEach(drawPart);
+    if (more.length) { h += '<div class="part more"><button type="button" class="p morebtn" id="moreBtn" aria-expanded="' + moreOpen + '">More ' + (moreOpen ? '▴' : '▾') + '</button><div class="morelist"' + (moreOpen ? '' : ' hidden') + '>'; more.forEach(drawPart); h += '</div></div>'; }
+    tailAdmin.forEach(drawPart);
     if (A.area !== 'production') h += '<div class="part"><a class="p" aria-current="page" href="' + location.pathname.split('/').pop() + '">' + esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '') + '</a></div>';
     h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + (p.is_owner ? 'Creator' : ROLE[p.role]) + '</span>' + (areasOf(p).length > 1 ? '<a class="switch" href="start.html">⇄ Switch area</a>' : '') + '<button id="signOut" type="button">Sign out</button></div>';
     return h;
@@ -77,6 +88,7 @@
     var rail = $('#rail'); if (!rail) return;
     rail.innerHTML = railHTML();
     $('#signOut').onclick = A.signOut;
+    var mb = $('#moreBtn'); if (mb) mb.onclick = function () { var l = mb.nextElementSibling, open = l.hidden; l.hidden = !open; mb.setAttribute('aria-expanded', open); mb.textContent = 'More ' + (open ? '▴' : '▾'); try { localStorage.setItem('atic.more', open ? '1' : '0'); } catch (e) {} };
     var cur = rail.querySelector('a.p[aria-current="page"]'), subs = cur && cur.parentNode.querySelector('.subs');
     var chev = document.getElementById('railChev');
     if (chev && subs) chev.onclick = function (e) { e.preventDefault(); e.stopPropagation(); subs.hidden = !subs.hidden; setSubsClosed(subs.hidden); chev.setAttribute('aria-expanded', !subs.hidden); chev.textContent = subs.hidden ? '▸' : '▾'; };
