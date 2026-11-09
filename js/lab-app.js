@@ -37,6 +37,9 @@ function needsPE(p){const c=catOfP(p);return c==='product'||c==='raw'}
 function logAct(txt){if(!S.me)return;const id=uid('a');const v={at:Date.now(),by:S.me.id,txt};S.acts=S.acts||{};S.acts[id]=v;S.db.doc('activity/'+id).set(v).catch(()=>{})}
 function freezeUsing(solId){Object.values(S.samples).forEach(m=>{const p=product(m.productId);let ch=false;(p&&p.tests||[]).forEach(t=>{if(!(t.consts||[]).some(c=>c.sol===solId))return;const r=(m.results||{})[t.id];if(!r||r.kf||!r.in||!Object.values(r.in).some(v=>v!==''&&v!=null))return;const k=constSnap(t);if(k)r.k=k;r.kf=true;ch=true});if(ch)saveSample(m)})}
 function freezeSample(x){const p=product(x.productId);(p&&p.tests||[]).forEach(t=>{const r=(x.results||{})[t.id];if(!r||r.kf)return;const k=constSnap(t);if(k){r.k=k}r.kf=true})}
+/* batches sent to the lab win over the number typed when the record was started (newest change wins) */
+function syncBatches(){if(!S.me||!S.daybatch)return;Object.values(S.sessions).forEach(x=>{const o=S.daybatch[x.date];if(!o||!o.items)return;const p=product(x.productId);const k=p&&(p.code+'|'+x.section);if(!k||o.items[k]==null)return;const n=Number(o.items[k]);
+  if(n!==Number(x.batches)&&(o.at||0)>(x.batchesAt||x.createdAt||0)){x.batches=n;x.batchesAt=o.at||Date.now();saveSession(x)}})}
 function lotOf(d){try{return (window.ATIC_PARENT&&window.ATIC_PARENT.lot)?String(window.ATIC_PARENT.lot(d)):''}catch(e){return''}}
 function lockedT(s,t){if(isDoctor())return false;const ss=s&&S.sessions[s.sessionId];if(!ss)return false;if(ss.finalVal)return true;if(t.kind==='micro')return !!(ss.microVal&&ss.microVal[t.id]);return !!ss.validated}
 function solOf(id){return (S.sol||[]).find(x=>x.id===id)}
@@ -115,7 +118,7 @@ async function boot(){
   const err=e=>{clearTimeout(timer);S.error='Could not read the lab records ('+(e.code||e.message)+').';render()};
   S.db.doc('config/main').onSnapshot(snap=>{S.cfg=snap.exists?snap.data():{products:[],sections:['SEC-1','SEC-2']};done.c1||(done.c1=1,done());if(snap.exists&&S.sol)migrateWaterWeekly();changed('cfg')},err);
   S.db.collection('people').onSnapshot(snap=>{S.people={};snap.docs.forEach(d=>S.people[d.id]=Object.assign({id:d.id},d.data()));done.c2||(done.c2=1,done());if(S.me&&S.people[S.me.id])S.me=S.people[S.me.id];changed('people')},err);
-  S.db.collection('sessions').orderBy('date','desc').limit(300).onSnapshot(snap=>{S.sessions={};snap.docs.forEach(d=>S.sessions[d.id]=Object.assign({id:d.id},d.data()));done.c3||(done.c3=1,done());changed('sessions')},err);
+  S.db.collection('sessions').orderBy('date','desc').limit(300).onSnapshot(snap=>{S.sessions={};snap.docs.forEach(d=>S.sessions[d.id]=Object.assign({id:d.id},d.data()));done.c3||(done.c3=1,done());syncBatches();changed('sessions')},err);
   S.db.collection('samples').orderBy('date','desc').limit(1000).onSnapshot(snap=>{
     snap.docs.forEach(d=>{const local=S.samples[d.id];const q=Q['samples/'+d.id];
       if(local&&((q&&(q.busy||q.next))||typingTimers[d.id]))return; S.samples[d.id]=Object.assign({id:d.id},d.data())});
@@ -127,7 +130,7 @@ async function boot(){
   S.db.collection('daynotes').onSnapshot(snap=>{S.daynotes={};snap.docs.forEach(d=>S.daynotes[d.id]=d.data());changed('daynotes')},()=>{});
   S.db.collection('presence').onSnapshot(snap=>{S.pres={};snap.docs.forEach(d=>S.pres[d.id]=d.data());if(S.view==='overview')changed('pres')},()=>{});
   S.db.collection('activity').onSnapshot(snap=>{S.acts={};snap.docs.forEach(d=>S.acts[d.id]=d.data());if(S.view==='overview')changed('acts')},()=>{});
-  S.db.collection('daybatch').onSnapshot(snap=>{S.daybatch={};snap.docs.forEach(d=>S.daybatch[d.id]=d.data());changed('daybatch')},()=>{});
+  S.db.collection('daybatch').onSnapshot(snap=>{S.daybatch={};snap.docs.forEach(d=>S.daybatch[d.id]=d.data());syncBatches();changed('daybatch')},()=>{});
   S.db.collection('plan').onSnapshot(snap=>{S.plans={};snap.docs.forEach(d=>S.plans[d.id]=d.data());changed('plan')},()=>{});
 }
 const SOL_SEED=[
@@ -316,7 +319,7 @@ function batchEditor(d){const items=planFor(d);const ov=(S.daybatch||{})[d];cons
   '<div class="row brow"><select id="ba-p">'+prods.map(p=>'<option value="'+esc(p.code)+'">'+esc(p.name)+'</option>').join('')+'</select><select id="ba-s">'+(S.cfg.sections||['SEC-1','SEC-2']).map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><input id="ba-n" class="num" type="number" min="0" placeholder="batches" style="width:90px"><button id="ba-add">+ Add</button></div>'+
   '<div class="row" style="justify-content:flex-end">'+(ov?'<button class="ghost" id="ba-reset">Use the factory plan again</button>':'')+'<button class="primary" id="ba-send">Send to the lab</button></div></div>'}
 function bindBatch(){const d=viewDay();const box=$('.batched');if(!box)return;const cur=()=>{const o={};box.querySelectorAll('[data-bk]').forEach(i=>{o[i.dataset.bk]=Number(i.value)||0});return o};
-  const syncRecs=items=>Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);const k=p&&(p.code+'|'+x.section);if(k&&items[k]!=null&&Number(items[k])!==Number(x.batches)){x.batches=Number(items[k]);saveSession(x)}});
+  const syncRecs=items=>Object.values(S.sessions).filter(x=>x.date===d).forEach(x=>{const p=product(x.productId);const k=p&&(p.code+'|'+x.section);if(k&&items[k]!=null&&Number(items[k])!==Number(x.batches)){x.batches=Number(items[k]);x.batchesAt=Date.now();saveSession(x)}});
   const save=items=>(syncRecs(items),S.db.doc('daybatch/'+d)).set({items,by:S.me.id,at:Date.now()}).then(()=>{S.daybatch=S.daybatch||{};S.daybatch[d]={items,by:S.me.id,at:Date.now()};S.dirty=false;render();toast('Batches sent to the lab')},e=>toast('Could not save: '+(e.code||e.message)));
   $('#ba-send').onclick=()=>save(cur());
   $('#ba-add').onclick=()=>{const n=Number($('#ba-n').value)||0;if(!n){toast('Type the number of batches');return}const o=cur();o[$('#ba-p').value+'|'+$('#ba-s').value]=n;save(o)};
@@ -564,7 +567,7 @@ function addSample(ss,p){
 function editSessionModal(ss){
   modal('<h2>Edit details</h2><form id="esf" class="stack"><div class="row"><label class="field" style="flex:1"><span>Lot number</span><input id="es-l" value="'+esc(ss.lot||'')+'"></label><label class="field" style="flex:1"><span>Batches expected</span><input id="es-b" type="number" value="'+esc(ss.batches||'')+'"></label></div><div class="row"><label class="field" style="flex:1"><span>Tank</span><input id="es-t" value="'+esc(ss.tank||'')+'"></label><label class="field" style="flex:1"><span>Date</span><input id="es-d" type="date" value="'+esc(ss.date)+'"></label></div>'+
    '<div class="row between">'+(isDoctor()?'<button type="button" class="danger" id="es-del">Delete this test record</button>':'<span></span>')+'<div class="row"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div></div><p id="es-confirm" class="small"></p></form>',(bg,close)=>{
-    bg.querySelector('#esf').onsubmit=e=>{e.preventDefault();ss.lot=bg.querySelector('#es-l').value.trim();ss.batches=Number(bg.querySelector('#es-b').value)||0;ss.tank=bg.querySelector('#es-t').value.trim();ss.date=bg.querySelector('#es-d').value||ss.date;saveSession(ss);sessionSamples(ss.id).forEach(s=>{if(s.date!==ss.date){s.date=ss.date;saveSample(s)}});close();render()};
+    bg.querySelector('#esf').onsubmit=e=>{e.preventDefault();ss.lot=bg.querySelector('#es-l').value.trim();ss.batches=Number(bg.querySelector('#es-b').value)||0;ss.batchesAt=Date.now();ss.tank=bg.querySelector('#es-t').value.trim();ss.date=bg.querySelector('#es-d').value||ss.date;saveSession(ss);sessionSamples(ss.id).forEach(s=>{if(s.date!==ss.date){s.date=ss.date;saveSample(s)}});close();render()};
     const del=bg.querySelector('#es-del');let armed=false;del&&(del.onclick=()=>{if(!armed){armed=true;del.textContent='Press again to delete it and all its samples';return}
       sessionSamples(ss.id).forEach(s=>{delete S.samples[s.id];queueWrite('samples/'+s.id,null,'delete')});delete S.sessions[ss.id];queueWrite('sessions/'+ss.id,null,'delete');close();S.view='today';render()})});
 }
