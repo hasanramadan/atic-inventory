@@ -149,7 +149,10 @@ async function migrateAcid(){migratePair();if(migA||!S.cfg||S.cfg.mAcid1||!(wind
   [['GM','t03',5],['GCN','t53','']].forEach(([pid,tid,mn])=>{const p=(c.products||[]).find(x=>x.id===pid);const t=p&&(p.tests||[]).find(x=>x.id===tid);if(!t)return;delete t.pick;
     t.outputs=[{key:'acid',label:'Acidity',formula:'C*V/30*192.12',unit:'%',min:mn,max:'',dp:2}]});
   c.mAcid1=1;try{await S.db.doc('config/main').set(c)}catch(e){migA=false}}
-async function migrateWaterWeekly(){migrateAcid();if(migW||!S.cfg||S.cfg.mWaterWeekly||!(window.LAB_ME||{}).id)return;migW=true;
+let migY=false;async function migrateNoYM(){if(migY||!S.cfg||S.cfg.mNoYMwv||!(window.LAB_ME||{}).id)return;migY=true;const c=JSON.parse(JSON.stringify(S.cfg));
+  (c.products||[]).filter(p=>/vinegar/i.test(p.name||'')||p.code==='WV').forEach(p=>{p.tests=(p.tests||[]).filter(t=>!(t.kind==='micro'&&/yeast|mou?ld/i.test(t.name||'')))});c.mNoYMwv=1;
+  try{await S.db.doc('config/main').set(c)}catch(e){migY=false}}
+async function migrateWaterWeekly(){migrateAcid();migrateNoYM();if(migW||!S.cfg||S.cfg.mWaterWeekly||!(window.LAB_ME||{}).id)return;migW=true;
   const c=JSON.parse(JSON.stringify(S.cfg));(c.products||[]).filter(p=>p.category==='water').forEach(p=>(p.tests||[]).forEach(t=>{if(t.kind==='micro'&&!t.everyDays)t.everyDays=7}));c.mWaterWeekly=1;
   try{await S.db.doc('config/main').set(c)}catch(e){migW=false}}
 async function seedSolutions(){if(seeding||!S.cfg||!(window.LAB_ME||{}).id)return;seeding=true;
@@ -328,7 +331,10 @@ function bindBatch(){const d=viewDay();const box=$('.batched');if(!box)return;co
   box.querySelectorAll('[data-bdel]').forEach(b=>b.onclick=()=>{const o=cur();delete o[b.dataset.bdel];save(o)});
   const r=$('#ba-reset');r&&(r.onclick=()=>S.db.doc('daybatch/'+d).delete().then(()=>{delete S.daybatch[d];render();toast('Back to the factory plan')}));}
 function sessLabel(s){const p=product(s.productId);return (p?p.name:'?')+' · '+s.section+' · Lot '+(s.lot||'–')}
-function sessCard(s){const p=product(s.productId);const pr=sessionProgress(s);const pct=pr.target?Math.round(100*pr.done/pr.target):0;
+function canDelOut(s){return catOfS(s)!=='product'&&(isStation()||isDoctor())}
+function delRecord(ss){return Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];render();logAct('deleted the record <b>'+esc((product(ss.productId)||{}).name||'')+'</b> '+esc(ss.section||'')+(ss.lot?' lot '+esc(ss.lot):''));toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))}
+function sessCard(s){return canDelOut(s)?'<div class="stack" style="gap:4px">'+sessCard0(s)+'<button class="ghost danger small" data-deloutside="'+s.id+'" style="align-self:flex-end">Delete</button></div>':sessCard0(s)}
+function sessCard0(s){const p=product(s.productId);const pr=sessionProgress(s);const pct=pr.target?Math.round(100*pr.done/pr.target):0;
   return '<button class="card stack" style="text-align:left;cursor:pointer" data-open-session="'+s.id+'"><div class="row between"><h3>'+esc(p?p.name:'?')+'</h3>'+statusPill(s)+'</div>'+
   '<div class="row small muted"><span>'+esc(s.section)+'</span><span>Lot <span class="num">'+esc(s.lot||'–')+'</span></span><span>'+niceDate(s.date)+'</span></div>'+
   '<div class="bar"><i style="width:'+pct+'%"></i></div><div class="row small"><span class="num">'+pr.done+' / '+pr.target+'</span> samples tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+(pr.micro?'<span class="pill warn">'+pr.micro+' micro pending</span>':'')+'</div></button>'}
@@ -344,6 +350,7 @@ function bindToday(){
 }
 function bindCommon(){
   document.querySelectorAll('[data-frep]').forEach(b=>b.onclick=()=>{const[sid,k,day,fm]=b.dataset.frep.split('|');const ss=S.sessions[sid];if(ss)report(ss,k,day,fm)});
+  document.querySelectorAll('[data-deloutside]').forEach(b=>b.onclick=function(){const ss=S.sessions[b.dataset.deloutside];if(!ss)return;if(!this.dataset.armed){this.dataset.armed=1;const n=sessionSamples(ss.id).length;this.textContent='Press again to delete'+(n?' it and its '+n+' sample'+(n>1?'s':''):'');return}this.disabled=true;delRecord(ss)});
   document.querySelectorAll('[data-open-session]').forEach(b=>b.onclick=()=>{S.sessionId=b.dataset.openSession;S.sampleId=null;S.back=S.view==='session'?S.back:S.view;S.view='session';render()});
   document.querySelectorAll('[data-open-sample]').forEach(b=>b.onclick=()=>{const s=S.samples[b.dataset.openSample];if(!s)return;S.sessionId=s.sessionId;S.sampleId=s.id;S.back=S.view==='session'?S.back:S.view;S.view='session';render()});
   document.querySelectorAll('[data-taskdone]').forEach(b=>b.onclick=()=>{const t=S.tasks[b.dataset.taskdone];t.done=true;t.doneBy=S.me.id;t.doneAt=Date.now();queueWrite('tasks/'+t.id,strip(t));render()});
@@ -410,7 +417,7 @@ function kindBar(){return '<div class="kindbar" role="tablist" aria-label="Test 
 function everyText(n){n=Number(n);return n===7?'week':n===14?'2 weeks':n===30||n===31?'month':n+' days'}
 function kv(k,v,cls){return '<div class="kv"><span class="label">'+k+'</span><b>'+esc(v)+'</b></div>'}
 function sampleForm(s,p,ss){
-  let h='<div class="row between"><div><span class="label">Sample</span><h2 class="mono">'+esc(s.code)+'</h2></div><div class="row small">'+
+  let h='<div class="row between"><div><span class="label">Sample</span>'+(catOfP(p)==='water'&&!locked(s)?'<input id="sm-code" class="mono" value="'+esc(s.code)+'" aria-label="Sample name" style="font-size:20px;font-weight:700;width:220px" title="Type a new name for this water sample">':'<h2 class="mono">'+esc(s.code)+'</h2>')+'</div><div class="row small">'+
     '<label class="row">Taken by <select id="sm-taken"><option value="">–</option>'+Object.values(S.people).filter(x=>x.active!==false&&x.canTest).map(x=>'<option value="'+x.id+'"'+(s.takenBy===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label><label class="row">Tank <input id="sm-tank" value="'+esc(s.tank||'')+'" style="width:70px"></label><label class="row">Batch <input id="sm-batch" value="'+esc(s.batch||'')+'" style="width:70px"></label>'+
     (isDoctor()?'<label class="row">Assign <select id="sm-assign"><option value="">Anyone</option>'+Object.values(S.people).filter(x=>x.active!==false&&x.canTest).map(x=>'<option value="'+x.id+'"'+(s.assignedTo===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label>':(s.assignedTo?'<span class="pill acc">Assigned to '+esc(person(s.assignedTo).name)+'</span>':''))+
     '</div></div>';
@@ -523,6 +530,7 @@ function bindSession(){
   });
   document.querySelectorAll('[data-org]').forEach(sel=>sel.onchange=()=>{s.results=s.results||{};const r=s.results[sel.dataset.org]=s.results[sel.dataset.org]||{};r.value=sel.value;r.by=S.me.id;if(s.date<today())r.late=true;r.at=Date.now();live(sel.dataset.org,'result');saveSample(s);S.dirty=true});
   document.querySelectorAll('[data-orgc]').forEach(inp=>inp.addEventListener('input',()=>{s.results=s.results||{};const r=s.results[inp.dataset.orgc]=s.results[inp.dataset.orgc]||{};r.comment=inp.value;live(inp.dataset.orgc,'comment');liveSave(s)}));
+  const sc=$('#sm-code');sc&&sc.addEventListener('change',()=>{const v=sc.value.trim();if(!v){sc.value=s.code;return}s.code=v;saveSample(s);render();toast('Sample renamed')});
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
   document.querySelectorAll('[data-mby]').forEach(i=>i.onchange=()=>{s.microBy=Object.assign({},s.microBy,{[i.dataset.mby]:i.value});saveSample(s);toast('Saved')});
   document.querySelectorAll('[data-mst]').forEach(i=>i.onchange=()=>{s.microStart=Object.assign({},s.microStart,{[i.dataset.mst]:i.value});saveSample(s);render();toast('Start date saved · read date updated')});
@@ -793,7 +801,7 @@ function setupView(){
     (t.kind==='org'?'<span class="muted small">Acceptable / not acceptable</span>':
       '<label class="small">Min <input class="num" data-tl="min" value="'+esc(o.min==null?'':o.min)+'"></label><label class="small">Max <input class="num" data-tl="max" value="'+esc(o.max==null?'':o.max)+'"></label>')+
     (t.kind==='micro'?'<label class="small">Read after <input class="num" data-tm="incubDays" type="number" value="'+esc(t.incubDays||'')+'" style="width:52px"> days</label><select data-tm="everyDays" class="small">'+[['','Every sample'],['7','Once a week'],['14','Every 2 weeks'],['30','Once a month']].map(x=>'<option value="'+x[0]+'"'+(String(t.everyDays||'')===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select>':'')+
-    (t.kind==='chem'?'<button class="ghost" data-rule="'+t.id+'">Edit rule</button>':'')+'<button class="ghost danger" data-tdel title="Remove test">×</button></div>'};
+    (t.kind!=='org'?'<button class="ghost" data-rule="'+t.id+'">Edit rule</button>':'')+'<button class="ghost danger" data-tdel title="Remove test">×</button></div>'};
   h+='<div class="card stack" style="gap:8px">'+((p.tests||[]).length?(p.tests||[]).map(row).join(''):'<p class="muted">No tests yet.</p>')+'</div>';
   h+='<div class="row"><button data-addtest="chem">+ Chemical test</button><button data-addtest="micro">+ Micro test</button><button data-addtest="org">+ Taste / smell check</button></div>';
   h+='<details class="small"><summary>Product details</summary><div class="row" style="margin-top:8px"><label class="field"><span>Name</span><input data-pf="name" value="'+esc(p.name)+'"></label><label class="field"><span>Sticker code</span><input data-pf="code" value="'+esc(p.code)+'" style="width:90px"></label><label class="field"><span>Type</span><select data-pf="category">'+CATS.map(o=>'<option value="'+o[0]+'"'+(catOfP(p)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label><label class="field"><span>Standard</span><input data-pf="standard" value="'+esc(p.standard||'')+'"></label></div><label class="row small" style="margin-top:8px"><input type="checkbox" id="su-pair"'+(p.microPair?' checked':'')+'> Microbiology: one result for every 2 samples (1+2, 3+4…)</label><button class="ghost danger" id="su-delp" style="margin-top:8px">Delete '+esc(p.name)+'</button></details>';
@@ -817,7 +825,7 @@ function bindSetup(){
     r.querySelector('[data-tn]').addEventListener('change',e=>{const old=t.name;t.name=e.target.value.trim()||old;(t.outputs||[]).forEach(o=>{if(o.label===old||t.kind==='micro')o.label=t.name});rerender()});
     r.querySelectorAll('[data-tl]').forEach(i=>i.addEventListener('change',()=>{const o=(t.outputs||[])[0];if(o)o[i.dataset.tl]=i.value.trim().replace(',','.');rerender()}));
     r.querySelectorAll('[data-tm]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.tm]=Number(i.value)||0;rerender()}));
-    const er=r.querySelector('[data-rule]');er&&(er.onclick=()=>{if(JSON.stringify(c)!==JSON.stringify(S.cfg)){toast('Press Save first');return}S.fb={pid:p.id,tid:t.id};S.chemTab='fb';S.view='chem';render()});
+    const er=r.querySelector('[data-rule]');er&&(er.onclick=()=>{if(JSON.stringify(c)!==JSON.stringify(S.cfg)){toast('Press Save first');return}S.fb={pid:p.id,tid:t.id,kind:t.kind};S.chemTab='fb';S.view='chem';render()});
     r.querySelector('[data-tdel]').onclick=function(){if(this.dataset.armed){p.tests.splice(Number(r.dataset.ti),1);rerender()}else{this.dataset.armed=1;this.textContent='Remove?'}};
   });
 }
@@ -860,21 +868,22 @@ function builderHTML(){
   const prods=S.cfg.products||[];
   if(!S.fb||!prods.find(p=>p.id===S.fb.pid)){const p=prods[0];S.fb={pid:p&&p.id,tid:''}}
   const p=prods.find(x=>x.id===S.fb.pid);if(!p)return'';
-  const chem=(p.tests||[]).filter(t=>t.kind==='chem');
+  const fk=S.fb.kind||'chem';const chem=(p.tests||[]).filter(t=>t.kind===fk);
   if(S.fb.tid===''&&chem[0])S.fb.tid=chem[0].id;
-  if(!S.fb.t||S.fb.t.id!==S.fb.tid){const src=(p.tests||[]).find(t=>t.id===S.fb.tid);S.fb.t=src?JSON.parse(JSON.stringify(src)):newTest();S.fb.tid=S.fb.t.id}
+  if(!S.fb.t||S.fb.t.id!==S.fb.tid){const src=(p.tests||[]).find(t=>t.id===S.fb.tid);S.fb.t=src?JSON.parse(JSON.stringify(src)):newTest(fk);S.fb.tid=S.fb.t.id}
   const t=S.fb.t;const lim=isDoctor();
   (t.outputs||[]).forEach((o,k)=>{if(!o.rule)o.rule=ruleOf(t,o,k)});
   const opts=CATS.map(([c,n])=>{const ps=prods.filter(x=>catOfP(x)===c);return ps.length?'<optgroup label="'+n+'">'+ps.map(x=>'<option value="'+x.id+'"'+(x.id===p.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</optgroup>':''}).join('');
-  let h='<h2>Make or change a test</h2><div class="card stack fb">';
+  let h='<h2>Make or change a test</h2><div class="kindbar">'+[['chem','Chemical'],['micro','Microbiology']].map(x=>'<button type="button" class="kind'+(fk===x[0]?' on':'')+'" data-fbk="'+x[0]+'">'+x[1]+'</button>').join('')+'</div><div class="card stack fb">';
   h+='<div class="row"><label class="field"><span>Product</span><select id="fb-p">'+opts+'</select></label><label class="field"><span>Test</span><select id="fb-t">'+chem.map(x=>'<option value="'+x.id+'"'+(x.id===t.id?' selected':'')+'>'+esc(x.name)+'</option>').join('')+(t._new?'<option value="'+t.id+'" selected>'+esc(t.name)+' (new)</option>':'')+'<option value="__new">+ New test</option></select></label>'+
     '<label class="field" style="flex:1"><span>Test name</span><input data-fbt="name" value="'+esc(t.name)+'"></label></div>';
+  if(t.kind==='micro')h+='<div class="row small"><label class="row">Read after <input class="num" data-fbm="incubDays" type="number" value="'+esc(t.incubDays||'')+'" style="width:60px"> days</label><label class="row">How often <select data-fbm="everyDays">'+[['','Every sample'],['7','Once a week'],['14','Every 2 weeks'],['30','Once a month']].map(x=>'<option value="'+x[0]+'"'+(String(t.everyDays||'')===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></label></div>';
   h+='<div class="step"><span class="stepn">1</span><div class="stack" style="flex:1"><b>What does the lab type?</b><div class="boxes">'+(t.inputs||[]).map((x,k)=>'<span class="boxed"><input data-inl="'+k+'" value="'+esc(x.label)+'"><button class="ghost danger" data-indel="'+k+'" title="Remove">×</button></span>').join('')+
     '<form id="fb-newin" class="row"><input id="fb-inname" placeholder="e.g. Volume, Sample weight" style="width:200px"><button>+ Add box</button></form></div></div></div>';
   (t.outputs||[]).forEach((o,k)=>{
     h+='<div class="step"><span class="stepn">'+(k+2)+'</span><div class="stack" style="flex:1"><div class="row"><b>Rule for</b><input data-ol="'+k+'" value="'+esc(o.label)+'" style="width:200px">'+((t.outputs||[]).length>1?'<button class="ghost danger" data-odel="'+k+'">Remove this result</button>':'')+'</div>'+
       '<label class="small row">Unit <span class="muted">(optional)</span><input data-ou="'+k+'" value="'+esc(o.unit||'')+'" placeholder="e.g. %, g/mL" style="width:110px"></label><div class="rule" data-rule="'+k+'"><span class="eq">=</span>'+(t._selK=k,o.rule.length?o.rule.map((x,i)=>tokHTML(t,x,i)).join(''):'<span class="muted">Tap the buttons below</span>')+'</div>'+editBar(t,o,k)+
-      '<label class="small row">Start from another rule <select data-copy="'+k+'"><option value="">Choose…</option>'+(S.cfg.products||[]).flatMap(pp=>(pp.tests||[]).filter(tt=>tt.kind==='chem').flatMap(tt=>(tt.outputs||[]).map((oo,oi)=>'<option value="'+esc(pp.id+'|'+tt.id+'|'+oi)+'">'+esc(pp.name+' · '+(tt.outputs.length>1?oo.label:tt.name))+'</option>'))).join('')+'</select></label>'+
+      '<label class="small row">Start from another rule <select data-copy="'+k+'"><option value="">Choose…</option>'+(S.cfg.products||[]).flatMap(pp=>(pp.tests||[]).filter(tt=>tt.kind===t.kind).flatMap(tt=>(tt.outputs||[]).map((oo,oi)=>'<option value="'+esc(pp.id+'|'+tt.id+'|'+oi)+'">'+esc(pp.name+' · '+(tt.outputs.length>1?oo.label:tt.name))+'</option>'))).join('')+'</select></label>'+
       '<div class="pad"><div class="padg"><span class="small muted">What the lab types</span>'+(t.inputs||[]).map(x=>'<button type="button" class="tok tk-in" data-add="'+k+'" data-t="in" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>'+
       '<div class="padg"><span class="small muted">Solutions</span>'+(S.sol||[]).map(x=>'<button type="button" class="tok tk-sol" data-add="'+k+'" data-t="sol" data-v="'+x.id+'">'+esc(x.name)+'</button>').join('')+'</div>'+
       ((t.outputs||[]).slice(0,k).length?'<div class="padg"><span class="small muted">Results above</span>'+t.outputs.slice(0,k).map(x=>'<button type="button" class="tok tk-res" data-add="'+k+'" data-t="res" data-v="'+esc(x.key)+'">'+esc(x.label)+'</button>').join('')+'</div>':'')+
@@ -883,10 +892,10 @@ function builderHTML(){
   h+='<div class="row"><button class="ghost small" id="fb-addout">+ Another result</button>'+((t.outputs||[]).length>1?'<label class="row pickopt"><input type="checkbox" id="fb-pick"'+(t.pick?' checked':'')+'> The lab chooses <b>one</b> of these results each time (e.g. anhydrous or monohydrate)</label>':'')+'</div>';
   const ex=S.fb.ex||{};
   h+='<div class="fbcheck"><b>Try it</b>'+(t.inputs||[]).map(x=>'<label class="row small">'+esc(x.label)+' <input class="num" data-fex="'+esc(x.key)+'" value="'+esc(ex[x.key]||'')+'" style="width:90px" inputmode="decimal"></label>').join('')+'<span id="fb-out">'+fbOuts(computeTest(t,ex))+'</span></div>';
-  h+='<div class="row between"><span class="small" id="fb-msg" style="color:var(--bad)"></span><div class="row"><button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save test</button></div></div></div>';
+  h+='<div class="row between"><span class="small" id="fb-msg" style="color:var(--bad)"></span><div class="row">'+(t._new?'':'<button class="ghost danger" id="fb-del">Delete this test</button>')+'<button id="fb-reset">Undo changes</button><button class="primary" id="fb-save">Save test</button></div></div></div>';
   return h;
 }
-function newTest(){return{id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume'}],consts:[],outputs:[{key:'r',label:'Result',rule:[],formula:'',unit:'',min:'',max:'',dp:2}],_new:1}}
+function newTest(k){if(k==='micro')return{id:uid('t'),kind:'micro',name:'New micro test',incubDays:2,inputs:[{key:'cfu',label:'Count'}],consts:[],outputs:[{key:'count',label:'New micro test',rule:[{k:'in',key:'cfu'}],formula:'cfu',unit:'CFU/mL',min:'',max:'',dp:0}],_new:1};return{id:uid('t'),kind:'chem',name:'New test',method:'',inputs:[{key:'V',label:'Volume'}],consts:[],outputs:[{key:'r',label:'Result',rule:[],formula:'',unit:'',min:'',max:'',dp:2}],_new:1}}
 function fbOuts(outs){return outs.map(o=>'<span class="out '+o.state+'">'+esc(o.label)+': '+(o.value==null?'type numbers':isNaN(o.value)?'rule not finished':fmt(o.value,o.dp))+'</span>').join('')}
 function insTok(k,tok){const o=S.fb.t.outputs[k];const sel=S.fb.sel;if(sel&&sel.k===k&&sel.i<o.rule.length){o.rule.splice(sel.i+1,0,tok);sel.i++}else{o.rule.push(tok)}}
 function bindChem(){
@@ -899,8 +908,13 @@ function bindChem(){
   const sa=$('#solAdd');sa&&(sa.onsubmit=e=>{e.preventDefault();const v=$('#sa-v').value.trim().replace(',','.');if(isNaN(Number(v))){toast('Concentration must be a number');return}S.sol=(S.sol||[]).concat([{id:uid('sol'),name:$('#sa-n').value.trim(),chem:'',nominal:null,conc:v,unit:'N',at:Date.now(),by:S.me.id,history:[]}]);S.dirty=false;saveSol();keep()});
   const fb=S.fb;if(!fb||!fb.t)return;const t=fb.t;
   const upd=()=>{compile(t);keep()};
-  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:''};keep()};
-  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.t=newTest();S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};keep()};
+  $('#fb-p').onchange=e=>{S.fb={pid:e.target.value,tid:'',kind:S.fb.kind};keep()};
+  document.querySelectorAll('[data-fbk]').forEach(b=>b.onclick=()=>{S.fb={pid:S.fb.pid,tid:'',kind:b.dataset.fbk};keep()});
+  document.querySelectorAll('[data-fbm]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.fbm]=Number(i.value)||0;keep()}));
+  const fd=$('#fb-del');fd&&(fd.onclick=async function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+t.name;return}
+    const c=JSON.parse(JSON.stringify(S.cfg));const pp=(c.products||[]).find(x=>x.id===S.fb.pid);if(!pp)return;pp.tests=(pp.tests||[]).filter(x=>x.id!==t.id);
+    try{await S.db.doc('config/main').set(c);S.cfg=c;S.cfgDraft=null;S.fb={pid:pp.id,tid:'',kind:t.kind};toast('Deleted '+t.name+' from '+pp.name);keep()}catch(e){toast('Could not delete: '+(e.code||e.message))}});
+  $('#fb-t').onchange=e=>{if(e.target.value==='__new'){S.fb.t=newTest(S.fb.kind);S.fb.tid=S.fb.t.id}else{S.fb.tid=e.target.value;S.fb.t=null}S.fb.ex={};keep()};
   document.querySelectorAll('[data-fbt]').forEach(i=>i.addEventListener('change',()=>{const old=t.name;t.name=i.value.trim()||old;if(t.outputs.length===1&&(t.outputs[0].label===old||t.outputs[0].label==='Result'))t.outputs[0].label=t.name;keep()}));
   document.querySelectorAll('[data-inl]').forEach(i=>i.addEventListener('change',()=>{t.inputs[Number(i.dataset.inl)].label=i.value.trim()||'Box';keep()}));
   document.querySelectorAll('[data-indel]').forEach(b=>b.onclick=()=>{const k=t.inputs[Number(b.dataset.indel)].key;t.inputs.splice(Number(b.dataset.indel),1);t.outputs.forEach(o=>o.rule=o.rule.filter(x=>!(x.k==='in'&&x.key===k)));upd()});
