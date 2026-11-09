@@ -173,14 +173,16 @@ function testsOf(p,kind){return (p&&p.tests||[]).filter(t=>!kind||t.kind===kind)
 function resultOf(s,t){return (s.results||{})[t.id]||{}}
 function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=resOuts(t,r);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
 function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}resOuts(t,r).forEach(o=>{if(o.state==='bad')bad++})});return bad}
-function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional);return ts.length>0&&ts.every(t=>testDone(s,t))}
+function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional&&testActive(s,t));return ts.length>0&&ts.every(t=>testDone(s,t))}
 /* tests done every N days (water micro: weekly): only due when N days passed since the last time it was done */
 function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(x=>{if(x.productId!==pid||x.date>=date)return;const p=product(pid);const t=p&&p.tests.find(y=>y.id===tid);if(t&&testDone(x,t)&&x.date>L)L=x.date});return L}
 function nextDue(s,t){if(!t.everyDays)return s.date;const L=lastDoneBefore(s.productId,t.id,s.date);return L?addDays(L,Number(t.everyDays)):s.date}
-function pairSkip(s){const p=product(s.productId);return !!(p&&p.microPair&&s.n%2===0)}
+function perBatch(t){return !!(t&&(t.perBatch||/brix/i.test(t.name||'')))}
+function isMate(s){return !!(s&&s.pairOf)}
+function pairSkip(s){if(s&&s.pairOf)return true;const p=product(s.productId);return !!(p&&p.microPair&&s.n%2===0)}
 function pairMate(s){return Object.values(S.samples).find(x=>x.sessionId===s.sessionId&&x.n===s.n+1)}
-function microCode(s){const p=product(s.productId);if(p&&p.microPair&&s.n%2===1){const ss=S.sessions[s.sessionId]||{};const m=pairMate(s);return (m||(Number(ss.batches)||0)>=s.n+1)?s.code+'+'+(s.n+1):s.code}return s.code}
-function testActive(s,t){if(t.kind==='micro'&&pairSkip(s))return false;if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
+function microCode(s){if(String(s.code).includes('+'))return s.code;const p=product(s.productId);if(p&&p.microPair&&s.n%2===1){const ss=S.sessions[s.sessionId]||{};const m=pairMate(s);return (m||(Number(ss.batches)||0)>=s.n+1)?s.code+'+'+(s.n+1):s.code}return s.code}
+function testActive(s,t){if(isMate(s)&&!perBatch(t))return false;if(t.kind==='micro'&&pairSkip(s))return false;if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
 function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>testActive(s,t)&&!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
 function myTasks(){return Object.values(S.tasks).filter(t=>!t.done&&(!t.to||t.to===S.me.id))}
@@ -374,10 +376,11 @@ function sessionView(){
   h+='<div class="session-head"><div><div class="label">'+esc(catName(p))+'</div><h1>'+esc(p?p.name:'?')+'</h1></div>'+
     kv('Filling date',niceDate(ss.date))+(ss.prod||ss.exp?kv('Production',ss.prod?niceDate(ss.prod):'–')+kv('Expiry',ss.exp?niceDate(ss.exp):'–'):'')+kv('Section',ss.section)+kv('Lot',ss.lot||'–','lot')+kv('Batches',ss.batches||'–','batches')+kv('Tank',ss.tank||'–','tank')+
     (ss.validated&&!isDoctor()?'':'<button class="ghost" id="editSess">Edit details</button>')+'</div>';
-  h+='<div class="card row between"><div class="row"><b class="num" style="font-size:18px">'+smp.length+' of '+(ss.batches||smp.length)+'</b><span>samples added</span>'+(left?'<span class="pill warn">'+left+' left to add</span>':'<span class="pill ok">All batches sampled</span>')+'<span class="muted">·</span><span class="num">'+pr.done+'</span> fully tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+'</div><button class="primary" id="addSample">'+(left?'Add sample '+(p?p.code:'')+(smp.length+1):'Add extra sample')+'</button></div>';
+  const pairP=p&&p.microPair;const vis=pairP?smp.filter(x=>!x.pairOf).length:smp.length,tot=pairP?Math.ceil((ss.batches||smp.length)/2):(ss.batches||smp.length);
+  h+='<div class="card row between"><div class="row"><b class="num" style="font-size:18px">'+vis+' of '+tot+'</b><span>samples added'+(pairP?' (2 batches each)':'')+'</span>'+(left?'<span class="pill warn">'+left+' left to add</span>':'<span class="pill ok">All batches sampled</span>')+'<span class="muted">·</span><span class="num">'+pr.done+'</span> fully tested'+(pr.bad?'<span class="pill bad">'+pr.bad+' out of limit</span>':'')+'</div><button class="primary" id="addSample">'+(left?'Add sample '+(p?p.code:'')+(smp.length+1)+(p&&p.microPair&&(Number(ss.batches)||0)>=smp.length+2?'+'+(smp.length+2):''):'Add extra sample')+'</button></div>';
   if(!smp.length){h+='<div class="card muted">No samples yet. Press <b>Add sample</b> for each batch you take a sample from.</div>'+signoffHTML(ss,smp)+'</div>';return h}
   const cur=S.samples[S.sampleId];
-  h+='<div class="work"><div class="samples" role="list">'+smp.map(s=>{const f=sampleFlags(s,p);const d=sampleChemDone(s,p);const live=s.live&&Date.now()-s.live.at<90000&&s.live.by!==S.me.id;
+  h+='<div class="work"><div class="samples" role="list">'+smp.filter(x=>!x.pairOf).map(s=>{const mt=Object.values(S.samples).find(x=>x.pairOf===s.id);const f=sampleFlags(s,p)+(mt?sampleFlags(mt,p):0);const d=sampleChemDone(s,p)&&(!mt||sampleChemDone(mt,p));const live=s.live&&Date.now()-s.live.at<90000&&s.live.by!==S.me.id;
       return '<button class="sbtn'+(s.id===S.sampleId?' on':'')+'" data-sample="'+s.id+'"><span><b>'+esc(s.code)+'</b>'+(s.extra?' <span class="pill warn">extra</span>':'')+'<br><span class="small muted">'+(s.tank?'Tank '+esc(s.tank):'Batch '+esc(s.batch||s.n))+(live?' · <span class="live-dot"></span> '+esc(person(s.live.by).name.split(' ')[0]):'')+'</span></span>'+
       (f?'<span class="pill bad">'+f+'</span>':d?'<span class="pill ok">Done</span>':'<span class="pill">Open</span>')+'</button>'}).join('')+'</div>';
   h+='<div class="card" id="sampleForm">'+sampleForm(cur,p,ss)+((isDoctor()||!ss.validated)?'<div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost danger small" id="delSample">Delete sample '+esc(cur.code)+'</button></div>':'')+'</div>';
@@ -413,7 +416,9 @@ function sampleForm(s,p,ss){
   if(testsOf(p,'micro').length&&testsOf(p).some(t=>t.kind!=='micro'))h+=kindBar();
   groups.forEach(([k,name])=>{const ts=testsOf(p,k);if(!ts.length||!kindOk({kind:k}))return;
     h+='<div class="group-h"><h3>'+name+'</h3>'+(k==='micro'?(microCode(s)!==s.code?'<span class="pill acc">For '+esc(microCode(s))+'</span> ':'')+'<label class="row small">All micro started on <input type="date" id="sm-mdate" value="'+esc(s.microDate||s.date)+'"'+(lockedT(s,{kind:'chem'})&&!isDoctor()?' disabled':'')+'></label>':'')+'</div>';
-    ts.forEach(t=>h+=testRow(s,t))});
+    ts.forEach(t=>{const mt=Object.values(S.samples).find(x=>x.pairOf===s.id);
+      if(mt&&perBatch(t)){h+=testRow(s,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(p.code+s.n)+'</b>');h+='<div data-sid="'+mt.id+'">'+testRow(mt,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(mt.code)+'</b>')+'</div>'}
+      else h+=testRow(s,t)})});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
   if(!s.testedBy&&!isAdmin()&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample · sign with PIN</button></div>';
   const rts=(s.retests||[]);
@@ -498,7 +503,7 @@ function bindSession(){
   const s=S.samples[S.sampleId]; if(!s)return;
   const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()};presence()};
   document.querySelectorAll('[data-in]').forEach(inp=>{
-    inp.addEventListener('input',()=>{const t=p.tests.find(x=>x.id===inp.dataset.in);s.results=s.results||{};const r=s.results[t.id]=s.results[t.id]||{};r.in=r.in||{};
+    inp.addEventListener('input',()=>{const t=p.tests.find(x=>x.id===inp.dataset.in);const sb=inp.closest('[data-sid]');const s=(sb&&S.samples[sb.dataset.sid])||S.samples[S.sampleId];s.results=s.results||{};const r=s.results[t.id]=s.results[t.id]||{};r.in=r.in||{};
       r.in[inp.dataset.key]=inp.value.trim().replace(',','.');r.by=S.me.id;r.at=Date.now();if(t.kind!=='micro'&&s.date<today())r.late=true;live(t.id,inp.dataset.key);
       const row=inp.closest('.test');const tmp=document.createElement('div');tmp.innerHTML=testRow(s,t);
       row.querySelector('.outs').replaceWith(tmp.querySelector('.outs'));
@@ -536,6 +541,11 @@ function bindSession(){
 function nextCode(p,smp){return (p?p.code:'S')+(smp.length+1)}
 function addSample(ss,p){
   const smp=sessionSamples(ss.id);const left=(Number(ss.batches)||0)-smp.length;
+  if(p&&p.microPair&&left>0){const n=smp.length+1,two=left>=2,last=smp[smp.length-1];
+    const base={sessionId:ss.id,date:ss.date,productId:ss.productId,tank:ss.tank||'',extra:false,reason:'',results:{},notes:[],retests:[],createdBy:S.me.id,createdAt:Date.now(),prod:(last&&last.prod)||ss.prod||'',exp:(last&&last.exp)||ss.exp||''};
+    const a=Object.assign({},base,{id:uid('m'),n,code:p.code+n+(two?'+'+(n+1):''),batch:two?n+' + '+(n+1):String(n)});saveSample(a);
+    if(two){const b=Object.assign({},base,{id:uid('m'),n:n+1,code:p.code+(n+1),batch:String(n+1),pairOf:a.id,results:{}});saveSample(b)}
+    S.sampleId=a.id;render();toast('Sample '+a.code+' added'+(left-(two?2:1)>0?' · '+Math.ceil((left-(two?2:1))/2)+' left':''));return}
   const make=(extra,reason)=>{const n=smp.length+1;const s={id:uid('m'),sessionId:ss.id,date:ss.date,productId:ss.productId,n,code:(p?p.code:'S')+n,tank:ss.tank||'',batch:extra?'':String(n),extra:!!extra,reason:reason||'',results:{},notes:[],retests:[],createdBy:S.me.id,createdAt:Date.now()};
     {const last=smp[smp.length-1];s.prod=(last&&last.prod)||ss.prod||'';s.exp=(last&&last.exp)||ss.exp||''}
     saveSample(s);S.sampleId=s.id;render();toast('Sample '+s.code+' added'+(left-1>0?' · '+(left-1)+' left':''))};
@@ -614,7 +624,7 @@ function stickersModal(ss){
     '<form id="stf" class="stack"><div class="row"><label class="field" style="flex:1"><span>Chemical stickers per sample</span><input id="st-c" type="number" min="0" max="24" value="1"></label><label class="field" style="flex:1"><span>Microbiology stickers</span><select id="st-m"><option value="pair"'+(p&&p.code==='GM'?' selected':'')+'>One for every 2 samples (1+2, 3+4…)</option><option value="one"'+(p&&p.code!=='GM'&&testsOf(p,'micro').length?' selected':'')+'>One per sample</option><option value="none"'+(!testsOf(p,'micro').length?' selected':'')+'>None</option></select></label><label class="field" style="flex:1"><span>Number of samples</span><input id="st-n" type="number" min="1" value="'+Math.max(smp.length,Number(ss.batches)||0,1)+'"></label><label class="field" style="flex:1"><span>Skip first labels</span><input id="st-skip" type="number" min="0" max="23" value="0" title="For a sheet that is partly used"></label></div><div id="st-prev" class="sheet"></div><div class="row" style="justify-content:flex-end"><button type="button" data-close>Close</button><button class="primary">Download PDF to print</button></div><p class="small muted" id="st-msg"></p></form>',(bg,close)=>{
     const labels=()=>{const n=Number(bg.querySelector('#st-n').value)||1,c=Number(bg.querySelector('#st-c').value)||1,skip=Number(bg.querySelector('#st-skip').value)||0;const out=[];for(let i=0;i<skip;i++)out.push(null);
       const L1=i=>{const s=smp[i-1];return{code:s?s.code:(p.code+i),name:p.name,date:ss.date,lot:ss.lot,section:ss.section,prod:(s&&s.prod)||ss.prod||'',exp:(s&&s.exp)||ss.exp||''}};
-      for(let i=1;i<=n;i++)for(let k=0;k<c;k++)out.push(Object.assign(L1(i),{kind:'Chemical'}));
+      if(p&&p.microPair){for(let i=1;i<=n;i+=2)for(let k=0;k<c;k++){const a=Object.assign(L1(i),{kind:'Chemical'});a.code=i+1<=n?p.code+i+'+'+(i+1):p.code+i;out.push(a)}}else for(let i=1;i<=n;i++)for(let k=0;k<c;k++)out.push(Object.assign(L1(i),{kind:'Chemical'}));
       const m=bg.querySelector('#st-m').value;
       if(m==='one')for(let i=1;i<=n;i++)out.push(Object.assign(L1(i),{kind:'Microbiology'}));
       if(m==='pair')for(let i=1;i<=n;i+=2){const a=L1(i);a.code=i+1<=n?p.code+i+'+'+(i+1):a.code;a.kind='Microbiology';out.push(a)}
