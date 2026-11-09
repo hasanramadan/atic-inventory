@@ -14,7 +14,7 @@ function ago(t){const s=Math.round((Date.now()-t)/1000);if(s<60)return s+'s ago'
 function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function lsSet(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
-function fmt(v,dp){if(v==null||v===''||isNaN(v))return'–';return Number(v).toFixed(dp==null?2:dp)}
+function fmt(v,dp){if(v==null||v===''||isNaN(v))return'–';const n=Number(v);return String(Math.round(n*1e6)/1e6)}
 
 /* ---------- formulas ---------- */
 const SAFE=/^[A-Za-z0-9_+\-*/().,\s^]*$/;
@@ -96,14 +96,15 @@ async function flush(path){
   catch(e){console.error(e);toast('Could not save: '+(e.message||e.code||'error'))}
   q.busy=false; if(q.next)flush(path);
 }
-function saveSample(s){S.samples[s.id]=s;queueWrite('samples/'+s.id,strip(s))}
+const localTouch={};
+function saveSample(s){S.samples[s.id]=s;localTouch[s.id]=Date.now();queueWrite('samples/'+s.id,strip(s))}
 function saveSession(s){S.sessions[s.id]=s;queueWrite('sessions/'+s.id,strip(s))}
 function strip(o){const c=Object.assign({},o);delete c.id;return JSON.parse(JSON.stringify(c))}
 
 /* debounced live typing */
 const typingTimers={};
 function flushTyping(){Object.keys(typingTimers).forEach(id=>{if(typingTimers[id]){clearTimeout(typingTimers[id]);typingTimers[id]=null;const x=S.samples[id];if(x)saveSample(x)}})}
-function liveSave(s,ms){clearTimeout(typingTimers[s.id]);typingTimers[s.id]=setTimeout(()=>{typingTimers[s.id]=null;saveSample(s)},ms==null?700:ms)}
+function liveSave(s,ms){localTouch[s.id]=Date.now();clearTimeout(typingTimers[s.id]);typingTimers[s.id]=setTimeout(()=>{typingTimers[s.id]=null;saveSample(s)},ms==null?700:ms)}
 
 /* ---------- boot ---------- */
 async function boot(){
@@ -122,8 +123,8 @@ async function boot(){
   S.db.collection('sessions').orderBy('date','desc').limit(300).onSnapshot(snap=>{S.sessions={};snap.docs.forEach(d=>S.sessions[d.id]=Object.assign({id:d.id},d.data()));done.c3||(done.c3=1,done());syncBatches();changed('sessions')},err);
   S.db.collection('samples').orderBy('date','desc').limit(1000).onSnapshot(snap=>{
     snap.docs.forEach(d=>{const local=S.samples[d.id];const q=Q['samples/'+d.id];
-      if(local&&((q&&(q.busy||q.next))||typingTimers[d.id]))return; S.samples[d.id]=Object.assign({id:d.id},d.data())});
-    const ids=new Set(snap.docs.map(d=>d.id));Object.keys(S.samples).forEach(k=>{if(!ids.has(k)&&!(Q['samples/'+k]&&(Q['samples/'+k].busy||Q['samples/'+k].next)))delete S.samples[k]});
+      if(local&&((q&&(q.busy||q.next))||typingTimers[d.id]||(localTouch[d.id]&&Date.now()-localTouch[d.id]<30000)))return; S.samples[d.id]=Object.assign({id:d.id},d.data())});
+    const ids=new Set(snap.docs.map(d=>d.id));Object.keys(S.samples).forEach(k=>{if(!ids.has(k)&&!(Q['samples/'+k]&&(Q['samples/'+k].busy||Q['samples/'+k].next))&&!(localTouch[k]&&Date.now()-localTouch[k]<30000))delete S.samples[k]});
     changed('samples')},err);
   S.db.doc('config/solutions').onSnapshot(snap=>{const d=snap.exists?snap.data():null;S.sol=d&&d.list||null;if(!S.sol)seedSolutions();else migrateWaterWeekly();changed('sol')},()=>{});
   S.db.doc('config/lab').onSnapshot(snap=>{S.labPin=snap.exists?String(snap.data().pin||''):'';changed('lab')},()=>{});
