@@ -102,6 +102,7 @@ function strip(o){const c=Object.assign({},o);delete c.id;return JSON.parse(JSON
 
 /* debounced live typing */
 const typingTimers={};
+function flushTyping(){Object.keys(typingTimers).forEach(id=>{if(typingTimers[id]){clearTimeout(typingTimers[id]);typingTimers[id]=null;const x=S.samples[id];if(x)saveSample(x)}})}
 function liveSave(s,ms){clearTimeout(typingTimers[s.id]);typingTimers[s.id]=setTimeout(()=>{typingTimers[s.id]=null;saveSample(s)},ms==null?700:ms)}
 
 /* ---------- boot ---------- */
@@ -388,7 +389,7 @@ function sessionView(){
   h+='<div class="work"><div class="samples" role="list">'+smp.filter(x=>!x.pairOf).map(s=>{const mt=Object.values(S.samples).find(x=>x.pairOf===s.id);const f=sampleFlags(s,p)+(mt?sampleFlags(mt,p):0);const d=sampleChemDone(s,p)&&(!mt||sampleChemDone(mt,p));const live=s.live&&Date.now()-s.live.at<90000&&s.live.by!==S.me.id;
       return '<button class="sbtn'+(s.id===S.sampleId?' on':'')+'" data-sample="'+s.id+'"><span><b>'+esc(s.code)+'</b>'+(s.extra?' <span class="pill warn">extra</span>':'')+'<br><span class="small muted">'+(s.tank?'Tank '+esc(s.tank):'Batch '+esc(s.batch||s.n))+(live?' · <span class="live-dot"></span> '+esc(person(s.live.by).name.split(' ')[0]):'')+'</span></span>'+
       (f?'<span class="pill bad">'+f+'</span>':d?'<span class="pill ok">Done</span>':'<span class="pill">Open</span>')+'</button>'}).join('')+'</div>';
-  h+='<div class="card" id="sampleForm">'+sampleForm(cur,p,ss)+((isDoctor()||!ss.validated)?'<div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost danger small" id="delSample">Delete sample '+esc(cur.code)+'</button></div>':'')+'</div>';
+  h+='<div class="card" id="sampleForm">'+sampleForm(cur,p,ss)+'<div class="savebar"><button class="primary" id="saveRes">Save results</button><span class="small muted" id="savedAt">'+(cur.savedAt?'Saved at '+hhmm(cur.savedAt):'Results also save by themselves as you type')+'</span></div>'+((isDoctor()||!ss.validated)?'<div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost danger small" id="delSample">Delete sample '+esc(cur.code)+'</button></div>':'')+'</div>';
   h+='<div class="side">'+notesPanel(cur)+'</div></div>';
   h+=signoffHTML(ss,smp);
   return h+'</div>';
@@ -496,7 +497,8 @@ function bindSession(){
   const ad=$('#addSample');ad&&(ad.onclick=()=>addSample(ss,p));
   const es=$('#editSess');es&&(es.onclick=()=>editSessionModal(ss));
   $('#stickers').onclick=()=>stickersModal(ss);
-  document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{S.sampleId=b.dataset.sample;render()});
+  document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{flushTyping();S.sampleId=b.dataset.sample;render()});
+  const svb=$('#saveRes');svb&&(svb.onclick=()=>{flushTyping();const cur=S.samples[S.sampleId];if(cur){cur.savedAt=Date.now();saveSample(cur);const mt=Object.values(S.samples).find(x=>x.pairOf===cur.id);if(mt)saveSample(mt)}toast('Results saved');const t=$('#savedAt');t&&(t.textContent='Saved at '+hhmm(Date.now()))});
   
   document.querySelectorAll('[data-val]').forEach(b=>b.onclick=()=>validateModal(ss,b.dataset.val,b.dataset.day));
   document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>report(ss,b.dataset.rep,b.dataset.day,b.dataset.fmt));
