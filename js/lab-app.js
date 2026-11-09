@@ -179,7 +179,7 @@ function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(
 function nextDue(s,t){if(!t.everyDays)return s.date;const L=lastDoneBefore(s.productId,t.id,s.date);return L?addDays(L,Number(t.everyDays)):s.date}
 function pairSkip(s){const p=product(s.productId);return !!(p&&p.microPair&&s.n%2===0)}
 function pairMate(s){return Object.values(S.samples).find(x=>x.sessionId===s.sessionId&&x.n===s.n+1)}
-function microCode(s){const p=product(s.productId);if(p&&p.microPair&&s.n%2===1){const m=pairMate(s);return m?s.code+'+'+(s.n+1):s.code}return s.code}
+function microCode(s){const p=product(s.productId);if(p&&p.microPair&&s.n%2===1){const ss=S.sessions[s.sessionId]||{};const m=pairMate(s);return (m||(Number(ss.batches)||0)>=s.n+1)?s.code+'+'+(s.n+1):s.code}return s.code}
 function testActive(s,t){if(t.kind==='micro'&&pairSkip(s))return false;if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
 function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>testActive(s,t)&&!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
