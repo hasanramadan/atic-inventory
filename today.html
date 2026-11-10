@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611101250">
+<link rel="stylesheet" href="css/app.css?v=202611101335">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -52,14 +52,14 @@ details.allm .mgrid{margin-top:12px}
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611101250"></script>
-<script src="js/shell.js?v=202611101250"></script>
-<script src="js/backup.js?v=202611101250" defer></script>
-<script src="js/assistant.js?v=202611101250" defer></script>
-<script src="js/io.js?v=202611101250"></script>
-<script src="js/line-engine.js?v=202611101250"></script>
-<script src="js/materials-engine.js?v=202611101250"></script>
-<script src="js/supply-engine.js?v=202611101250"></script>
+<script src="config.js?v=202611101335"></script>
+<script src="js/shell.js?v=202611101335"></script>
+<script src="js/backup.js?v=202611101335" defer></script>
+<script src="js/assistant.js?v=202611101335" defer></script>
+<script src="js/io.js?v=202611101335"></script>
+<script src="js/line-engine.js?v=202611101335"></script>
+<script src="js/materials-engine.js?v=202611101335"></script>
+<script src="js/supply-engine.js?v=202611101335"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -98,6 +98,8 @@ function planToday(sec) {
       h += '<span class="s">From the factory plan. ' + link('line', 'line.html#timeline', 'Make the forecast in the Line Planner →') + '</span>';
     } else h += '<span class="empty">Nothing planned on this line today.</span>';
   }
+  var ns = ((D.fplan && D.fplan.runs) || []).filter(function (r) { return r.note && r.from <= TODAY && r.to >= TODAY && (r.lines === (sec === 'S1' ? 'SEC-1' : 'SEC-2') || r.lines === 'both'); });
+  if (ns.length) h += '<span class="s" style="display:block;margin-top:6px;padding:8px 10px;border-radius:8px;border:1px solid #e0b300;background:#fff8dc;color:#5a4500">' + ns.map(function (r) { return '⚠ ' + esc(r.note); }).join('<br>') + '</span>';
   return h + '</div>';
 }
 function lastResults() {

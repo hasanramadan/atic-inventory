@@ -4,7 +4,7 @@
 <title>ATIC Line Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611101250">
+<link rel="stylesheet" href="css/app.css?v=202611101335">
 <style>
 
 .lp .wrap{max-width:1500px;margin:0 auto;padding-inline:16px;padding-block:0 40px;display:flex;flex-direction:column;gap:14px}
@@ -353,14 +353,14 @@
 </main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611101250"></script>
-<script src="js/shell.js?v=202611101250"></script>
-<script src="js/backup.js?v=202611101250" defer></script>
-<script src="js/assistant.js?v=202611101250" defer></script>
-<script src="js/io.js?v=202611101250"></script>
-<script src="js/excel.js?v=202611101250"></script>
-<script src="js/word.js?v=202611101250"></script>
-<script src="js/line-engine.js?v=202611101250"></script>
+<script src="config.js?v=202611101335"></script>
+<script src="js/shell.js?v=202611101335"></script>
+<script src="js/backup.js?v=202611101335" defer></script>
+<script src="js/assistant.js?v=202611101335" defer></script>
+<script src="js/io.js?v=202611101335"></script>
+<script src="js/excel.js?v=202611101335"></script>
+<script src="js/word.js?v=202611101335"></script>
+<script src="js/line-engine.js?v=202611101335"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 // The engine is in js/line-engine.js (shared with ATIC BETA 2.0, Supply Planner and Forecast Results).
@@ -448,6 +448,11 @@ function refreshAutoPrev() {
 }
 /* the factory plan (Raw Materials → Forecast & plan): products, sizes and batches per line and day, changeovers included */
 let FPLAN = null;
+function planNotes() {
+  for (const sec of SECS) { const el = $(sec + '-pnote'); if (!el) continue; const key = sec === 'S1' ? 'SEC-1' : 'SEC-2';
+    const ns = ((FPLAN && FPLAN.runs) || []).filter(r => r.note && r.from <= S.date && r.to >= S.date && (r.lines === key || r.lines === 'both')).map(r => r.note);
+    el.hidden = !ns.length; el.innerHTML = ns.map(n => '⚠ ' + n.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))).join('<br>'); }
+}
 function factoryRuns(date, sec) {
   const L = FPLAN && FPLAN.lineDays && FPLAN.lineDays[date] && FPLAN.lineDays[date][sec === 'S1' ? 'SEC-1' : 'SEC-2'];
   if (!L || !L.length) return null;
@@ -502,6 +507,7 @@ function buildCards() {
     const c = document.createElement('article'); c.className = 'card'; c.id = 'card-' + sec;
     c.innerHTML = `
       <div class="card-h"><h2>${SECN[sec]}</h2><span class="sub" id="${sec}-sub"></span></div>
+      <div id="${sec}-pnote" hidden style="margin:6px 0 10px;padding:10px 12px;border-radius:10px;border:1px solid #e0b300;background:#fff8dc;color:#5a4500;font-size:14px"></div>
       <div class="inputs">
         <div class="f w2"><label class="l" for="${sec}-pprod">Previous run (yesterday)</label><select id="${sec}-pprod"></select></div>
         <div class="f"><label class="l" for="${sec}-psize">Prev. size</label><select id="${sec}-psize"></select></div>
@@ -666,7 +672,7 @@ function setSaveChip() {
   else if (S.dbState === 'error') { c.className = 'chip warn'; t.textContent = 'Saving paused: store not answering'; }
   else { c.className = 'chip off'; t.textContent = 'Saving off'; c.title = 'This view cannot reach the shared store. Forecasts still work; nothing is saved.'; }
 }
-function update(o = {}) {
+function update(o = {}) { try { planNotes(); } catch (e) {}
   compute(); syncInputs(); renderCards(); renderTimelineTab();
   SIM.load(S.fc, o.keepTime);
   if (!$('p-compare').hidden && !o.skipReport) renderCompare();
