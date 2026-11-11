@@ -206,6 +206,7 @@ function render(){
   if(!S.me){root.innerHTML=loginView();bindLogin();return}
   if(isStation())return renderStation();
   const tabs=isAdmin()?[['today','Batches',''],['history','Records',''],['micro','Micro pending',microPendingCount()||''],['tasks','Tasks','']]:[['today','Today',myTasks().length||''],['history','Records',''],['micro','Micro pending',microPendingCount()||''],['tasks','Tasks',myTasks().length||'']];
+  if(isDoctor()||isAdmin())tabs.unshift(['find','Find & view','']);
   if(isDoctor())tabs.unshift(['overview','Live overview','']);
   if(isDoctor())tabs.push(['chem','Solutions & formulas','']);
   if(isDoctor())tabs.push(['setup','Tests & limits','']);
@@ -213,9 +214,11 @@ function render(){
   if(S.view==='session'&&!S.sessions[S.sessionId])S.view='today';
   const cur=S.view==='session'?(S.back||'today'):S.view;
   root.innerHTML='<div class="app"><nav class="rail" aria-label="Sections"><div class="brand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div>ATIC Lab<small>Quality control · '+niceDate(today())+'</small></div>'+
+    ((isDoctor()||isAdmin())?'<form id="railFind" style="margin:0 0 8px"><input id="railFindQ" type="search" placeholder="🔎 Find lot, sample, test…" aria-label="Find anything in the lab" value="'+esc(S.view==='find'?(S.fq||''):'')+'" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:10px;border:1px solid rgba(15,110,140,.25)"></form>':'')+
     tabs.map(t=>'<button class="tab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'"><span>'+t[1]+'</span>'+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+
     '<div class="me"><div><div class="label">Signed in</div><b>'+esc(S.me.name)+'</b> <span class="muted small">'+esc(roleName(S.me.role))+'</span></div></div></nav><main id="main">'+viewHTML()+'</main></div>';
   root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
+  const rf=$('#railFind');rf&&(rf.onsubmit=e=>{e.preventDefault();S.fq=$('#railFindQ').value.trim();S.view='find';render();const n=$('#fq');n&&n.focus()});
   bindView();presence();
   root.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;lsSet('lab.cat',S.cat);histFilter.product='';render()});
   root.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{S.kind=b.dataset.kind;lsSet('lab.kind',S.kind);render()});
@@ -227,7 +230,7 @@ function presence(force){if(!S.me||isAdmin()||!S.db)return;const ss=S.view==='se
 setInterval(()=>presence(true),60000);
 setInterval(()=>{if(S.view==='overview'&&isDoctor())patchWatch()},15000);
 function where(v){const ss=v.sessionId&&S.sessions[v.sessionId];const p=ss&&product(ss.productId);const smp=v.sampleId&&S.samples[v.sampleId];const t=smp&&p&&(p.tests||[]).find(x=>x.id===v.testId);
-  const names={today:'Today',history:'Records',micro:'Micro pending',tasks:'Tasks',chem:'Solutions & formulas',setup:'Tests & limits',people:'People',overview:'Live overview'};
+  const names={find:'Find & view',today:'Today',history:'Records',micro:'Micro pending',tasks:'Tasks',chem:'Solutions & formulas',setup:'Tests & limits',people:'People',overview:'Live overview'};
   if(ss)return '<b>'+esc(p?p.name:'Record')+'</b> · '+esc(ss.section||'')+(ss.lot?' · lot '+esc(ss.lot):'')+(smp?' · sample <b class="mono">'+esc(smp.code)+'</b>':'')+(t?' · typing <b>'+esc(t.name)+'</b>':'');
   return esc(names[v.view]||v.view)+(v.cat&&v.view==='today'?' · '+esc(catLabel(v.cat)):'')}
 function roleName(r){return r==='admin'?'Admin':r==='doctor'?'Lab manager':r==='station'?'Lab account':'Lab technician'}
@@ -253,10 +256,11 @@ function viewHTML(){
     case 'setup':return setupView();
     case 'chem':return chemView();
     case 'people':return peopleView();
+    case 'find':return findView();
     default:return todayView();
   }
 }
-function bindView(){({overview:bindOverview,session:bindSession,history:bindHistory,micro:bindMicro,tasks:bindTasks,setup:bindSetup,chem:bindChem,people:bindPeople}[S.view]||bindToday)()}
+function bindView(){({overview:bindOverview,session:bindSession,history:bindHistory,micro:bindMicro,tasks:bindTasks,setup:bindSetup,chem:bindChem,people:bindPeople,find:bindFind}[S.view]||bindToday)()}
 
 /* ---------- login ---------- */
 let pick=null;
@@ -766,6 +770,47 @@ function bindHistory(){
       this.disabled=true;try{for(const id of ids){for(const x of sessionSamples(id)){await S.db.doc('samples/'+x.id).delete();delete S.samples[x.id]}await S.db.doc('sessions/'+id).delete();delete S.sessions[id]}logAct('deleted '+ids.length+' record(s) from Records');toast('Deleted')}catch(e){toast('Could not delete: '+(e.code||e.message))}render()}}
 fBind(histFilter,'hfBar');document.querySelectorAll('[data-fst]').forEach(b=>b.onclick=()=>{histFilter.status=b.dataset.fst;render()});bindCommon()}
 
+
+/* ---------- FIND & VIEW (lab manager / admin) ---------- */
+function fNorm(s){return String(s==null?'':s).toLowerCase()}
+function fDates(q){const out=[];(q.match(/\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b/g)||[]).forEach(m=>{const a=m.split(/[\/.-]/);const y=a[2]?(a[2].length===2?'20'+a[2]:a[2]):'';out.push((y?y+'-':'')+a[1].padStart(2,'0')+'-'+a[0].padStart(2,'0'))});return out}
+function sessHay(ss){const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);const ppl=new Set();smp.forEach(x=>{if(x.takenBy)ppl.add(person(x.takenBy).name);if(x.testedBy)ppl.add(person(x.testedBy).name)});[ss.validated,ss.finalVal].concat(Object.values(ss.microVal||{})).forEach(v=>{if(v&&v.by)ppl.add(person(v.by).name)});
+  return fNorm([p.name,p.code,catLabel(catOfP(p)),ss.lot,ss.section,ss.date,niceDate(ss.date),ss.prod,ss.exp,niceDate(ss.prod),niceDate(ss.exp)].concat(smp.map(x=>x.code+' '+(x.tank||'')+' '+(x.batch||''))).concat([...ppl]).join(' '))}
+function sampHay(x){const ss=S.sessions[x.sessionId]||{};const p=product(ss.productId)||{};return fNorm([x.code,x.tank,x.batch,p.name,p.code,ss.lot,ss.date,niceDate(ss.date),x.takenBy?person(x.takenBy).name:'',x.testedBy?person(x.testedBy).name:''].join(' '))}
+const DRX=/^\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?$/;
+function fWords(q,hay,dates){const ws=fNorm(q).split(/\s+/).filter(w=>w&&!DRX.test(w));return ws.every(w=>hay.includes(w))&&dates.every(d=>hay.includes(d))}
+function sessLate(ss){const p=product(ss.productId);return sessionSamples(ss.id).some(x=>testsOf(p).some(t=>resultOf(x,t).late))}
+const FCHIPS=[['','Everything'],['today','Today'],['week','Last 7 days'],['open','Not validated'],['bad','Out of limit'],['micro','Micro waiting'],['late','Filled late'],['val','Fully validated']];
+function fChip(ss,c){const d=today();if(!c)return true;if(c==='today')return ss.date===d;if(c==='week')return ss.date>=addDays(d,-6);if(c==='open')return !ss.validated;if(c==='val')return !!ss.finalVal||allValidated(ss);const pr=sessionProgress(ss);if(c==='bad')return pr.bad>0;if(c==='micro')return pr.micro>0;if(c==='late')return sessLate(ss);return true}
+function findView(){const q=S.fq||'',c=S.fchip||'',dates=fDates(q);const hasQ=!!q.trim();const MAX=S.fmore?400:40;
+  const all=Object.values(S.sessions).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  const recs=all.filter(ss=>fChip(ss,c)&&(!hasQ||fWords(q,sessHay(ss),dates)));
+  let h='<div class="stack"><h1>Find & view</h1><p class="muted small" style="margin:-6px 0 0">Type anything: a product, lot, sample (GM3), person, test (Brix), or a date (10/11). Or tap a quick view.</p>'+
+    '<input id="fq" class="fsearch" type="search" value="'+esc(q)+'" placeholder="e.g. 26314 · GM1+2 · Brix · Tahani · 10/11 · water" style="font-size:17px;padding:12px 14px">'+
+    '<div class="kindbar">'+FCHIPS.map(x=>{const n=all.filter(ss=>fChip(ss,x[0])).length;return '<button type="button" class="kind'+(c===x[0]?' on':'')+'" data-fchip="'+x[0]+'">'+x[1]+' <span class="muted small">'+n+'</span></button>'}).join('')+'</div>';
+  if(!hasQ&&!c){const prods=(S.cfg.products||[]).map(p=>{const L=all.filter(s=>s.productId===p.id);return{p,n:L.length,last:L[0]&&L[0].date,open:L.filter(s=>!s.validated).length}}).filter(x=>x.n);
+    h+='<h2>Go straight to a product</h2><div class="ctiles">'+prods.map(x=>'<button class="ctile" data-fprod="'+x.p.id+'"><b>'+esc(x.p.name)+'</b><span class="small muted">'+esc(catLabel(catOfP(x.p)))+' · '+x.n+' record'+(x.n>1?'s':'')+'</span><span class="small">Last: '+niceDate(x.last)+(x.open?' · <span class="pill warn">'+x.open+' not validated</span>':'')+'</span></button>').join('')+'</div><h2>Latest records</h2>'}
+  else h+='<h2>Records <span class="small muted">'+recs.length+'</span></h2>';
+  h+=recs.length?'<div class="card tablewrap"><table><tr><th>Date</th><th>Product</th><th>Section</th><th>Lot</th><th>Samples</th><th>Out of limit</th><th>Micro</th><th>Status</th><th>Reports</th></tr>'+recs.slice(0,MAX).map(s=>{const p=product(s.productId)||{};const pr=sessionProgress(s);
+    return '<tr><td class="num">'+niceDate(s.date)+'</td><td><button class="ghost" data-open-session="'+s.id+'"><b>'+esc(p.name||'?')+'</b></button></td><td>'+esc(s.section||'')+'</td><td class="num">'+esc(s.lot||'–')+'</td><td class="num">'+pr.done+'/'+pr.target+'</td><td>'+(pr.bad?'<span class="pill bad">'+pr.bad+'</span>':'<span class="muted">0</span>')+'</td><td>'+(pr.micro?'<span class="pill warn">'+pr.micro+'</span>':'<span class="muted">–</span>')+'</td><td>'+statusPill(s)+'</td><td style="white-space:nowrap"><button class="ghost small" data-frep="'+s.id+'|chem">Chemical</button> <button class="ghost small" data-frep="'+s.id+'|all">Full</button></td></tr>'}).join('')+'</table></div>'+(recs.length>MAX?'<button class="ghost" id="fmore">Show all '+recs.length+'</button>':''):'<div class="card muted">No records found. Try fewer words.</div>';
+  if(hasQ){
+    const smp=Object.values(S.samples).filter(x=>S.sessions[x.sessionId]&&fChip(S.sessions[x.sessionId],c)&&fWords(q,sampHay(x),dates)).sort((a,b)=>S.sessions[b.sessionId].date.localeCompare(S.sessions[a.sessionId].date)||(a.n||0)-(b.n||0));
+    if(smp.length)h+='<h2>Samples <span class="small muted">'+smp.length+'</span></h2><div class="card tablewrap"><table><tr><th>Sample</th><th>Product</th><th>Date</th><th>Lot</th><th>Taken by</th><th>Tested by</th><th>Out of limit</th></tr>'+smp.slice(0,MAX).map(x=>{const ss=S.sessions[x.sessionId];const p=product(ss.productId)||{};const bad=sampleFlags(x,p);return '<tr><td><button class="ghost" data-open-sample="'+x.id+'"><b class="mono">'+esc(x.code)+'</b></button></td><td>'+esc(p.name||'')+'</td><td class="num">'+niceDate(ss.date)+'</td><td class="num">'+esc(ss.lot||'–')+'</td><td>'+esc(x.takenBy?person(x.takenBy).name:'')+'</td><td>'+esc(x.testedBy?person(x.testedBy).name:'')+'</td><td>'+(bad?'<span class="pill bad">'+bad+'</span>':'<span class="muted">0</span>')+'</td></tr>'}).join('')+'</table></div>';
+    const words=fNorm(q).split(/\s+/).filter(w=>w.length>=2&&!/^\d/.test(w));const rows=[];
+    if(words.length)Object.values(S.samples).forEach(x=>{const ss=S.sessions[x.sessionId];if(!ss||!fChip(ss,c))return;const p=product(ss.productId)||{};const sh=sessHay(ss);if(!dates.every(d=>sh.includes(d)))return;
+      testsOf(p).forEach(tt=>(tt.outputs||[]).forEach(o=>{const nm=fNorm(tt.name+' '+o.label);const rest=words.filter(w=>!nm.includes(w));if(rest.length===words.length)return;if(!rest.every(w=>sh.includes(w)||sampHay(x).includes(w)))return;
+        const r=resultOf(x,tt);const v=resOuts(tt,r).find(y=>y.key===o.key);if(!v||v.value==null||isNaN(v.value))return;rows.push({x,ss,p,o,label:o.label+(o.unit?' ('+o.unit+')':''),v,late:r.late})}))});
+    if(rows.length){rows.sort((a,b)=>b.ss.date.localeCompare(a.ss.date)||(a.x.n||0)-(b.x.n||0));const vals=rows.map(r=>Number(r.v.value));const m=vals.reduce((s,v)=>s+v,0)/vals.length;const sd=vals.length>1?Math.sqrt(vals.reduce((s,v)=>s+(v-m)*(v-m),0)/(vals.length-1)):0;const bad=rows.filter(r=>r.v.state==='bad').length;const one=new Set(rows.map(r=>r.label)).size===1;
+      h+='<h2>Results <span class="small muted">'+rows.length+'</span></h2>'+(one?'<div class="row small"><span class="pill">Mean '+fmt(m)+'</span><span class="pill">SD '+fmt(sd)+'</span><span class="pill">CV '+(m?fmt(Math.round(sd/Math.abs(m)*1e4)/100)+' %':'–')+'</span><span class="pill">Min '+fmt(Math.min(...vals))+'</span><span class="pill">Max '+fmt(Math.max(...vals))+'</span>'+(bad?'<span class="pill bad">'+bad+' out of limit</span>':'<span class="pill ok">All within limit</span>')+'</div>':'')+
+        '<div class="card tablewrap"><table><tr><th>Date</th><th>Product</th><th>Lot</th><th>Sample</th><th>Test</th><th>Result</th><th>Limit</th></tr>'+rows.slice(0,MAX).map(r=>'<tr><td class="num">'+niceDate(r.ss.date)+'</td><td>'+esc(r.p.name||'')+'</td><td class="num">'+esc(r.ss.lot||'–')+'</td><td><button class="ghost" data-open-sample="'+r.x.id+'"><b class="mono">'+esc(r.x.code)+'</b></button></td><td>'+esc(r.label)+'</td><td class="num'+(r.v.state==='bad'?' bad':'')+'">'+fmt(r.v.value)+(r.late?' <span class="pill late">late</span>':'')+'</td><td>'+esc(limitText(r.o)||'–')+'</td></tr>').join('')+'</table></div>'+(rows.length>MAX?'<button class="ghost" id="fmore">Show all '+rows.length+'</button>':'')}
+    const ppl=Object.values(S.people).filter(pp=>pp.name&&fNorm(pp.name).includes(fNorm(q.trim())));
+    if(ppl.length)h+='<h2>People</h2><div class="ctiles">'+ppl.map(pp=>{const taken=Object.values(S.samples).filter(x=>x.takenBy===pp.id).length,tested=Object.values(S.samples).filter(x=>x.testedBy===pp.id).length;return '<div class="card stack" style="gap:4px"><b>'+esc(pp.name)+'</b><span class="small muted">Took '+taken+' sample'+(taken===1?'':'s')+' · finished '+tested+'</span></div>'}).join('')+'</div>'}
+  return h+'</div>'}
+function bindFind(){const i=$('#fq');if(i){let tm;i.oninput=()=>{clearTimeout(tm);tm=setTimeout(()=>{S.fq=i.value;S.fmore=false;const pos=i.selectionStart;render();const n=$('#fq');if(n){n.focus();n.setSelectionRange(pos,pos)}},300)}}
+  document.querySelectorAll('[data-fchip]').forEach(b=>b.onclick=()=>{S.fchip=b.dataset.fchip;S.fmore=false;render()});
+  document.querySelectorAll('[data-fprod]').forEach(b=>b.onclick=()=>{const p=product(b.dataset.fprod);S.cat=catOfP(p);lsSet('lab.cat',S.cat);Object.keys(histFilter).forEach(k=>histFilter[k]=typeof histFilter[k]==='boolean'?false:'');histFilter.product=p.id;S.view='history';render()});
+  document.querySelectorAll('[data-frep]').forEach(b=>b.onclick=()=>{const[a,k]=b.dataset.frep.split('|');const ss=S.sessions[a];ss&&report(ss,k)});
+  const m=$('#fmore');m&&(m.onclick=()=>{S.fmore=true;render()});bindCommon()}
 
 /* ---------- filters (Records, Micro pending) ---------- */
 function fBar(F,id,extra){const d=today();const q=[['today','Today',d,d],['7','Last 7 days',addDays(d,-6),''],['30','Last 30 days',addDays(d,-29),''],['all','All','','']];
