@@ -187,7 +187,8 @@ function testsOf(p,kind){return (p&&p.tests||[]).filter(t=>!kind||t.kind===kind)
 function resultOf(s,t){return (s.results||{})[t.id]||{}}
 function testDone(s,t){const r=resultOf(s,t);if(t.kind==='org')return !!r.value;const outs=resOuts(t,r);return outs.length>0&&outs.every(o=>o.value!=null&&!isNaN(o.value))}
 function sampleFlags(s,p){let bad=0;testsOf(p).forEach(t=>{const r=resultOf(s,t);if(t.kind==='org'){if(r.value==='Not acceptable')bad++;return}resOuts(t,r).forEach(o=>{if(o.state==='bad')bad++})});return bad}
-function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional&&testActive(s,t));return ts.length>0&&ts.every(t=>testDone(s,t))}
+function optFor(s,t){return !!t.optional||!!(t.requiredFrom&&s&&s.date&&s.date<t.requiredFrom)}
+function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!optFor(s,t)&&testActive(s,t));return ts.length>0&&ts.every(t=>testDone(s,t))}
 /* tests done every N days (water micro: weekly): only due when N days passed since the last time it was done */
 function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(x=>{if(x.productId!==pid||x.date>=date)return;const p=product(pid);const t=p&&p.tests.find(y=>y.id===tid);if(t&&testDone(x,t)&&x.date>L)L=x.date});return L}
 function nextDue(s,t){if(t.weekday!=null&&t.weekday!==''){let d=s.date;for(let i=0;i<7&&wday(d)!==Number(t.weekday);i++)d=addDays(d,1);if(d===s.date&&!testActive(s,t))d=addDays(d,7);return d}if(!t.everyDays)return s.date;const L=lastDoneBefore(s.productId,t.id,s.date);return L?addDays(L,Number(t.everyDays)):s.date}
@@ -506,7 +507,7 @@ function microGroups(ss){const p=product(ss.productId);const smp=sessionSamples(
   return Object.values(g).map(x=>Object.assign(x,{first:[...x.days].sort()[0]})).sort((a,b)=>a.first.localeCompare(b.first)||a.name.localeCompare(b.name))}
 function microName(ss,key){const t=(product(ss.productId)||{tests:[]}).tests.find(x=>x.id===key);return t?t.name:key}
 function allValidated(ss){const mg=microGroups(ss);return !!ss.validated&&mg.every(g=>(ss.microVal||{})[g.day])}
-function chemState(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);let need=0,done=0;smp.forEach(x=>testsOf(p).filter(t=>t.kind!=='micro'&&!t.optional).forEach(t=>{need++;if(testDone(x,t))done++}));return{need,done}}
+function chemState(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);let need=0,done=0;smp.forEach(x=>testsOf(p).filter(t=>t.kind!=='micro'&&!optFor(x,t)).forEach(t=>{need++;if(testDone(x,t))done++}));return{need,done}}
 function valLine(v){return '<span class="pill ok">Validated</span> by <b>'+esc(person(v.by).name)+'</b> <span class="muted small">'+niceDate(new Date(v.at+4*3600e3).toISOString().slice(0,10))+' '+hhmm(v.at)+(v.comment?' · '+esc(v.comment):'')+'</span>'}
 function signoffHTML(ss,smp){
   if(!smp.length)return '';
