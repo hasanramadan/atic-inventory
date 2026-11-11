@@ -593,6 +593,11 @@ function nextCode(p,smp){return (p?p.code:'S')+(smp.length+1)}
 function addSample(ss,p){
   const smp=sessionSamples(ss.id);const left=(Number(ss.batches)||0)-smp.length;
   if(p&&p.microPair&&left>0){const n=smp.length+1,two=left>=2,last=smp[smp.length-1];
+    // more batches came after the last sample was added alone (e.g. GM7): the next batch joins it as GM7+8
+    if(last&&!last.pairOf&&!last.extra&&!last.testedBy&&!/\+/.test(last.code||'')&&!Object.values(S.samples).some(x=>x.pairOf===last.id)){
+      last.code=p.code+last.n+'+'+n;last.batch=last.n+' + '+n;saveSample(last);
+      saveSample({id:uid('m'),sessionId:ss.id,date:ss.date,productId:ss.productId,tank:ss.tank||'',extra:false,reason:'',results:{},notes:[],retests:[],createdBy:S.me.id,createdAt:Date.now(),prod:last.prod||ss.prod||'',exp:last.exp||ss.exp||'',n,code:p.code+n,batch:String(n),pairOf:last.id});
+      S.sampleId=last.id;render();toast(last.code+' is now a pair'+(left-1>0?' · '+Math.ceil((left-1)/2)+' left':''));return}
     const base={sessionId:ss.id,date:ss.date,productId:ss.productId,tank:ss.tank||'',extra:false,reason:'',results:{},notes:[],retests:[],createdBy:S.me.id,createdAt:Date.now(),prod:ss.prod||'',exp:ss.exp||''};
     const a=Object.assign({},base,{id:uid('m'),n,code:p.code+n+(two?'+'+(n+1):''),batch:two?n+' + '+(n+1):String(n)});saveSample(a);
     if(two){const b=Object.assign({},base,{id:uid('m'),n:n+1,code:p.code+(n+1),batch:String(n+1),pairOf:a.id,results:{}});saveSample(b)}
