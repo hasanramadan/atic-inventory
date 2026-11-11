@@ -135,12 +135,27 @@
     });
     return res;
   }
+  // recipe mix for a day: the plan's line list can hold several runs of one product with different recipes (e.g. 5 batches no caramel, then 4 standard)
+  function mixOf(m, day, product, section) {
+    var L = m.plan && m.plan.lineDays && m.plan.lineDays[day] && m.plan.lineDays[day][section];
+    if (!L) return null;
+    var xs = L.filter(function (x) { return x.product === product && Number(x.batches) > 0; });
+    if (!xs.length || !xs.some(function (x) { return x.recipe; })) return null;
+    return xs.map(function (x) { return { variant: x.recipe || null, batches: Number(x.batches) }; });
+  }
+  function splitMix(m, day, product, section, b, source) {
+    var mix = mixOf(m, day, product, section);
+    if (!mix) return [{ product: product, section: section, batches: b, source: source, variant: (m.plan && m.plan.recipeOf && m.plan.recipeOf[day] && m.plan.recipeOf[day][product + '|' + section]) || null }];
+    var out = [], left = b;
+    mix.forEach(function (x, i) { var n = i === mix.length - 1 ? left : Math.min(left, x.batches); if (n > 0) out.push({ product: product, section: section, batches: n, source: source, variant: x.variant }); left -= n; });
+    return out;
+  }
   function batchesOn(m, day, avg, sc) {
     var wk = weekStart(day);
     if (dow(day) === 5 && !(m.actualDays && m.actualDays[day])) return []; // Friday is always a day off at ATIC
     if (m.actualDays && m.actualDays[day]) {
       var ad = m.actualDays[day], out = [];
-      Object.keys(ad).forEach(function (k) { var b = Number(ad[k]) || 0; if (b > 0) { var q = k.split('|'); out.push({ product: q[0], section: q[1], batches: b, source: 'actual' }); } });
+      Object.keys(ad).forEach(function (k) { var b = Number(ad[k]) || 0; if (b > 0) { var q = k.split('|'); out = out.concat(splitMix(m, day, q[0], q[1], b, 'actual')); } });
       // a section with no actual that day keeps the plan / average for that section
       var have = {}; out.forEach(function (x) { have[x.section] = 1; });
       var rest = batchesOn(Object.assign({}, m, { actualDays: null }), day, avg, sc).filter(function (x) { return !have[x.section] && !(m.actualSections && m.actualSections[day] && m.actualSections[day][x.section]); });
@@ -152,7 +167,7 @@
       var d = m.plan.days[day] || {};
       Object.keys(d).forEach(function (k) {
         var b = Number(d[k]) || 0; if (!b) return;
-        var parts = k.split('|'); res.push({ product: parts[0], section: parts[1], batches: b, source: 'plan', variant: (m.plan.recipeOf && m.plan.recipeOf[day] && m.plan.recipeOf[day][k]) || null });
+        var parts = k.split('|'); res = res.concat(splitMix(m, day, parts[0], parts[1], b, 'plan'));
       });
     } else res = paceItems(m, dow(day), avg, sc);
     return res;
