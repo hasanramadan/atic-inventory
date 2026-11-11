@@ -4,7 +4,7 @@
 <title>ATIC · Today</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611111507">
+<link rel="stylesheet" href="css/app.css?v=202611111509">
 <style>
 .wrap{display:flex;flex-direction:column;gap:18px;max-width:1150px}
 .top h1{margin:0}.sub{color:var(--muted);margin:4px 0 0}
@@ -52,14 +52,14 @@ details.allm .mgrid{margin-top:12px}
 <main id="main"><div class="boot"><div><i></i>Loading today…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611111507"></script>
-<script src="js/shell.js?v=202611111507"></script>
-<script src="js/backup.js?v=202611111507" defer></script>
-<script src="js/assistant.js?v=202611111507" defer></script>
-<script src="js/io.js?v=202611111507"></script>
-<script src="js/line-engine.js?v=202611111507"></script>
-<script src="js/materials-engine.js?v=202611111507"></script>
-<script src="js/supply-engine.js?v=202611111507"></script>
+<script src="config.js?v=202611111509"></script>
+<script src="js/shell.js?v=202611111509"></script>
+<script src="js/backup.js?v=202611111509" defer></script>
+<script src="js/assistant.js?v=202611111509" defer></script>
+<script src="js/io.js?v=202611111509"></script>
+<script src="js/line-engine.js?v=202611111509"></script>
+<script src="js/materials-engine.js?v=202611111509"></script>
+<script src="js/supply-engine.js?v=202611111509"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, ME = window.ATICEngine, SP = window.ATICSupply, D = {};
@@ -134,7 +134,7 @@ function materials() {
     var rec = 0; evs.forEach(function (o) { if (o.material === r.id && o.received && o.eta > st.asOf && o.eta <= TODAY) rec += Number(o.qty) || 0; });
     return Math.max(0, (Number(st.qty) || 0) + rec - used);
   }
-  function outNoDelivery(r) { var cum = 0, act = null; (r.daily || []).forEach(function (x) { if (x.date < TODAY) return; cum += Number(x.received) || 0; if (act === null && r.weekly > 0 && x.closing - cum <= 0) act = x.date; }); return act; }
+  function outNoDelivery(r) { var cum = 0, act = null; (r.daily || []).forEach(function (x) { if (x.date < TODAY) return; evs.forEach(function (o) { if (o.material === r.id && !o.received && o.eta === x.date) cum += Number(o.qty) || 0; }); if (act === null && r.weekly > 0 && x.closing - cum <= 0) act = x.date; }); return act; }
   function nums(r) {
     var st = fc.model && fc.model.stock && fc.model.stock[r.id]; if (!st || st.qty == null || !st.asOf) return null;
     var used = r.usedSinceCount || 0, ws = r.weeks && r.weeks[0] ? r.weeks[0].start : null;
