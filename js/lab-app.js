@@ -425,7 +425,12 @@ function groupEditor(ss,p){const heads=sessionSamples(ss.id).filter(x=>!x.pairOf
       (can?'<div class="row small" style="margin:8px 0">Quick: <button type="button" class="ghost small" data-gq="1">Each alone</button><button type="button" class="ghost small" data-gq="2">Every 2 samples</button><button type="button" class="ghost small" data-gq="3">Every 3</button><button type="button" class="ghost small" data-gq="4">Every 4</button><button type="button" class="ghost small" data-gq="all">All together</button></div>':'')+
       '<div class="row" style="flex-wrap:wrap;gap:8px">'+heads.map(x=>'<label class="row small" style="gap:4px;border:1px solid rgba(15,110,140,.2);border-radius:8px;padding:4px 8px"><b class="mono">'+esc(x.code)+'</b><select data-gs="'+x.id+'"'+(can?'':' disabled')+'><option value="">alone</option>'+L.split('').slice(0,Math.max(4,Math.ceil(heads.length/2)+1)).map(g=>'<option value="'+g+'"'+(m[x.id]===g?' selected':'')+'>Group '+g+'</option>').join('')+'</select></label>').join('')+'</div>'+
       '<p class="small muted" style="margin:6px 0 0">Samples in the same group get one '+esc(t.name)+' result, typed in the first sample of the group. The others show it as combined.</p></details>'}).join('')}
-function bindGroups(ss){document.querySelectorAll('[data-grp]').forEach(box=>{const tid=box.dataset.grp;box.addEventListener('toggle',()=>{if(box.open)S.grpOpen=tid});
+function bindGroupJoin(ss){document.querySelectorAll('[data-gjoin]').forEach(b=>b.onclick=()=>{const tid=b.dataset.gt,me=S.samples[b.dataset.gself],x=S.samples[b.dataset.gjoin];if(!me||!x)return;const m=Object.assign({},(ss.groups||{})[tid]);
+    const used=new Set(Object.values(m));let g=m[me.id];if(!g){g='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(c=>!used.has(c));m[me.id]=g}
+    if(m[x.id]===g)delete m[x.id];else m[x.id]=g;
+    if(Object.keys(m).filter(k=>m[k]===g).length<2)delete m[me.id];
+    ss.groups=Object.assign({},ss.groups,{[tid]:m});saveSession(ss);render();toast('Salinity group: '+grpName(me,{id:tid,kind:'chem',grouped:true}))})}
+function bindGroups(ss){bindGroupJoin(ss);document.querySelectorAll('[data-grp]').forEach(box=>{const tid=box.dataset.grp;box.addEventListener('toggle',()=>{if(box.open)S.grpOpen=tid});
   const heads=sessionSamples(ss.id).filter(x=>!x.pairOf);const put=m=>{ss.groups=Object.assign({},ss.groups,{[tid]:m});S.grpOpen=tid;saveSession(ss);render();toast('Groups saved')};
   box.querySelectorAll('[data-gs]').forEach(sel=>sel.onchange=()=>{const m=Object.assign({},(ss.groups||{})[tid]);if(sel.value)m[sel.dataset.gs]=sel.value;else delete m[sel.dataset.gs];put(m)});
   box.querySelectorAll('[data-gq]').forEach(b=>b.onclick=()=>{const q=b.dataset.gq;const m={};const L='ABCDEFGHIJKLMNOPQRSTUVWXYZ';if(q==='all')heads.forEach(x=>m[x.id]='A');else if(q!=='1'){const k=Number(q);heads.forEach((x,i)=>m[x.id]=L[Math.floor(i/k)]);}put(m)})})}
@@ -468,8 +473,12 @@ function sampleForm(s,p,ss){
   return h;
 }
 function testRow(s,t){
-  if(groupTest(t)&&grpMembers(s,t).length>1&&grpLead(s,t).id===s.id){const h1=testRow1(s,t);return h1.replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+'</b> <span class="pill acc">for '+esc(grpName(s,t))+'</span>')}
+  if(groupTest(t)&&!s.pairOf&&grpLead(s,t).id===s.id){let h1=testRow1(s,t);if(grpMembers(s,t).length>1)h1=h1.replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+'</b> <span class="pill acc">for '+esc(grpName(s,t))+'</span>');return h1+grpJoin(s,t)}
   return testRow1(s,t)}
+function grpJoin(s,t){const ss=S.sessions[s.sessionId];if(!ss)return '';const heads=sessionSamples(ss.id).filter(x=>!x.pairOf);if(heads.length<2)return '';const can=!ss.validated||isDoctor();const mine=new Set(grpMembers(s,t).map(x=>x.id));const m=(ss.groups||{})[t.id]||{};
+  return '<div class="small" style="margin:-4px 0 10px;padding:8px 10px;border:1px dashed rgba(15,110,140,.35);border-radius:10px"><b>'+esc(t.name)+' done together with:</b> <span class="muted">tap the samples you mixed with '+esc(s.code)+'</span><div class="row" style="flex-wrap:wrap;gap:6px;margin-top:6px">'+
+    heads.filter(x=>x.id!==s.id).map(x=>{const on=mine.has(x.id);const other=!on&&m[x.id]&&grpLead(x,t).id!==x.id?grpLead(x,t):(!on&&m[x.id]&&grpMembers(x,t).length>1?x:null);
+      return '<button type="button" class="kind'+(on?' on':'')+'" data-gjoin="'+x.id+'" data-gt="'+t.id+'" data-gself="'+s.id+'"'+(can?'':' disabled')+' title="'+(other?'Now in the group of '+esc(grpLead(x,t).code):'')+'">'+(on?'✓ ':'')+esc(x.code)+(other?' <span class="muted">(with '+esc(grpLead(x,t).code)+')</span>':'')+'</button>'}).join('')+'</div></div>'}
 function testRow1(s,t){
   const r=resultOf(s,t);
   if(r.late&&t.kind!=='micro'){const h0=testRow0(s,t);return h0.replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+'</b> <span class="pill late">Filled late · '+(r.at?niceDate(new Date(r.at+4*3600e3).toISOString().slice(0,10)):'')+'</span>')}
