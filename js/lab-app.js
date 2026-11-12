@@ -485,7 +485,7 @@ function grpBatches(ss){return sessionSamples(ss.id).slice().sort((a,b)=>(a.n||0
 function grpJoin(s,t){const ss=S.sessions[s.sessionId];if(!ss)return '';const all=grpBatches(ss);if(all.length<2)return '';const can=!ss.validated||isDoctor();const mine=new Set(grpMembers(s,t).map(x=>x.id));
   return '<div class="small" style="margin:-4px 0 10px;padding:8px 10px;border:1px dashed rgba(15,110,140,.35);border-radius:10px"><b>'+esc(t.name)+' done together with:</b> <span class="muted">tap every batch you mixed with '+esc(batchLbl(s))+'</span><div class="row" style="flex-wrap:wrap;gap:6px;margin-top:6px">'+
     all.filter(x=>x.id!==s.id).map(x=>{const on=mine.has(x.id);const L=grpLead(x,t);const other=!on&&grpMembers(x,t).length>1?L:null;
-      return '<button type="button" class="kind'+(on?' on':'')+'" data-gjoin="'+x.id+'" data-gt="'+t.id+'" data-gself="'+s.id+'"'+(can?'':' disabled')+'>'+(on?'✓ ':'')+esc(batchLbl(x))+(other?' <span class="muted">(with '+esc(batchLbl(L))+')</span>':'')+'</button>'}).join('')+'</div></div>'}
+      return '<button type="button" class="kind'+(on?' on':'')+'" data-gjoin="'+x.id+'" data-gt="'+t.id+'" data-gself="'+s.id+'"'+(can?'':' disabled')+'>'+(on?'✓ ':'')+esc(batchLbl(x))+(other?' <span class="muted">(in '+esc(grpName(x,t))+')</span>':'')+'</button>'}).join('')+'</div></div>'}
 function testRow1(s,t){
   const r=resultOf(s,t);
   if(r.late&&t.kind!=='micro'){const h0=testRow0(s,t);return h0.replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+'</b> <span class="pill late">Filled late · '+(r.at?niceDate(new Date(r.at+4*3600e3).toISOString().slice(0,10)):'')+'</span>')}
