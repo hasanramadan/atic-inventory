@@ -106,7 +106,8 @@
           var lo = k * W, hi = lo + W, ov = Math.min(hi, e.to) - Math.max(lo, e.from); if (ov <= 0 && !(e.from === e.to && e.from >= lo && e.from < hi)) continue;
           if (e.kind === 'fill') {
             var c = e.j.cartons * ov / (e.to - e.from), b = c / e.j.bpb;
-            cal[k][s].push({ t: 'fill', name: e.j.item.name, cartons: c, batches: b }); cal[k].cartons += c;
+            e.j.cum = (e.j.cum || 0) + c;
+            cal[k][s].push({ t: 'fill', name: e.j.item.name, cartons: c, batches: b, cum: e.j.cum, of: e.j.cartons }); cal[k].cartons += c;
             var per = {}; per[s] = c; sched[k].items.push({ item: e.j.item.id, product: e.j.item.product, size: e.j.item.size, cartons: c, batches: b, perSec: per, bpb: e.j.bpb });
           } else if (e.from >= lo && e.from < hi) cal[k][s].push({ t: e.kind, name: e.j.item.name, min: Math.round(e.to - e.from), co: e.co });
         }
@@ -134,14 +135,23 @@
     function cell(list) {
       if (!list.length) return '<span class="muted">–</span>';
       return list.map(function (x) {
-        if (x.t === 'fill') return '<b>' + esc(x.name) + '</b>: ' + fmtN(Math.round(x.cartons)) + ' cartons <span class="small muted">(' + n1(x.batches, 1) + ' batches)</span>';
+        if (x.t === 'fill') return '<b>' + esc(x.name) + '</b>: ' + fmtN(Math.round(x.cartons)) + ' cartons <span class="small muted">(' + n1(x.batches, 1) + ' batches)</span><br><span class="small">Total so far: <b>' + fmtN(Math.round(x.cum)) + '</b> of ' + fmtN(Math.round(x.of)) + '</span>';
         if (x.t === 'change') return '<span class="small">↺ Line change to ' + esc(x.name) + ' ~' + hm(x.min) + '</span>';
         return '<span class="small">⏳ Waiting for first batch of ' + esc(x.name) + ' ~' + hm(x.min) + '</span>';
       }).join('<br>');
     }
     var cum = 0;
-    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Calendar (approximate)</h3><div class="tablewrap"><table><thead><tr><th>Day</th><th>Date</th>' + used.map(function (s) { return '<th>' + SECN[s] + '</th>'; }).join('') + '<th class="n">Cartons so far</th></tr></thead><tbody>' +
-      cal.map(function (c, i) { cum += c.cartons; return '<tr><td>' + (i + 1) + '</td><td style="white-space:nowrap">' + esc(new Date(c.date + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })) + ' ' + esc(U.nice(c.date)) + '</td>' + used.map(function (s) { return '<td>' + cell(c[s]) + '</td>'; }).join('') + '<td class="n"><b>' + fmtN(Math.round(cum)) + '</b></td></tr>'; }).join('') +
+    function secDay(c, s) { return c[s].reduce(function (a, x) { return a + (x.t === 'fill' ? x.cartons : 0); }, 0); }
+    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Calendar (approximate)</h3><div class="tablewrap"><table><thead><tr><th>Day</th><th>Date</th>' + used.map(function (s) { return '<th>' + SECN[s] + '</th>'; }).join('') + '<th class="n">Cartons this day</th><th class="n">Cartons so far</th></tr></thead><tbody>' +
+      cal.map(function (c, i) {
+        cum += c.cartons;
+        return '<tr><td>' + (i + 1) + '</td><td style="white-space:nowrap">' + esc(new Date(c.date + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })) + ' ' + esc(U.nice(c.date)) + '</td>' + used.map(function (s) { return '<td>' + cell(c[s]) + '</td>'; }).join('') +
+          '<td class="n"><b>' + fmtN(Math.round(c.cartons)) + '</b>' + (used.length > 1 ? '<br><span class="small muted">' + used.map(function (s) { return (s === 'S1' ? 'S1 ' : 'S2 ') + fmtN(Math.round(secDay(c, s))); }).join(' · ') + '</span>' : '') + '</td><td class="n"><b>' + fmtN(Math.round(cum)) + '</b></td></tr>';
+      }).join('') +
+      '<tr style="border-top:2px solid var(--line)"><td></td><td><b>Total</b></td>' + used.map(function (s) {
+        var tot = Q[s].reduce(function (a, j) { return a + j.cartons; }, 0);
+        return '<td>' + Q[s].map(function (j) { return '<b>' + esc(j.item.name) + '</b>: ' + fmtN(Math.round(j.cartons)) + ' cartons <span class="small muted">(' + n1(j.batches, 1) + ' batches, about ' + fmtN(Math.round(j.cap.p50)) + ' a day)</span>'; }).join('<br>') + (Q[s].length > 1 ? '<br><b>' + SECN[s] + ': ' + fmtN(Math.round(tot)) + ' cartons</b>' : '') + '</td>';
+      }).join('') + '<td class="n"><b>' + fmtN(Math.round(totC)) + '</b></td><td></td></tr>' +
       '</tbody></table></div></div>';
 
     /* ---- stoppages from history on the sections used ---- */
