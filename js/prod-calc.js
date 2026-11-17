@@ -90,7 +90,16 @@
           if (wait > 0) { ev[s].push({ kind: 'prep', j: j, from: F, to: F + wait }); F += wait; }
         }
         var dur = W * j.cartons / j.cap.p50, spd = (M.speed[j.item.id] || {})[s]; j.fillH = spd && spd.p50 > 0 ? j.cartons / spd.p50 / 60 : null; j.start = F; j.end = F + dur; j.lead = lead; j.wait = wait; j.co = co; j.days = dur / W; j.batches = j.cartons / j.bpb;
-        ev[s].push({ kind: 'fill', j: j, from: F, to: F + dur }); prevStart = F; F += dur;
+        prevStart = F;
+        if (pr) { /* batches carried to the next day are heated again each morning (1 heating a day, from the second day on) */
+          var left = dur, t = F; j.reheats = 0;
+          while (left > 1e-6) {
+            var dayEnd = (Math.floor(t / W + 1e-9) + 1) * W, chunk = Math.min(left, dayEnd - t);
+            ev[s].push({ kind: 'fill', j: j, from: t, to: t + chunk, c: j.cartons * chunk / dur }); left -= chunk; t += chunk;
+            if (left > 1e-6) { ev[s].push({ kind: 'reheat', j: j, from: dayEnd, to: dayEnd + pr.heat }); t = dayEnd + pr.heat; j.reheats++; }
+          }
+          F = t;
+        } else { ev[s].push({ kind: 'fill', j: j, from: F, to: F + dur, c: j.cartons }); F += dur; }
       });
       end[s] = F;
     });
@@ -106,7 +115,7 @@
         for (var k = 0; k < nDays; k++) {
           var lo = k * W, hi = lo + W, ov = Math.min(hi, e.to) - Math.max(lo, e.from); if (ov <= 0 && !(e.from === e.to && e.from >= lo && e.from < hi)) continue;
           if (e.kind === 'fill') {
-            var c = e.j.cartons * ov / (e.to - e.from), b = c / e.j.bpb;
+            var c = e.c * ov / (e.to - e.from), b = c / e.j.bpb;
             e.j.cum = (e.j.cum || 0) + c;
             cal[k][s].push({ t: 'fill', name: e.j.item.name, cartons: c, batches: b, cum: e.j.cum, of: e.j.cartons }); cal[k].cartons += c;
             var per = {}; per[s] = c; sched[k].items.push({ item: e.j.item.id, product: e.j.item.product, size: e.j.item.size, cartons: c, batches: b, perSec: per, bpb: e.j.bpb });
@@ -131,8 +140,8 @@
         return Q[s].map(function (j, k) {
           var pre = [];
           if (j.co) pre.push('Line change ' + (j.co.type === 'size' ? '(size)' : j.co.type === 'product' ? '(product)' : '(product and size)') + ' ~' + hm(j.co.min));
-          if (j.lead) pre.push('First batch: ' + PREP[j.item.product].txt + ' = ' + hm(j.lead) + (j.wait > 0.5 ? (j.wait < j.lead - 0.5 ? ', line waits ' + hm(j.wait) : ', line waits for it') : ', ready while the previous item runs') + ' (' + PREP[j.item.product].restTxt + ', outside working time)');
-          return '<tr><td>' + (k === 0 ? '<b>' + SECN[s] + '</b>' : '') + '</td><td><b>' + esc(j.item.name) + '</b>' + (j.L.sec === 'both' ? ' <span class="small muted">(share of ' + fmtN(Number(j.L.cartons)) + ')</span>' : '') + '</td><td class="n">' + fmtN(Math.round(j.cartons)) + '</td><td class="n">' + n1(j.bpb, 1) + '</td><td class="n"><b>' + n1(j.batches, 1) + '</b></td><td class="n">' + fmtN(Math.round(j.cap.p50)) + ' <span class="small muted">(' + fmtN(Math.round(j.cap.p10)) + '–' + fmtN(Math.round(j.cap.p90)) + ')</span></td><td class="n"><b>' + n1(j.days + ((j.co ? j.co.min : 0) + (j.wait || 0)) / W, 1) + '</b></td><td class="n"><b>' + (j.fillH != null ? n1(j.fillH, 1) + ' h' : '–') + '</b></td><td class="small">' + (pre.length ? esc(pre.join(' · ')) : '<span class="muted">–</span>') + '</td></tr>';
+          if (j.lead) pre.push('First batch: ' + PREP[j.item.product].txt + ' = ' + hm(j.lead) + (j.wait > 0.5 ? (j.wait < j.lead - 0.5 ? ', line waits ' + hm(j.wait) : ', line waits for it') : ', ready while the previous item runs') + ' (' + PREP[j.item.product].restTxt + ', outside working time)' + (j.reheats ? '; then 1 heating (' + hm(PREP[j.item.product].heat) + ') each following morning for the batches carried over: ' + j.reheats + ' day' + (j.reheats === 1 ? '' : 's') : ''));
+          return '<tr><td>' + (k === 0 ? '<b>' + SECN[s] + '</b>' : '') + '</td><td><b>' + esc(j.item.name) + '</b>' + (j.L.sec === 'both' ? ' <span class="small muted">(share of ' + fmtN(Number(j.L.cartons)) + ')</span>' : '') + '</td><td class="n">' + fmtN(Math.round(j.cartons)) + '</td><td class="n">' + n1(j.bpb, 1) + '</td><td class="n"><b>' + n1(j.batches, 1) + '</b></td><td class="n">' + fmtN(Math.round(j.cap.p50)) + ' <span class="small muted">(' + fmtN(Math.round(j.cap.p10)) + '–' + fmtN(Math.round(j.cap.p90)) + ')</span></td><td class="n"><b>' + n1(j.days + ((j.co ? j.co.min : 0) + (j.wait || 0) + (j.reheats || 0) * ((PREP[j.item.product] || {}).heat || 0)) / W, 1) + '</b></td><td class="n"><b>' + (j.fillH != null ? n1(j.fillH, 1) + ' h' : '–') + '</b></td><td class="small">' + (pre.length ? esc(pre.join(' · ')) : '<span class="muted">–</span>') + '</td></tr>';
         }).join('');
       }).join('') + '</tbody></table></div>' +
       '<p style="margin:10px 0 0"><b>' + fmtN(Math.round(totC)) + ' cartons, ' + n1(totB, 1) + ' batches.</b> ' + used.map(function (s) { var fh = Q[s].reduce(function (a, j) { return a + (j.fillH || 0); }, 0); return '<b>' + SECN[s] + '</b>: about <b>' + n1(end[s] / W, 1) + ' working days</b> and <b>' + n1(fh, 1) + ' filling hours</b>, ' + esc(U.nice(dates[0])) + ' to ' + esc(U.nice(lastDay[s])); }).join('; ') + '. ' + (used.length > 1 ? 'All done by <b>' + esc(U.nice(dates[dates.length - 1])) + '</b>. ' : '') +
@@ -144,6 +153,7 @@
       return list.map(function (x) {
         if (x.t === 'fill') return '<b>' + esc(x.name) + '</b>: ' + fmtN(Math.round(x.cartons)) + ' cartons <span class="small muted">(' + n1(x.batches, 1) + ' batches)</span><br><span class="small">Total so far: <b>' + fmtN(Math.round(x.cum)) + '</b> of ' + fmtN(Math.round(x.of)) + '</span>';
         if (x.t === 'change') return '<span class="small">↺ Line change to ' + esc(x.name) + ' ~' + hm(x.min) + '</span>';
+        if (x.t === 'reheat') return '<span class="small">🔥 Morning heating of the batches carried over ~' + hm(x.min) + '</span>';
         return '<span class="small">⏳ Waiting for first batch of ' + esc(x.name) + ' ~' + hm(x.min) + '</span>';
       }).join('<br>');
     }
@@ -184,7 +194,7 @@
           used.forEach(function (s) {
             c[s].forEach(function (x) {
               if (x.t === 'fill') inner += '<div style="border-left:4px solid ' + col[(jobs.filter(function (j) { return j.item.name === x.name; })[0] || {}).item ? jobs.filter(function (j) { return j.item.name === x.name; })[0].item.id : ''] + ';padding:2px 5px;margin:2px 0;background:var(--bg);border-radius:4px;font-size:12px"><span class="muted">' + (s === 'S1' ? 'S1' : 'S2') + '</span> ' + esc(x.name.replace(/^Grenadine Molasses/, 'GM').replace(/^Lemon Substitute/, 'Lemon').replace(/^White Vinegar/, 'Vinegar')) + '<br><b>' + fmtN(Math.round(x.cartons)) + '</b> ctn</div>';
-              else inner += '<div style="font-size:11px;color:var(--amber);margin:2px 0">' + (s === 'S1' ? 'S1 ' : 'S2 ') + (x.t === 'change' ? '↺ change ~' + hm(x.min) : '⏳ first batch ~' + hm(x.min)) + '</div>';
+              else inner += '<div style="font-size:11px;color:var(--amber);margin:2px 0">' + (s === 'S1' ? 'S1 ' : 'S2 ') + (x.t === 'change' ? '↺ change ~' + hm(x.min) : x.t === 'reheat' ? '🔥 heating ~' + hm(x.min) : '⏳ first batch ~' + hm(x.min)) + '</div>';
             });
           });
           inner += '<div style="font-size:12px;margin-top:4px;border-top:1px solid var(--line);padding-top:3px">Day: <b>' + fmtN(Math.round(c.cartons)) + '</b></div>';
@@ -220,6 +230,9 @@
     var need = {}; mi.rows.forEach(function (r) { need[r.id] = r.need; });
     var subIn = {};
     Object.keys(SUB).forEach(function (a) { if (!(need[a] > 0) || !mats[SUB[a].to]) return; var short = need[a] - (now[a] || 0); if (short > 1e-9) { need[a] = now[a] || 0; need[SUB[a].to] = (need[SUB[a].to] || 0) + short * SUB[a].f; subIn[SUB[a].to] = { from: a, qty: short * SUB[a].f }; } });
+    /* filters: blossom water 2 per batch, rose water 1 per batch */
+    var FILT = { BW: 2, RW: 1 }, filters = 0, filtTxt = [];
+    jobs.forEach(function (j) { var f = FILT[j.item.product]; if (f) { var n = Math.ceil(j.batches - 1e-9) * f; filters += n; filtTxt.push(esc(j.item.name) + ' ' + Math.ceil(j.batches - 1e-9) + ' batches × ' + f); } });
     var ids = Object.keys(need).filter(function (id) { return need[id] > 1e-9; }).sort(function (a, b) { return need[b] * (kgPer(mats[b] || {}) || 1) - need[a] * (kgPer(mats[a] || {}) || 1); });
     var shortToday = 0, shortPlan = 0, fin = dates[dates.length - 1];
     h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Raw materials</h3><div class="tablewrap"><table><thead><tr><th>Material</th><th class="n">Needed</th><th class="n">kg</th><th class="n">Stock today</th><th>From today\'s stock</th><th>With the factory plan</th></tr></thead><tbody>' +
@@ -231,7 +244,7 @@
         var coming = ((rr[id] || {}).openOrders || []).filter(function (o) { return o.eta >= TODAY; }).map(function (o) { return '+' + fmtN(Math.round(o.qty)) + ' on ' + U.nice(o.eta); }).join(', ');
         var sn = subIn[id] ? '<br><span class="small muted">Includes ' + n1(subIn[id].qty, 1) + ' ' + esc(mt.unit) + ' in place of ' + esc((mats[subIn[id].from] || {}).name || subIn[id].from) + ' (' + ((now[subIn[id].from] || 0) > 0 ? 'only ' + n1(now[subIn[id].from], 1) + ' left' : 'none in stock') + ')</span>' : '';
         return '<tr><td><b>' + esc(mt.name) + '</b>' + sn + '</td><td class="n">' + n1(q, q < 10 ? 2 : 1) + ' ' + esc(mt.unit) + '</td><td class="n">' + (kg ? fmtN(Math.round(q * kg)) : '') + '</td><td class="n">' + n1(have, have < 10 ? 2 : 1) + '</td><td>' + (okToday ? '<span class="chip ok" style="padding:1px 8px">Enough</span>' : '<span class="chip order" style="padding:1px 8px">Short ' + n1(-left, -left < 10 ? 2 : 1) + ' ' + esc(mt.unit) + '</span>') + '</td><td>' + withPlan + (coming ? '<br><span class="small muted">Coming: ' + esc(coming) + '</span>' : '') + '</td></tr>';
-      }).join('') + '</tbody></table></div>' +
+      }).join('') + (filters ? '<tr><td><b>Filters</b><br><span class="small muted">' + filtTxt.join('; ') + '</span></td><td class="n">' + fmtN(filters) + ' filters</td><td class="n"></td><td class="n muted">–</td><td colspan="2" class="small muted">Stock of filters is not tracked in raw materials yet</td></tr>' : '') + '</tbody></table></div>' +
       '<p style="margin:10px 0 0">' + (shortToday ? '<b style="color:var(--red)">' + shortToday + ' material' + (shortToday === 1 ? ' is' : 's are') + ' short</b> from today\'s stock. ' : '<b style="color:var(--green)">Today\'s stock covers this job.</b> ') + (shortPlan ? '<b style="color:var(--red)">' + shortPlan + ' material' + (shortPlan === 1 ? ' runs' : 's run') + ' short</b> once the current factory plan is counted too.' : 'It stays covered with the current factory plan.') +
       ' <span class="small muted">Stock today = last physical count (' + esc(U.nice((S.saved.inventory || {}).asOf || '')) + ') − what the batches used since + deliveries received. "With the factory plan" adds this job to the plan on its sections and runs the stock forecast week by week, counting deliveries due.</span></p></div>';
     return h;
