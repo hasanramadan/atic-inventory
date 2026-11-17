@@ -275,11 +275,14 @@
     /* Substitutes: when a material has run out, the line makes the batch with its substitute instead
        (Irani molasses out → UAE molasses, bucket for bucket). So stock never goes below 0: the part a recipe
        still asks for after the material is gone is taken from the substitute on the same day. */
-    var SUBS = Object.assign({ irani: 'uae' }, m.substitutes || {});
+    /* Citric acid anhydrous out → citric acid monohydrate, about 9.4% more by weight (molar masses 210.14 / 192.12),
+       so 1 bag of anhydrous in a recipe becomes 1.094 bags of monohydrate. */
+    var SUBS = Object.assign({ irani: { to: 'uae', f: 1 }, citric: { to: 'citricmono', f: 210.14 / 192.12 } }, m.substitutes || {});
     m.dailyAdj = clone(m.dailyAdj || {});
     var results = runAll(), moved = false;
     Object.keys(SUBS).forEach(function (a) {
-      var ra = results.filter(function (x) { return x.id === a; })[0], b = SUBS[a];
+      var sb = typeof SUBS[a] === 'string' ? { to: SUBS[a], f: 1 } : SUBS[a], b = sb.to, f = Number(sb.f) || 1;
+      var ra = results.filter(function (x) { return x.id === a; })[0];
       if (!ra || !results.some(function (x) { return x.id === b; })) return;
       var s = Number(ra.stockCounted) || 0, total = 0;
       ra.rollDays.concat(ra.daily.filter(function (x) { return !x.beforeCount; })).forEach(function (x) {
@@ -287,10 +290,10 @@
         var use = Number(x.use) || 0, take = Math.min(use, Math.max(s, 0)), short = use - take; s -= take;
         if (short > 1e-9) {
           var adj = m.dailyAdj[x.date] = Object.assign({}, m.dailyAdj[x.date] || {});
-          adj[a] = (Number(adj[a]) || 0) - short; adj[b] = (Number(adj[b]) || 0) + short; total += short; moved = true;
+          adj[a] = (Number(adj[a]) || 0) - short; adj[b] = (Number(adj[b]) || 0) + short * f; total += short; moved = true;
         }
       });
-      if (total) (m.substituted = m.substituted || {})[a] = { to: b, qty: total };
+      if (total) (m.substituted = m.substituted || {})[a] = { to: b, qty: total, asQty: total * f, factor: f };
     });
     if (moved) results = runAll();
     var dayBatches = {};
