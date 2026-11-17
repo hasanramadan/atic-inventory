@@ -108,8 +108,7 @@
             var c = e.j.cartons * ov / (e.to - e.from), b = c / e.j.bpb;
             cal[k][s].push({ t: 'fill', name: e.j.item.name, cartons: c, batches: b }); cal[k].cartons += c;
             var per = {}; per[s] = c; sched[k].items.push({ item: e.j.item.id, product: e.j.item.product, size: e.j.item.size, cartons: c, batches: b, perSec: per, bpb: e.j.bpb });
-          } else if (e.kind === 'change') cal[k][s].push({ t: 'change', name: e.j.item.name, min: Math.round(ov), co: e.co });
-          else cal[k][s].push({ t: 'prep', name: e.j.item.name, min: Math.round(ov) });
+          } else if (e.from >= lo && e.from < hi) cal[k][s].push({ t: e.kind, name: e.j.item.name, min: Math.round(e.to - e.from), co: e.co });
         }
       });
     });
