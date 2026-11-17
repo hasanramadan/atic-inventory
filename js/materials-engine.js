@@ -201,18 +201,19 @@
     var start = weekStart(today);
     var dayCache = {};
     function items(day) { return dayCache[day] || (dayCache[day] = batchesOn(m, day, avg, sc)); }
-    var results = m.materials.map(function (mat) {
+    function runAll() { return m.materials.map(function (mat) {
       var st = m.stock[mat.id] || { qty: 0, asOf: today, source: 'none' };
       var lead = { min: sc.leadDays || mat.leadMinDays, max: sc.leadDays || mat.leadMaxDays };
       // roll stock forward from count date to the start of this week
       var qty = Number(st.qty) || 0, gap = 0;
       var d = addDays(st.asOf, 1);
       var rollFrom = d;
-      var actualSince = 0;
+      var actualSince = 0, rollDays = [];
       while (d < start) {
         if (m.actualDays[d]) actualSince++;
-        var u0 = useOn(m, mat.id, items(d)).total + adjOn(m, mat.id, d); qty -= u0; gap += u0;
-        m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === d) qty += Number(o.qty) || 0; });
+        var u0 = useOn(m, mat.id, items(d)).total + adjOn(m, mat.id, d), r0 = 0; qty -= u0; gap += u0;
+        m.orders.forEach(function (o) { if (o.material === mat.id && o.eta === d) { qty += Number(o.qty) || 0; r0 += Number(o.qty) || 0; } });
+        rollDays.push({ date: d, use: u0, received: r0 });
         d = addDays(d, 1);
       }
       var opening = qty;
@@ -266,11 +267,32 @@
         stockNow: stockNow, weekly: weekly, byProduct: byProd, perDay: pd.total, perDayBy: pd.by, perSat: ps.total, safety: safety, weeksCover: weeksCover,
         runOut: runOut, belowSafety: belowSafety, orderBy: orderBy, daysToOrder: daysToOrder,
         lead: lead, arrivalIfOrderedToday: { earliest: addDays(today, lead.min), latest: arrival },
-        suggestedQty: suggested, openOrders: openOrders, lateOrders: lateOrders, weeks: weeks, daily: daily, firstWeekPlan: firstWeekPlan, topProducts: top
+        suggestedQty: suggested, openOrders: openOrders, lateOrders: lateOrders, weeks: weeks, daily: daily, rollDays: rollDays, firstWeekPlan: firstWeekPlan, topProducts: top
       };
       res.why = explain(res, m, today);
       return res;
+    }); }
+    /* Substitutes: when a material has run out, the line makes the batch with its substitute instead
+       (Irani molasses out → UAE molasses, bucket for bucket). So stock never goes below 0: the part a recipe
+       still asks for after the material is gone is taken from the substitute on the same day. */
+    var SUBS = Object.assign({ irani: 'uae' }, m.substitutes || {});
+    m.dailyAdj = clone(m.dailyAdj || {});
+    var results = runAll(), moved = false;
+    Object.keys(SUBS).forEach(function (a) {
+      var ra = results.filter(function (x) { return x.id === a; })[0], b = SUBS[a];
+      if (!ra || !results.some(function (x) { return x.id === b; })) return;
+      var s = Number(ra.stockCounted) || 0, total = 0;
+      ra.rollDays.concat(ra.daily.filter(function (x) { return !x.beforeCount; })).forEach(function (x) {
+        s += Number(x.received) || 0;
+        var use = Number(x.use) || 0, take = Math.min(use, Math.max(s, 0)), short = use - take; s -= take;
+        if (short > 1e-9) {
+          var adj = m.dailyAdj[x.date] = Object.assign({}, m.dailyAdj[x.date] || {});
+          adj[a] = (Number(adj[a]) || 0) - short; adj[b] = (Number(adj[b]) || 0) + short; total += short; moved = true;
+        }
+      });
+      if (total) (m.substituted = m.substituted || {})[a] = { to: b, qty: total };
     });
+    if (moved) results = runAll();
     var dayBatches = {};
     for (var q = 0; q < HORIZON; q++) { var dq = addDays(start, q), bt = {}; items(dq).forEach(function (it) { bt[it.product] = (bt[it.product] || 0) + it.batches; }); dayBatches[dq] = bt; }
     var paceBt = function (d) { var o = {}; paceItems(m, d, avg, sc).forEach(function (it) { o[it.product] = (o[it.product] || 0) + it.batches; }); return o; };
