@@ -77,6 +77,40 @@
       }).join('') + '</tbody></table></div>' +
       '<p style="margin:10px 0 0"><b>' + fmtN(Math.round(calc.cartons)) + ' cartons, ' + n1(calc.batches, 1) + ' batches, ' + calc.workdays + ' working day' + (calc.workdays === 1 ? '' : 's') + ' on ' + secTxt + '</b>: ' + esc(U.nice(calc.start)) + ' to ' + esc(U.nice(calc.finish)) + (extraDays > 0.05 ? ', plus about ' + n1(extraDays, 1) + ' day' + (extraDays >= 1.05 ? 's' : '') + ' because preparation is slower than filling' : '') + '. <span class="small muted">Cartons per day = Line Planner forecast for a full day of that item (usual case, with the range in brackets). Friday off; Saturdays ' + (st.saturdays ? 'working' : 'off') + '.</span></p></div>';
 
+    /* day-by-day calendar: preparation (filter + heat, one after another) and filling run side by side;
+       a batch is filled once it is ready and the previous batch has been filled */
+    (function () {
+      var W = 600, T = 0, ev = []; /* ev: {kind:'prep'|'fill', item, from, to, batches, cartons} in working minutes from the start */
+      calc.rows.forEach(function (r) {
+        var pn = prepNote[r.item.id], nb = Math.ceil(r.batches - 1e-9), fillPer = W * r.bpb / r.cap.p50, last = r.batches - (nb - 1);
+        if (!pn) { ev.push({ kind: 'fill', item: r.item, from: T, to: T + r.days * W, batches: r.batches, cartons: r.cartons }); T += r.days * W; return; }
+        var fillEnd = T, prepAt = [];
+        for (var i = 0; i < nb; i++) {
+          var lane = i % pn.heat, start = T + Math.floor(i / pn.heat) * pn.per, ready = start + pn.per, b = i === nb - 1 ? last : 1;
+          ev.push({ kind: 'prep', item: r.item, from: start, to: ready, batches: b });
+          var fs = Math.max(ready, fillEnd), fe = fs + fillPer * b; ev.push({ kind: 'fill', item: r.item, from: fs, to: fe, batches: b, cartons: b * r.bpb }); fillEnd = fe;
+        }
+        T = fillEnd;
+      });
+      var nDays = Math.ceil(T / W - 1e-9), cal = [], d = st.start;
+      function work(x) { var w = new Date(x + 'T00:00:00Z').getUTCDay(); return w !== 5 && (w !== 6 || st.saturdays); }
+      while (!work(d)) d = U.addDays(d, 1);
+      for (var k = 0; k < nDays; k++) {
+        var lo = k * W, hi = lo + W, row = { date: d, prep: {}, fill: {}, cartons: {} };
+        ev.forEach(function (e) {
+          var ov = Math.min(hi, e.to) - Math.max(lo, e.from); if (ov <= 0) return; var f = ov / (e.to - e.from || 1), nm = e.item.name;
+          if (e.kind === 'prep') { if (e.to > lo && e.to <= hi) row.prep[nm] = (row.prep[nm] || 0) + e.batches; }
+          else { row.fill[nm] = (row.fill[nm] || 0) + e.batches * f; row.cartons[nm] = (row.cartons[nm] || 0) + e.cartons * f; }
+        });
+        cal.push(row); d = U.addDays(d, 1); while (!work(d)) d = U.addDays(d, 1);
+      }
+      function fmtObj(o, dec) { var k = Object.keys(o).filter(function (x) { return o[x] > 0.05; }); return k.length ? k.map(function (x) { return n1(o[x], dec) + (k.length > 1 || calc.rows.length > 1 ? ' <span class="small muted">' + esc(x) + '</span>' : ''); }).join('<br>') : '<span class="muted">–</span>'; }
+      var anyPrep = Object.keys(prepNote).length;
+      h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 4px">Day by day (approximate)</h3><p class="small muted" style="margin:0 0 8px">' + (anyPrep ? 'Ready = batches filtered and heated by the end of that day. Filling starts as soon as the first batch is ready and keeps going while the next ones heat. ' : '') + 'Each day is a 600-minute shift' + (st.sections.length === 2 ? ' on both sections together' : '') + '.</p><div class="tablewrap"><table><thead><tr><th>Day</th><th>Date</th>' + (anyPrep ? '<th class="n">Batches ready</th>' : '') + '<th class="n">Batches filled</th><th class="n">Cartons</th><th class="n">Cartons so far</th></tr></thead><tbody>' +
+        (function () { var cum = 0; return cal.map(function (c, i) { var dayC = Object.keys(c.cartons).reduce(function (a, x) { return a + c.cartons[x]; }, 0); cum += dayC; return '<tr><td>' + (i + 1) + '</td><td>' + esc(new Date(c.date + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })) + ' ' + esc(U.nice(c.date)) + '</td>' + (anyPrep ? '<td class="n">' + fmtObj(c.prep, 1) + '</td>' : '') + '<td class="n">' + fmtObj(c.fill, 1) + '</td><td class="n">' + fmtObj(c.cartons, 0) + '</td><td class="n"><b>' + fmtN(Math.round(cum)) + '</b></td></tr>'; }).join(''); })() +
+        '</tbody></table></div><p class="small" style="margin:8px 0 0">Finishes about <b>' + esc(U.nice(cal.length ? cal[cal.length - 1].date : st.start)) + '</b> (' + cal.length + ' working day' + (cal.length === 1 ? '' : 's') + ').</p></div>';
+    })();
+
     /* materials: the order added to the factory plan, run through the stock forecast */
     var vars = {}; lines.forEach(function (L) { var it = SP.itemById(ITEMS, L.item); if (it && L.variant) vars[it.product] = L.variant; });
     var mi = SP.materialsImpact(window.ATICEngine, BASE, savedForEngine(), calc.days, TODAY, { variants: vars });
