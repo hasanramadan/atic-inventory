@@ -359,6 +359,15 @@
     return h;
   }
 
-  var api = { forecast: forecast, buildModel: buildModel, productRecipes: productRecipes, avgWeekly: avgWeekly, orderEvents: orderEvents, emailHTML: emailHTML, util: { iso: iso, addDays: addDays, weekStart: weekStart, nice: nice, fmt: fmt, diffDays: diffDays } };
+  /* What the recipes say was used on a day with Line Planner actuals: batches really prepared × the recipe each
+     run used (variants included), with no learned factor. Used to learn real use ÷ recipe from the counts. */
+  function recipeUse(m, day) {
+    var out = {}, mm = Object.assign({}, m, { useFactor: {} });
+    if (!(m.actualDays && m.actualDays[day])) return null;
+    var its = batchesOn(mm, day, null, { demandPct: 100, extraGM: 0 }).filter(function (x) { return x.source === 'actual'; });
+    m.materials.forEach(function (mat) { var u = useOn(mm, mat.id, its).total; if (u) out[mat.id] = u; });
+    return out;
+  }
+  var api = { forecast: forecast, recipeUse: recipeUse, buildModel: buildModel, productRecipes: productRecipes, avgWeekly: avgWeekly, orderEvents: orderEvents, emailHTML: emailHTML, util: { iso: iso, addDays: addDays, weekStart: weekStart, nice: nice, fmt: fmt, diffDays: diffDays } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ATICEngine = api;
 })(typeof window !== 'undefined' ? window : globalThis);

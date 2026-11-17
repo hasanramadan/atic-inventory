@@ -1017,9 +1017,9 @@ function usReceived(from, to) { // receipts after `from`, up to and including `t
    is applied to every future estimate of that material. A period is used only when the Line Planner has most of its days. */
 function learnUse() {
   if (!run.cache && !BASE) return {};
-  var counts = usCounts(), key = counts.map(function (c) { return c.date + c.at; }).join() + '|' + Object.keys(LP.days).length + '|' + ((S.saved.orders && S.saved.orders.items) || []).length;
+  var counts = usCounts(), key = counts.map(function (c) { return c.date + c.at; }).join() + '|' + Object.keys(LP.days).length + '|' + ((S.saved.orders && S.saved.orders.items) || []).length + '|' + JSON.stringify((S.saved.plan && S.saved.plan.recipeOf) || {}).length + '|' + JSON.stringify(S.saved.recipes || {}).length;
   if (learnUse.k === key) return learnUse.v;
-  var model = E.buildModel(BASE, { materials: S.saved.materials, recipes: S.saved.recipes }), per = [], out = {}; learnUse.odd = {};
+  var model = E.buildModel(BASE, { materials: S.saved.materials, recipes: S.saved.recipes, plan: S.saved.plan, actualDays: LP.days, actualSections: LP.secs }), per = [], out = {}; learnUse.odd = {};
   for (var i = 1; i < counts.length; i++) {
     var a = counts[i - 1], b = counts[i]; if (!(b.date > a.date)) continue;
     var p = usPeriod(model, a, b); if (p.days < 5 || p.missing.length > p.days * 0.3) continue; /* at least 5 production days with Line Planner actuals */ per.push(p);
@@ -1050,7 +1050,9 @@ function usExpected(model, from, to) { // days after `from` up to `to`: batches 
     var ad = LP.days[d];
     if (!ad && !LP.secs[d]) { missing.push(d); continue; }
     days++;
-    Object.keys(ad || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}; Object.keys(r).forEach(function (m) { out[m] = (out[m] || 0) + (Number(r[m]) || 0) * ad[k]; }); });
+    var ru = E.recipeUse && model.actualDays ? E.recipeUse(model, d) : null; /* each run's own recipe (no-caramel, no-Irani…) */
+    if (ru) Object.keys(ru).forEach(function (m) { out[m] = (out[m] || 0) + ru[m]; });
+    else Object.keys(ad || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}; Object.keys(r).forEach(function (m) { out[m] = (out[m] || 0) + (Number(r[m]) || 0) * ad[k]; }); });
   }
   return { qty: out, days: days, missing: missing };
 }
