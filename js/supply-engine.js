@@ -127,6 +127,22 @@
       workdays: days.length, errors: errors, warnings: warnings };
   }
 
+  /* ---------- order typed in cartons (Raw Materials > Production calculator): same rows and day-by-day schedule ---------- */
+  function cartonsCalc(lines, opts) {
+    var errors = [], agg = {};
+    (lines || []).forEach(function (ln) { var it = itemById(opts.items, ln.item); if (!it || !(ln.cartons > 0)) return; (agg[it.id] = agg[it.id] || { item: it, cartons: 0 }).cartons += Number(ln.cartons); });
+    var rows = Object.keys(agg).map(function (k) {
+      var a = agg[k], it = a.item, bpb = opts.model.bpb[it.id], cap = dailyCap(opts.model, it.id, opts.sections);
+      if (!bpb) errors.push(it.name + ': the Line Planner has no boxes-per-batch figure.');
+      if (!cap) errors.push(it.name + ': no learned speed for ' + opts.sections.join(' + ') + '.');
+      return { item: it, cartons: a.cartons, bpb: bpb, batches: bpb ? a.cartons / bpb : null, cap: cap, days: cap ? a.cartons / cap.p50 : null, daysLo: cap ? a.cartons / cap.p90 : null, daysHi: cap ? a.cartons / Math.max(cap.p10, 1) : null };
+    });
+    var ok = rows.length && rows.every(function (r) { return r.bpb && r.cap; });
+    var days = ok ? schedule(rows.map(function (r) { return { item: r.item, cartons: r.cartons, cap: r.cap, bpb: r.bpb, sections: opts.sections }; }), { start: opts.start, saturdays: opts.saturdays, model: opts.model }) : [];
+    return { rows: rows, cartons: sum(rows, function (r) { return r.cartons; }), batches: sum(rows, function (r) { return r.batches || 0; }), lineDays: sum(rows, function (r) { return r.days || 0; }),
+      days: days, start: days.length ? days[0].date : null, finish: days.length ? days[days.length - 1].date : null, workdays: days.length, errors: errors };
+  }
+
   /* ---------- campaign: one item for N weeks ---------- */
   function campaignCalc(o) {
     var it = itemById(o.items, o.item), model = o.model, errors = [];
@@ -158,7 +174,8 @@
 
   /* ---------- raw materials ---------- */
   /* Turn scheduled days into the Raw Materials plan, keep everything else at normal pace, and run the stock forecast. */
-  function materialsImpact(ME, BASE, saved, sched, today) {
+  function materialsImpact(ME, BASE, saved, sched, today, opt) {
+    opt = opt || {}; var VAR = opt.variants || {};
     var m = ME.buildModel(BASE, saved), avg = ME.avgWeekly(m), fp = (saved.plan && saved.plan.days) ? saved.plan : null;
     if (!sched.length) return null;
     var weeksSet = {}; sched.forEach(function (d) { weeksSet[weekStart(d.date)] = 1; });
@@ -185,7 +202,9 @@
         days[day] = o;
       }
     });
-    var plan = { days: Object.assign({}, fp ? fp.days : {}, days), from: fp && fp.from, to: fp && fp.to, weeks: weeks, source: 'Supply Planner' };
+    var recipeOf = Object.assign({}, (saved.plan && saved.plan.recipeOf) || {});
+    if (Object.keys(VAR).length) sched.forEach(function (d) { d.items.forEach(function (x) { if (!VAR[x.product]) return; Object.keys(x.perSec).forEach(function (s) { if (x.perSec[s] > 0) { recipeOf[d.date] = Object.assign({}, recipeOf[d.date] || {}); recipeOf[d.date][x.product + '|' + SECMAP[s]] = VAR[x.product]; } }); }); });
+    var plan = { days: Object.assign({}, fp ? fp.days : {}, days), from: fp && fp.from, to: fp && fp.to, weeks: weeks, source: 'Supply Planner', recipeOf: recipeOf };
     var s2 = Object.assign({}, saved, { plan: plan });
     var withRun = ME.forecast(BASE, s2, today), base = ME.forecast(BASE, saved, today);
     // what the order/campaign alone uses, per material and week
@@ -194,7 +213,7 @@
     sched.forEach(function (d) {
       d.items.forEach(function (x) {
         Object.keys(x.perSec).forEach(function (s) {
-          var b = x.perSec[s] / x.bpb, rec = (m.recipes[x.product] || {})[SECMAP[s]] || {};
+          var b = x.perSec[s] / x.bpb, vr = VAR[x.product] && m.variants && m.variants[x.product] && m.variants[x.product][VAR[x.product]], rec = (vr ? vr[SECMAP[s]] : (m.recipes[x.product] || {})[SECMAP[s]]) || {};
           Object.keys(rec).forEach(function (mid) { if (!need[mid]) return; var q = rec[mid] * b; need[mid].total += q; var w = weekStart(d.date); need[mid].weeks[w] = (need[mid].weeks[w] || 0) + q; });
         });
       });
@@ -214,6 +233,6 @@
     return { rows: rows, weeks: weeks, missingRecipes: missingRecipes, today: today };
   }
 
-  root.ATICSupply = { ITEMS: ITEMS, items: items, itemById: itemById, lineModel: lineModel, orderCalc: orderCalc, campaignCalc: campaignCalc, materialsImpact: materialsImpact,
+  root.ATICSupply = { ITEMS: ITEMS, items: items, itemById: itemById, lineModel: lineModel, orderCalc: orderCalc, cartonsCalc: cartonsCalc, campaignCalc: campaignCalc, materialsImpact: materialsImpact,
     util: { addDays: addDays, dow: dow, weekStart: weekStart, isWorkday: isWorkday, firstWorkday: firstWorkday, nextWorkday: nextWorkday } };
 })(typeof window !== 'undefined' ? window : globalThis);
