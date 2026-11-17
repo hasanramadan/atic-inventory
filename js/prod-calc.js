@@ -9,7 +9,8 @@
   var SUB = { irani: { to: 'uae', f: 1 }, citric: { to: 'citricmono', f: 210.14 / 192.12 } };
   var KG = { irani: 25, uae: 25, iraqi: 25, sugar: 50, orange: 10, rose: 10 };
   /* first batch of a product, before filling can start: rest, then filter, then heat (minutes) */
-  var PREP = { BW: { rest: 360, filter: 25, heat: 60, txt: 'rest 6 h, filter 20–30 min, heat 1 h' }, RW: { rest: 60, filter: 20, heat: 60, txt: 'rest 1 h, filter 20 min, heat 1 h' } };
+  /* the rest (6 h blossom, 1 h rose) happens beforehand, outside working time; only filtering and heating of the first batch are waited for */
+  var PREP = { BW: { rest: 360, filter: 25, heat: 60, txt: 'filter 20–30 min + heat 1 h', restTxt: '6 h rest done beforehand' }, RW: { rest: 60, filter: 20, heat: 60, txt: 'filter 20 min + heat 1 h', restTxt: '1 h rest done beforehand' } };
   var SECN = { S1: 'Section 1', S2: 'Section 2' }, W = 600;
   var LAST = '', SP = null, M = null, ITEMS = null, ERR = '', PCFG = null, OPENED = false;
 
@@ -85,10 +86,10 @@
         if (k > 0 && Q[s][k - 1].item.id !== j.item.id) { co = changeMin(Q[s][k - 1].item, j.item); ev[s].push({ kind: 'change', j: j, from: F, to: F + co.min, co: co }); F += co.min; }
         var pr = PREP[j.item.product], lead = 0, wait = 0;
         if (pr && (k === 0 || Q[s][k - 1].item.product !== j.item.product)) { /* first batch of this product: the line waits for it unless it was prepared while the previous item ran */
-          lead = pr.rest + pr.filter + pr.heat; var ready = (k === 0 ? 0 : prevStart) + lead; wait = Math.max(0, ready - F);
+          lead = pr.filter + pr.heat; var ready = (k === 0 ? 0 : prevStart) + lead; wait = Math.max(0, ready - F);
           if (wait > 0) { ev[s].push({ kind: 'prep', j: j, from: F, to: F + wait }); F += wait; }
         }
-        var dur = W * j.cartons / j.cap.p50; j.start = F; j.end = F + dur; j.lead = lead; j.wait = wait; j.co = co; j.days = dur / W; j.batches = j.cartons / j.bpb;
+        var dur = W * j.cartons / j.cap.p50, spd = (M.speed[j.item.id] || {})[s]; j.fillH = spd && spd.p50 > 0 ? j.cartons / spd.p50 / 60 : null; j.start = F; j.end = F + dur; j.lead = lead; j.wait = wait; j.co = co; j.days = dur / W; j.batches = j.cartons / j.bpb;
         ev[s].push({ kind: 'fill', j: j, from: F, to: F + dur }); prevStart = F; F += dur;
       });
       end[s] = F;
@@ -119,17 +120,17 @@
     LAST = lines.map(function (L) { return fmtN(Number(L.cartons)) + ' ' + SP.itemById(ITEMS, L.item).name; }).join(' + ') + ' · ' + n1(totB, 1) + ' batches · ' + used.map(function (s) { return SECN[s] + ' ' + n1(end[s] / W, 1) + ' days'; }).join(', ') + ' (' + U.nice(dates[0]) + ' → ' + U.nice(dates[dates.length - 1]) + ')';
 
     /* ---- batches and days ---- */
-    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Batches and days</h3><div class="tablewrap"><table><thead><tr><th>Section</th><th>Product</th><th class="n">Cartons</th><th class="n">Cartons per batch</th><th class="n">Batches</th><th class="n">Cartons per day</th><th class="n">Filling days</th><th>Before filling</th></tr></thead><tbody>' +
+    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Batches and days</h3><div class="tablewrap"><table><thead><tr><th>Section</th><th>Product</th><th class="n">Cartons</th><th class="n">Cartons per batch</th><th class="n">Batches</th><th class="n">Cartons per day</th><th class="n">Working days</th><th class="n">Filling hours</th><th>Before filling</th></tr></thead><tbody>' +
       used.map(function (s) {
         return Q[s].map(function (j, k) {
           var pre = [];
           if (j.co) pre.push('Line change ' + (j.co.type === 'size' ? '(size)' : j.co.type === 'product' ? '(product)' : '(product and size)') + ' ~' + hm(j.co.min));
-          if (j.lead) pre.push('First batch: ' + PREP[j.item.product].txt + ' = ' + hm(j.lead) + (j.wait > 0.5 ? (j.wait < j.lead - 0.5 ? ', line waits ' + hm(j.wait) + ' (rest done during the previous item)' : ', line waits for it') : ', ready while the previous item runs'));
+          if (j.lead) pre.push('First batch: ' + PREP[j.item.product].txt + ' = ' + hm(j.lead) + (j.wait > 0.5 ? (j.wait < j.lead - 0.5 ? ', line waits ' + hm(j.wait) : ', line waits for it') : ', ready while the previous item runs') + ' (' + PREP[j.item.product].restTxt + ', outside working time)');
           return '<tr><td>' + (k === 0 ? '<b>' + SECN[s] + '</b>' : '') + '</td><td><b>' + esc(j.item.name) + '</b>' + (j.L.sec === 'both' ? ' <span class="small muted">(share of ' + fmtN(Number(j.L.cartons)) + ')</span>' : '') + '</td><td class="n">' + fmtN(Math.round(j.cartons)) + '</td><td class="n">' + n1(j.bpb, 1) + '</td><td class="n"><b>' + n1(j.batches, 1) + '</b></td><td class="n">' + fmtN(Math.round(j.cap.p50)) + ' <span class="small muted">(' + fmtN(Math.round(j.cap.p10)) + '–' + fmtN(Math.round(j.cap.p90)) + ')</span></td><td class="n"><b>' + n1(j.days, 1) + '</b></td><td class="small">' + (pre.length ? esc(pre.join(' · ')) : '<span class="muted">–</span>') + '</td></tr>';
         }).join('');
       }).join('') + '</tbody></table></div>' +
-      '<p style="margin:10px 0 0"><b>' + fmtN(Math.round(totC)) + ' cartons, ' + n1(totB, 1) + ' batches.</b> ' + used.map(function (s) { return '<b>' + SECN[s] + '</b>: about ' + n1(end[s] / W, 1) + ' working days, ' + esc(U.nice(dates[0])) + ' to ' + esc(U.nice(lastDay[s])); }).join('; ') + '. ' + (used.length > 1 ? 'All done by <b>' + esc(U.nice(dates[dates.length - 1])) + '</b>. ' : '') +
-      '<span class="small muted">This is the time with no delays: batches are prepared outside filling time, so only the first batch of blossom or rose water is waited for. If a batch is not ready in time, or a breakdown runs long, add that time. Cartons per day include the normal stops (range in brackets: slow to fast day). Friday off; Saturdays ' + (st.saturdays ? 'working' : 'off') + '.</span></p></div>';
+      '<p style="margin:10px 0 0"><b>' + fmtN(Math.round(totC)) + ' cartons, ' + n1(totB, 1) + ' batches.</b> ' + used.map(function (s) { var fh = Q[s].reduce(function (a, j) { return a + (j.fillH || 0); }, 0); return '<b>' + SECN[s] + '</b>: about <b>' + n1(end[s] / W, 1) + ' working days</b> and <b>' + n1(fh, 1) + ' filling hours</b>, ' + esc(U.nice(dates[0])) + ' to ' + esc(U.nice(lastDay[s])); }).join('; ') + '. ' + (used.length > 1 ? 'All done by <b>' + esc(U.nice(dates[dates.length - 1])) + '</b>. ' : '') +
+      '<span class="small muted">Working days = 10-hour shifts including normal stops, line changes and the first-batch wait; filling hours = time the filler actually runs. This is the time with no delays: the rest (6 h blossom, 1 h rose) is done beforehand outside working time and later batches are prepared outside filling time, so only the first batch\'s filtering and heating is waited for. If a batch is not ready in time, or a breakdown runs long, add that time. Cartons per day include the normal stops (range in brackets: slow to fast day). Friday off; Saturdays ' + (st.saturdays ? 'working' : 'off') + '.</span></p></div>';
 
     /* ---- calendar ---- */
     function cell(list) {
