@@ -191,6 +191,11 @@
     var sc = Object.assign({ demandPct: 100, leadDays: null, extraGM: 0 }, scenario || {});
     var m = buildModel(base, saved);
     today = today || iso(Date.now());
+    /* Only what has really arrived counts. An order whose expected date has passed without a receipt is NOT added
+       to stock (no guessing that it came); it is kept aside as late and counts again only once it is received
+       or given a new expected date. Orders still due in the future count from their date in the forecast. */
+    m.lateOrders = m.orders.filter(function (o) { return !o.received && o.eta < today; });
+    m.orders = m.orders.filter(function (o) { return o.received || o.eta >= today; });
     var avg = avgWeekly(m);
     var HORIZON = 26 * 7;
     var start = weekStart(today);
@@ -253,6 +258,7 @@
       var suggested = weekly > 0 ? Math.max(0, safety + weekly * mat.orderCoverWeeks - Math.max(0, projAtArrival)) : 0;
       suggested = Math.ceil(suggested / 10) * 10;
       var openOrders = m.orders.filter(function (o) { return o.material === mat.id && !o.received; });
+      var lateOrders = m.lateOrders.filter(function (o) { return o.material === mat.id; });
       var top = Object.keys(byProd).sort(function (a, b) { return byProd[b] - byProd[a]; });
       var res = {
         id: mat.id, name: mat.name, unit: mat.unit, note: mat.note, active: active, status: status,
@@ -260,7 +266,7 @@
         stockNow: stockNow, weekly: weekly, byProduct: byProd, perDay: pd.total, perDayBy: pd.by, perSat: ps.total, safety: safety, weeksCover: weeksCover,
         runOut: runOut, belowSafety: belowSafety, orderBy: orderBy, daysToOrder: daysToOrder,
         lead: lead, arrivalIfOrderedToday: { earliest: addDays(today, lead.min), latest: arrival },
-        suggestedQty: suggested, openOrders: openOrders, weeks: weeks, daily: daily, firstWeekPlan: firstWeekPlan, topProducts: top
+        suggestedQty: suggested, openOrders: openOrders, lateOrders: lateOrders, weeks: weeks, daily: daily, firstWeekPlan: firstWeekPlan, topProducts: top
       };
       res.why = explain(res, m, today);
       return res;
