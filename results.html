@@ -4,7 +4,7 @@
 <title>ATIC Forecast Results</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611171058">
+<link rel="stylesheet" href="css/app.css?v=202611171102">
 <style>
 .sec2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .fc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
@@ -27,14 +27,14 @@
 <main id="main"><div class="boot"><div><i></i>Loading Forecast Results…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611171058"></script>
-<script src="js/shell.js?v=202611171058"></script>
-<script src="js/backup.js?v=202611171058" defer></script>
-<script src="js/assistant.js?v=202611171058" defer></script>
-<script src="js/io.js?v=202611171058"></script>
-<script src="js/line-engine.js?v=202611171058"></script>
-<script src="js/materials-engine.js?v=202611171058"></script>
-<script src="js/supply-engine.js?v=202611171058"></script>
+<script src="config.js?v=202611171102"></script>
+<script src="js/shell.js?v=202611171102"></script>
+<script src="js/backup.js?v=202611171102" defer></script>
+<script src="js/assistant.js?v=202611171102" defer></script>
+<script src="js/io.js?v=202611171102"></script>
+<script src="js/line-engine.js?v=202611171102"></script>
+<script src="js/materials-engine.js?v=202611171102"></script>
+<script src="js/supply-engine.js?v=202611171102"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, SP = window.ATICSupply, ME = window.ATICEngine;
@@ -89,10 +89,12 @@ function render() {
   $('#main').innerHTML = h;
 }
 function supplyCard(s) {
-  var h = '<div class="card ok" style="cursor:default"><div class="h"><div><h3>' + esc(s.name) + '</h3><span class="unit">' + (s.kind === 'order' ? 'Order by trucks' : 'Campaign') + ' · saved ' + esc((s.savedAt || '').slice(0, 10)) + ' by ' + esc(s.by || '') + '</span></div></div>';
+  var h = '<div class="card ok" style="cursor:default"><div class="h"><div><h3>' + esc(s.name) + '</h3><span class="unit">' + (s.kind === 'order' ? 'Order by trucks' : s.kind === 'cartons' ? 'Production calculator' : 'Campaign') + ' · saved ' + esc((s.savedAt || '').slice(0, 10)) + ' by ' + esc(s.by || '') + '</span></div></div>';
   try {
     var x = s.input, items = SP.items(D.docs.supply), r, days;
-    if (s.kind === 'order') { r = SP.orderCalc(x.lines, { samples: !!x.samples, sections: x.sections, start: x.start, saturdays: !!x.saturdays, model: D.model, items: items }); days = r.days;
+    if (s.kind === 'cartons') { r = SP.cartonsCalc(x.lines.filter(function (l) { return Number(l.cartons) > 0; }).map(function (l) { return { item: l.item, cartons: Number(l.cartons) }; }), { sections: x.sections, start: x.start, saturdays: !!x.saturdays, model: D.model, items: items }); days = r.days;
+      h += '<p class="small" style="margin:0">' + esc(s.summary || '') + '</p><p class="small" style="margin:0"><a href="materials.html?open=' + encodeURIComponent(s.id) + '#calc">Open in the calculator →</a></p>'; }
+    else if (s.kind === 'order') { r = SP.orderCalc(x.lines, { samples: !!x.samples, sections: x.sections, start: x.start, saturdays: !!x.saturdays, model: D.model, items: items }); days = r.days;
       h += '<dl class="stat"><dt>Trucks</dt><dd>' + r.trucks + '</dd><dt>Cartons</dt><dd>' + fmt(r.cartons, 0) + '</dd><dt>Batches</dt><dd>' + fmt(r.batches, 1) + '</dd><dt>Production</dt><dd>' + nice(r.start) + ' → ' + nice(r.finish) + '</dd>' + (x.needBy ? '<dt>Needed by</dt><dd style="color:' + (r.finish > x.needBy ? 'var(--red)' : 'var(--green)') + '">' + nice(x.needBy) + '</dd>' : '') + '</dl>'; }
     else { r = SP.campaignCalc({ item: x.item, weeks: x.weeks, start: x.start, sections: x.sections, saturdays: !!x.saturdays, alt: x.alt, model: D.model, items: items }); days = r.days;
       h += '<dl class="stat"><dt>Cartons</dt><dd>' + fmt(r.total.cartons, 0) + '</dd><dt>Trucks</dt><dd>' + (r.total.fullTrucks != null ? r.total.fullTrucks : '–') + '</dd><dt>Batches</dt><dd>' + fmt(r.total.batches, 0) + '</dd><dt>Weeks</dt><dd>' + nice(r.start) + ' → ' + nice(r.finish) + '</dd></dl>'; }
