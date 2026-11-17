@@ -126,16 +126,16 @@
     var ptTot = Object.keys(byItem).map(function (k) { var b = byItem[k], x = pt(b.it, b.c); return x ? esc(b.it.name) + ': ' + n1(x.pallets, 1) + ' pallets' + (x.trucks != null ? ' = ' + n1(x.trucks, 2) + ' trucks (' + Math.floor(x.trucks + 1e-9) + ' full)' : '') : esc(b.it.name) + ': pallet rules not set'; });
 
     /* ---- batches and days ---- */
-    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Batches and days</h3><div class="tablewrap"><table><thead><tr><th>Section</th><th>Product</th><th class="n">Cartons</th><th class="n">Cartons per batch</th><th class="n">Batches</th><th class="n">Cartons per day</th><th class="n">Working days</th><th class="n">Filling hours</th><th class="n">Pallets</th><th class="n">Trucks</th><th>Before filling</th></tr></thead><tbody>' +
+    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Batches and days</h3><div class="tablewrap"><table><thead><tr><th>Section</th><th>Product</th><th class="n">Cartons</th><th class="n">Cartons per batch</th><th class="n">Batches</th><th class="n">Cartons per day</th><th class="n">Working days</th><th class="n">Filling hours</th><th>Before filling</th></tr></thead><tbody>' +
       used.map(function (s) {
         return Q[s].map(function (j, k) {
           var pre = [];
           if (j.co) pre.push('Line change ' + (j.co.type === 'size' ? '(size)' : j.co.type === 'product' ? '(product)' : '(product and size)') + ' ~' + hm(j.co.min));
           if (j.lead) pre.push('First batch: ' + PREP[j.item.product].txt + ' = ' + hm(j.lead) + (j.wait > 0.5 ? (j.wait < j.lead - 0.5 ? ', line waits ' + hm(j.wait) : ', line waits for it') : ', ready while the previous item runs') + ' (' + PREP[j.item.product].restTxt + ', outside working time)');
-          return '<tr><td>' + (k === 0 ? '<b>' + SECN[s] + '</b>' : '') + '</td><td><b>' + esc(j.item.name) + '</b>' + (j.L.sec === 'both' ? ' <span class="small muted">(share of ' + fmtN(Number(j.L.cartons)) + ')</span>' : '') + '</td><td class="n">' + fmtN(Math.round(j.cartons)) + '</td><td class="n">' + n1(j.bpb, 1) + '</td><td class="n"><b>' + n1(j.batches, 1) + '</b></td><td class="n">' + fmtN(Math.round(j.cap.p50)) + ' <span class="small muted">(' + fmtN(Math.round(j.cap.p10)) + '–' + fmtN(Math.round(j.cap.p90)) + ')</span></td><td class="n"><b>' + n1(j.days + ((j.co ? j.co.min : 0) + (j.wait || 0)) / W, 1) + '</b></td><td class="n"><b>' + (j.fillH != null ? n1(j.fillH, 1) + ' h' : '–') + '</b></td>' + ptCells(j.item, j.cartons) + '<td class="small">' + (pre.length ? esc(pre.join(' · ')) : '<span class="muted">–</span>') + '</td></tr>';
+          return '<tr><td>' + (k === 0 ? '<b>' + SECN[s] + '</b>' : '') + '</td><td><b>' + esc(j.item.name) + '</b>' + (j.L.sec === 'both' ? ' <span class="small muted">(share of ' + fmtN(Number(j.L.cartons)) + ')</span>' : '') + '</td><td class="n">' + fmtN(Math.round(j.cartons)) + '</td><td class="n">' + n1(j.bpb, 1) + '</td><td class="n"><b>' + n1(j.batches, 1) + '</b></td><td class="n">' + fmtN(Math.round(j.cap.p50)) + ' <span class="small muted">(' + fmtN(Math.round(j.cap.p10)) + '–' + fmtN(Math.round(j.cap.p90)) + ')</span></td><td class="n"><b>' + n1(j.days + ((j.co ? j.co.min : 0) + (j.wait || 0)) / W, 1) + '</b></td><td class="n"><b>' + (j.fillH != null ? n1(j.fillH, 1) + ' h' : '–') + '</b></td><td class="small">' + (pre.length ? esc(pre.join(' · ')) : '<span class="muted">–</span>') + '</td></tr>';
         }).join('');
       }).join('') + '</tbody></table></div>' +
-      '<p style="margin:10px 0 0"><b>' + fmtN(Math.round(totC)) + ' cartons, ' + n1(totB, 1) + ' batches.</b> ' + used.map(function (s) { var fh = Q[s].reduce(function (a, j) { return a + (j.fillH || 0); }, 0); return '<b>' + SECN[s] + '</b>: about <b>' + n1(end[s] / W, 1) + ' working days</b> and <b>' + n1(fh, 1) + ' filling hours</b>, ' + esc(U.nice(dates[0])) + ' to ' + esc(U.nice(lastDay[s])); }).join('; ') + '. ' + (used.length > 1 ? 'All done by <b>' + esc(U.nice(dates[dates.length - 1])) + '</b>. ' : '') + '<br><b>Pallets and trucks:</b> ' + ptTot.join('; ') + '. ' +
+      '<p style="margin:10px 0 0"><b>' + fmtN(Math.round(totC)) + ' cartons, ' + n1(totB, 1) + ' batches.</b> ' + used.map(function (s) { var fh = Q[s].reduce(function (a, j) { return a + (j.fillH || 0); }, 0); return '<b>' + SECN[s] + '</b>: about <b>' + n1(end[s] / W, 1) + ' working days</b> and <b>' + n1(fh, 1) + ' filling hours</b>, ' + esc(U.nice(dates[0])) + ' to ' + esc(U.nice(lastDay[s])); }).join('; ') + '. ' + (used.length > 1 ? 'All done by <b>' + esc(U.nice(dates[dates.length - 1])) + '</b>. ' : '') +
       '<span class="small muted">Working days = 10-hour shifts including normal stops, line changes and the first-batch wait; filling hours = time the filler actually runs. This is the time with no delays: the rest (6 h blossom, 1 h rose) is done beforehand outside working time and later batches are prepared outside filling time, so only the first batch\'s filtering and heating is waited for. If a batch is not ready in time, or a breakdown runs long, add that time. Cartons per day include the normal stops (range in brackets: slow to fast day). Friday off; Saturdays ' + (st.saturdays ? 'working' : 'off') + '.</span></p></div>';
 
     /* ---- calendar ---- */
@@ -157,9 +157,43 @@
       }).join('') +
       '<tr style="border-top:2px solid var(--line)"><td></td><td><b>Total</b></td>' + used.map(function (s) {
         var tot = Q[s].reduce(function (a, j) { return a + j.cartons; }, 0);
-        return '<td>' + Q[s].map(function (j) { return '<b>' + esc(j.item.name) + '</b>: ' + fmtN(Math.round(j.cartons)) + ' cartons <span class="small muted">(' + n1(j.batches, 1) + ' batches, about ' + fmtN(Math.round(j.cap.p50)) + ' a day)</span>' + (function () { var x = pt(j.item, j.cartons); return x ? '<br><span class="small">' + n1(x.pallets, 1) + ' pallets' + (x.trucks != null ? ' · <b>' + n1(x.trucks, 2) + ' trucks</b> (' + Math.floor(x.trucks + 1e-9) + ' full)' : '') + '</span>' : ''; })(); }).join('<br>') + (Q[s].length > 1 ? '<br><b>' + SECN[s] + ': ' + fmtN(Math.round(tot)) + ' cartons</b>' : '') + '</td>';
+        return '<td>' + Q[s].map(function (j) { return '<b>' + esc(j.item.name) + '</b>: ' + fmtN(Math.round(j.cartons)) + ' cartons <span class="small muted">(' + n1(j.batches, 1) + ' batches, about ' + fmtN(Math.round(j.cap.p50)) + ' a day)</span>' }).join('<br>') + (Q[s].length > 1 ? '<br><b>' + SECN[s] + ': ' + fmtN(Math.round(tot)) + ' cartons</b>' : '') + '</td>';
       }).join('') + '<td class="n"><b>' + fmtN(Math.round(totC)) + '</b></td><td></td></tr>' +
       '</tbody></table></div></div>';
+
+    /* ---- pallets and trucks (Supply Planner pallet rules) ---- */
+    h += '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Pallets and trucks</h3><div class="tablewrap"><table><thead><tr><th>Product</th><th class="n">Cartons</th><th class="n">Cartons per pallet</th><th class="n">Pallets</th><th class="n">Pallets per truck</th><th class="n">Trucks</th><th class="n">Full trucks</th></tr></thead><tbody>' +
+      Object.keys(byItem).map(function (k) {
+        var b = byItem[k], x = pt(b.it, b.c);
+        if (!x) return '<tr><td><b>' + esc(b.it.name) + '</b></td><td class="n">' + fmtN(Math.round(b.c)) + '</td><td colspan="5" class="small muted">Cartons per pallet / pallets per truck not set yet (Supply Planner › Settings).</td></tr>';
+        return '<tr><td><b>' + esc(b.it.name) + '</b></td><td class="n">' + fmtN(Math.round(b.c)) + '</td><td class="n">' + b.it.cpp + '</td><td class="n"><b>' + n1(x.pallets, 1) + '</b></td><td class="n">' + (b.it.ppt || '–') + '</td><td class="n"><b>' + (x.trucks != null ? n1(x.trucks, 2) : '–') + '</b></td><td class="n">' + (x.trucks != null ? Math.floor(x.trucks + 1e-9) + (x.trucks % 1 > 0.01 ? ' <span class="small muted">+ ' + Math.round((x.trucks % 1) * b.it.ppt) + ' pallets</span>' : '') : '–') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+
+    /* ---- calendar view (month grid) ---- */
+    (function () {
+      var COL = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#dc2626', '#0891b2', '#4f46e5', '#65a30d'], col = {}, ci = 0;
+      jobs.forEach(function (j) { if (!col[j.item.id]) col[j.item.id] = COL[ci++ % COL.length]; });
+      var byDate = {}; cal.forEach(function (c) { byDate[c.date] = c; });
+      var first = U.weekStart(dates[0]), last = dates[dates.length - 1], d = first, wk = [];
+      var h2 = '<div class="panel"><h3 style="font-size:16px;margin:0 0 8px">Calendar view</h3><div style="display:flex;gap:10px;flex-wrap:wrap;margin:0 0 8px">' + Object.keys(col).map(function (id) { var it = SP.itemById(ITEMS, id); return '<span class="small"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:' + col[id] + ';margin-right:4px"></span>' + esc(it.name) + '</span>'; }).join('') + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:6px;overflow-x:auto">' + ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(function (x) { return '<div class="small muted" style="text-align:center;font-weight:600">' + x + '</div>'; }).join('');
+      while (d <= last || U.weekStart(d) === U.weekStart(last)) {
+        var c = byDate[d], w = new Date(d + 'T00:00:00Z').getUTCDay(), off = !c && (w === 5 || (w === 6 && !st.saturdays)), before = d < dates[0], after = d > last;
+        var inner = '<div style="font-weight:600;font-size:13px;margin-bottom:4px">' + esc(U.nice(d)) + '</div>';
+        if (c) {
+          used.forEach(function (s) {
+            c[s].forEach(function (x) {
+              if (x.t === 'fill') inner += '<div style="border-left:4px solid ' + col[(jobs.filter(function (j) { return j.item.name === x.name; })[0] || {}).item ? jobs.filter(function (j) { return j.item.name === x.name; })[0].item.id : ''] + ';padding:2px 5px;margin:2px 0;background:var(--bg);border-radius:4px;font-size:12px"><span class="muted">' + (s === 'S1' ? 'S1' : 'S2') + '</span> ' + esc(x.name.replace(/^Grenadine Molasses/, 'GM').replace(/^Lemon Substitute/, 'Lemon').replace(/^White Vinegar/, 'Vinegar')) + '<br><b>' + fmtN(Math.round(x.cartons)) + '</b> ctn</div>';
+              else inner += '<div style="font-size:11px;color:var(--amber);margin:2px 0">' + (s === 'S1' ? 'S1 ' : 'S2 ') + (x.t === 'change' ? '↺ change ~' + hm(x.min) : '⏳ first batch ~' + hm(x.min)) + '</div>';
+            });
+          });
+          inner += '<div style="font-size:12px;margin-top:4px;border-top:1px solid var(--line);padding-top:3px">Day: <b>' + fmtN(Math.round(c.cartons)) + '</b></div>';
+        } else if (off && !before && !after) inner += '<div class="small muted">Day off</div>';
+        h2 += '<div style="min-height:86px;border:1px solid var(--line);border-radius:8px;padding:6px;background:' + (c ? 'var(--card,#fff)' : 'transparent') + ';opacity:' + (before || after ? 0.35 : 1) + '">' + inner + '</div>';
+        d = U.addDays(d, 1); if (d > last && new Date(d + 'T00:00:00Z').getUTCDay() === 0) break;
+      }
+      h += h2 + '</div></div>';
+    })();
 
     /* ---- stoppages from history on the sections used ---- */
     var CAT = [['Capping', /cap/i], ['Labels & stickers', /label|sticker/i], ['Filling (nozzle, sensor, pump)', /nozzle|filling|sensor|pump|leak/i], ['Washer, conveyor & bottles', /washer|conveyor|bottle stuck|gearbox|bearing|motor/i], ['Waiting (material, cartons, batch)', /wait/i]];
