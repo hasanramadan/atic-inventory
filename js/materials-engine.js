@@ -225,6 +225,7 @@
         var uu = useOn(m, mat.id, avgItems); weekly += uu.total;
         Object.keys(uu.by).forEach(function (p) { byProd[p] = (byProd[p] || 0) + uu.by[p]; });
       }
+      if (!(weekly > 0) && SUBW[mat.id]) weekly = SUBW[mat.id]; /* a substitute takes over the normal pace of what it replaces */
       var pd = useOn(m, mat.id, paceItems(m, 1, avg, sc)), ps = useOn(m, mat.id, paceItems(m, 6, avg, sc));
       var safety = weekly * mat.safetyWeeks;
       var daily = [], weeks = [], cur = opening, runOut = null, belowSafety = null, firstWeekPlan = null;
@@ -279,6 +280,7 @@
        so 1 bag of anhydrous in a recipe becomes 1.094 bags of monohydrate. */
     var SUBS = Object.assign({ irani: { to: 'uae', f: 1 }, citric: { to: 'citricmono', f: 210.14 / 192.12 } }, m.substitutes || {});
     m.dailyAdj = clone(m.dailyAdj || {});
+    var SUBW = {};
     var results = runAll(), moved = false;
     Object.keys(SUBS).forEach(function (a) {
       var sb = typeof SUBS[a] === 'string' ? { to: SUBS[a], f: 1 } : SUBS[a], b = sb.to, f = Number(sb.f) || 1;
@@ -293,7 +295,7 @@
           adj[a] = (Number(adj[a]) || 0) - short; adj[b] = (Number(adj[b]) || 0) + short * f; total += short; moved = true;
         }
       });
-      if (total) (m.substituted = m.substituted || {})[a] = { to: b, qty: total, asQty: total * f, factor: f };
+      if (total) { (m.substituted = m.substituted || {})[a] = { to: b, qty: total, asQty: total * f, factor: f }; SUBW[b] = (SUBW[b] || 0) + (Number(ra.weekly) || 0) * f; }
     });
     if (moved) results = runAll();
     var dayBatches = {};
