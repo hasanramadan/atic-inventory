@@ -157,7 +157,7 @@
       }).join('') +
       '<tr style="border-top:2px solid var(--line)"><td></td><td><b>Total</b></td>' + used.map(function (s) {
         var tot = Q[s].reduce(function (a, j) { return a + j.cartons; }, 0);
-        return '<td>' + Q[s].map(function (j) { return '<b>' + esc(j.item.name) + '</b>: ' + fmtN(Math.round(j.cartons)) + ' cartons <span class="small muted">(' + n1(j.batches, 1) + ' batches, about ' + fmtN(Math.round(j.cap.p50)) + ' a day)</span>'; }).join('<br>') + (Q[s].length > 1 ? '<br><b>' + SECN[s] + ': ' + fmtN(Math.round(tot)) + ' cartons</b>' : '') + '</td>';
+        return '<td>' + Q[s].map(function (j) { return '<b>' + esc(j.item.name) + '</b>: ' + fmtN(Math.round(j.cartons)) + ' cartons <span class="small muted">(' + n1(j.batches, 1) + ' batches, about ' + fmtN(Math.round(j.cap.p50)) + ' a day)</span>' + (function () { var x = pt(j.item, j.cartons); return x ? '<br><span class="small">' + n1(x.pallets, 1) + ' pallets' + (x.trucks != null ? ' · <b>' + n1(x.trucks, 2) + ' trucks</b> (' + Math.floor(x.trucks + 1e-9) + ' full)' : '') + '</span>' : ''; })(); }).join('<br>') + (Q[s].length > 1 ? '<br><b>' + SECN[s] + ': ' + fmtN(Math.round(tot)) + ' cartons</b>' : '') + '</td>';
       }).join('') + '<td class="n"><b>' + fmtN(Math.round(totC)) + '</b></td><td></td></tr>' +
       '</tbody></table></div></div>';
 
