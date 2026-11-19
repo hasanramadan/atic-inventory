@@ -4,7 +4,7 @@
 <title>ATIC · Choose where to go</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611191115">
+<link rel="stylesheet" href="css/app.css?v=202611191503">
 <style>
 html,body{height:100%}
 body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d2e22 55%,#081d16 100%);color:#eef5f1;overflow:hidden;font-family:var(--f-body,'IBM Plex Sans',sans-serif)}
@@ -57,9 +57,9 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611191115"></script>
-<script src="js/shell.js?v=202611191115"></script>
-<script src="js/backup.js?v=202611191115" defer></script>
+<script src="config.js?v=202611191503"></script>
+<script src="js/shell.js?v=202611191503"></script>
+<script src="js/backup.js?v=202611191503" defer></script>
 <script>
 (async function () {
   var A = await ATIC.boot({ page: 'start', area: 'start' }); if (!A) return;
@@ -75,7 +75,7 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
   var INFO = {
     production: { c: '#2f9e6c', h: 'Production', p: 'Today, the Line Planner, raw materials and the team.', tag: 'Open', href: ATIC.firstPage(p) || 'materials.html' },
     lab: { c: '#4fb3e8', h: 'Lab', p: 'Quality control: product chemistry and micro, water, swabs, raw materials, with limits, sign-off and a live view for the lab manager.', tag: 'Open', href: 'lab.html' },
-    research: { c: '#9b7be8', h: 'Research', p: 'Lab research: trials and experiments, what was tested, results and conclusions, kept with the lab records.', tag: 'Coming soon', href: 'research.html' },
+    research: { c: '#9b7be8', h: 'Research', p: 'Trials and experiments: formulas, tests you build, solutions, results, comparisons and reports.', tag: 'Under testing', href: 'research.html' },
     packaging: { c: '#e8955b', h: 'Packaging materials', p: 'Bottles, caps, labels, cartons and filters: stock in the inventory next to raw materials, used per production.', tag: 'Coming soon', href: 'packaging.html' },
     preparation: { c: '#d4a017', h: 'Preparation', p: 'Products, sizes and batches per section → the raw materials to prepare, with the lot number.', tag: 'Open', href: 'prep.html' }
   };
@@ -83,7 +83,7 @@ body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#1d5a43 0%,#0d
   document.getElementById('who').textContent = (p.full_name || p.username) + (p.is_owner ? ' · Creator' : '');
   document.getElementById('out').onclick = ATIC.signOut;
   var stage = document.getElementById('stage');
-  stage.innerHTML = areas.map(function (k) { var x = INFO[k]; return '<button class="door" data-href="' + x.href + '" style="--c:' + x.c + '" aria-label="' + x.h + (x.tag === 'Coming soon' ? ' (coming soon)' : '') + '"><span class="glow"></span><span class="face"></span><span class="scene">' + SCENE[k] + '</span><span class="txt"><span class="tag' + (x.tag === 'Coming soon' ? ' soon' : '') + '">' + x.tag + '</span><h2>' + x.h + '</h2><p>' + x.p + '</p><span class="go">Enter →</span></span></button>'; }).join('');
+  stage.innerHTML = areas.map(function (k) { var x = INFO[k]; return '<button class="door" data-href="' + x.href + '" style="--c:' + x.c + '" aria-label="' + x.h + (x.tag === 'Coming soon' ? ' (coming soon)' : '') + '"><span class="glow"></span><span class="face"></span><span class="scene">' + SCENE[k] + '</span><span class="txt"><span class="tag' + (x.tag === 'Coming soon' || x.tag === 'Under testing' ? ' soon' : '') + '">' + x.tag + '</span><h2>' + x.h + '</h2><p>' + x.p + '</p><span class="go">Enter →</span></span></button>'; }).join('');
   if (areas.length > 3) stage.classList.add('many');
   document.getElementById('st').hidden = false;
   var doors = [].slice.call(document.querySelectorAll('.door')), n = doors.length;
