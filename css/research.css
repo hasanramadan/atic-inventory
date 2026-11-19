@@ -42,7 +42,7 @@ table.ft thead th.stick{z-index:3;background:var(--surface-2)}
 table.ft input,table.ft select{border:1px solid transparent;background:transparent;border-radius:7px;padding:5px 7px;width:92px;font:inherit}
 table.ft input:hover,table.ft select:hover{border-color:var(--line)}
 table.ft input:focus,table.ft select:focus{border-color:var(--rs);background:var(--surface);outline:none}
-table.ft input.nm{width:190px;font-weight:600}
+table.ft input.nm{width:190px;font-weight:600;text-align:left}
 table.ft td.chg{background:var(--rs-soft)}
 table.ft td.out{font-family:var(--f-mono);font-weight:600;text-align:right;min-width:84px}
 table.ft td.good{color:var(--green)}table.ft td.bad{color:var(--red);background:var(--red-soft)}

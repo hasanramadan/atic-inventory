@@ -71,7 +71,7 @@
     ordered2.forEach(drawPart);
     if (more.length) { h += '<div class="part more"><button type="button" class="p morebtn" id="moreBtn" aria-expanded="' + moreOpen + '">More ' + (moreOpen ? '▴' : '▾') + '</button><div class="morelist"' + (moreOpen ? '' : ' hidden') + '>'; more.forEach(drawPart); h += '</div></div>'; }
     tailAdmin.forEach(drawPart);
-    if (A.area !== 'production') h += '<div class="part"><a class="p" aria-current="page" href="' + location.pathname.split('/').pop() + '">' + esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '') + '</a></div>';
+    if (A.area !== 'production') { var cur2 = curSub(); h += '<div class="part"><a class="p" aria-current="page" href="' + location.pathname.split('/').pop() + '">' + esc((AREAS.filter(function (a) { return a.key === A.area; })[0] || {}).label || '') + '</a>' + (A.subs.length ? '<div class="subs">' + A.subs.map(function (s) { return '<a href="#' + s.id + '" data-sub="' + s.id + '"' + (s.id === cur2 ? ' aria-current="page"' : '') + '>' + esc(s.label) + '</a>'; }).join('') + '</div>' : '') + '</div>'; }
     h += '</nav><div class="userchip"><b>' + esc(p.full_name || p.username) + '</b><span style="opacity:.75;font-size:12px">' + (p.is_owner ? 'Creator' : ROLE[p.role]) + '</span>' + (areasOf(p).length > 1 ? '<a class="switch" href="start.html">⇄ Switch area</a>' : '') + '<button id="signOut" type="button">Sign out</button></div>';
     return h;
   }
