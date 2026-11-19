@@ -65,11 +65,15 @@
   }
 
   /* ---------- data ---------- */
-  async function loadAll() {
+  var editSeq = 0;
+  async function loadAll(live) {
+    var seq = editSeq;
     var ls = await Promise.all(['res_projects', 'res_tests', 'res_solutions'].map(function (c) { return A.planner.list(c).catch(function (e) { console.warn(c, e); return []; }); }));
+    if (live && (seq !== editSeq || saving || Object.keys(pend).length)) return false;
     R.projects = ls[0].map(function (r) { return r.data; }).filter(Boolean);
     R.tests = ls[1].map(function (r) { return r.data; }).filter(Boolean).sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
     R.sols = ls[2].map(function (r) { return r.data; }).filter(Boolean).sort(function (a, b) { return (b.prepared || '').localeCompare(a.prepared || ''); });
+    return true;
   }
   async function loadRefs() {
     try {
@@ -89,14 +93,14 @@
   var saveT = {}, saving = 0;
   function chip() { var c = $('#saveChip'); if (c) c.textContent = saving ? 'Saving…' : 'All changes saved'; }
   async function put(coll, obj) {
-    obj.updatedAt = new Date().toISOString(); obj.updatedBy = ME;
+    obj.updatedAt = new Date().toISOString(); obj.updatedBy = ME; editSeq++;
     saving++; chip();
     try { await A.planner.set(coll, obj.id, obj); }
     catch (e) { toast('Could not save: ' + (/row-level|42501|permission/i.test((e.message || '') + e.code) ? 'this account is not allowed to save research yet (ask the admin).' : (e.message || e))); }
     saving--; chip();
   }
   var pend = {};
-  function saveProject(p, now) { clearTimeout(saveT[p.id]); if (now) { delete pend[p.id]; return put('res_projects', p); } pend[p.id] = 1; saveT[p.id] = setTimeout(function () { delete pend[p.id]; put('res_projects', p); }, 600); }
+  function saveProject(p, now) { editSeq++; clearTimeout(saveT[p.id]); if (now) { delete pend[p.id]; return put('res_projects', p); } pend[p.id] = 1; saveT[p.id] = setTimeout(function () { delete pend[p.id]; put('res_projects', p); }, 600); }
   async function delDoc(coll, id) { try { await A.planner.del(coll, id); } catch (e) { toast('Could not delete: ' + (e.message || e)); } }
   function log(p, text) { (p.log = p.log || []).unshift({ id: uid('l'), at: new Date().toISOString(), by: ME, text: text, auto: true }); }
 
@@ -623,7 +627,7 @@
   window.addEventListener('hashchange', render);
   /* live updates from other people: refresh unless someone is typing here */
   var busy = 0; document.addEventListener('focusin', function () { busy = Date.now(); });
-  A.planner.subscribe(function (pl) { var c = pl && (pl.new && pl.new.coll || pl.old && pl.old.coll); if (!c || c.indexOf('res_') !== 0 || c === 'res_files') return; setTimeout(async function () { if (saving || Object.keys(pend).length) return; var a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && Date.now() - busy < 20000) return; if (document.querySelector('.mbg')) return; await loadAll(); rerender(); }, 1200); });
+  A.planner.subscribe(function (pl) { var c = pl && (pl.new && pl.new.coll || pl.old && pl.old.coll); if (!c || c.indexOf('res_') !== 0 || c === 'res_files') return; setTimeout(async function () { if (saving || Object.keys(pend).length) return; var a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && Date.now() - busy < 20000) return; if (document.querySelector('.mbg')) return; if (await loadAll(true)) rerender(); }, 1200); });
   render();
   window.RS = { R: R, evalF: evalF, render: render }; /* for checks */
 })();
