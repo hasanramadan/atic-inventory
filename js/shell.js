@@ -13,9 +13,9 @@
   ];
   var ROLE = { admin: 'Admin', editor: 'Can edit', viewer: 'View only' };
   /* areas: Production (this site), Lab and Preparation. The owner has all of them. */
-  var AREAS = [{ key: 'production', label: 'Production', href: null }, { key: 'lab', label: 'Lab', href: 'lab.html' }, { key: 'preparation', label: 'Preparation', href: 'prep.html' }];
+  var AREAS = [{ key: 'production', label: 'Production', href: null }, { key: 'lab', label: 'Lab', href: 'lab.html' }, { key: 'preparation', label: 'Preparation', href: 'prep.html' }, { key: 'research', label: 'Research', href: 'research.html', soon: true }, { key: 'packaging', label: 'Packaging materials', href: 'packaging.html', soon: true }];
   function areasOf(p) { if (!p) return []; if (p.is_owner) return AREAS.map(function (a) { return a.key; }); var a = (p.areas && p.areas.length) ? p.areas : ['production']; return AREAS.map(function (x) { return x.key; }).filter(function (k) { return a.indexOf(k) >= 0; }); }
-  function areaHome(p) { var a = areasOf(p); if (a.length > 1) return 'start.html'; if (a[0] === 'lab') return 'lab.html'; if (a[0] === 'preparation') return 'prep.html'; return firstPageOf(p); }
+  function areaHome(p) { var a = areasOf(p); if (a.length > 1) return 'start.html'; if (a[0] === 'lab') return 'lab.html'; if (a[0] === 'preparation') return 'prep.html'; if (a[0] === 'research') return 'research.html'; if (a[0] === 'packaging') return 'packaging.html'; return firstPageOf(p); }
   var ICON_MSG = '<svg class="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:7px"><path fill="currentColor" d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 6v2h2V9H7zm4 0v2h2V9h-2zm4 0v2h2V9h-2z"/></svg>';
   var CFG = window.ATIC_CONFIG || {};
   var sb = (window.supabase && CFG.url) ? window.supabase.createClient(CFG.url, CFG.key) : null;
