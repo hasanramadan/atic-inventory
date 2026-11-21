@@ -279,7 +279,7 @@
   var onLab = /lab/.test(location.pathname);
   function menu() {
     var lab = labAllowed(), o = [];
-    if (onLab && lab) o.push(['🧪 Lab', 'lab']);
+    if (onLab) return [['Today in the lab', 'l:today'], ['Yesterday in the lab', 'l:yday'], ['Records for a product…', 'lprod'], ['Gaps and missing results', 'l:gaps'], ['Out of limits (14 days)', 'l:out'], ['Who tested what (7 days)', 'l:who'], ['❓ What can I ask?', 'help']];
     o.push(['🏭 Production', 'prod'], ['📦 Raw materials', 'mat'], ['🗓 Factory plan', 'plan']);
     if (!onLab && lab) o.push(['🧪 Lab', 'lab']);
     o.push(['🔬 Research', 'res'], ['❓ What can I ask?', 'help']);
@@ -288,7 +288,7 @@
   var HOME = ['🏠 Menu', 'menu'];
   var NODES = {
     menu: function () { return { t: 'What do you want to know?', o: menu() }; },
-    help: function () { return { t: 'Tap a topic, or type a question like:\n• What did we produce yesterday?\n• Line 2 yesterday stoppages\n• When does salt run out?\n• What should I order?\n• Deliveries coming\n• Raw materials for tomorrow\n• Plan next week\n• GM recipe\n• Lot for tomorrow' + (labAllowed() ? '\n• Lab LS results\n• Lab gaps\n• Out of limits' : '') + '\n\nEverything is worked out from the website\'s own numbers, for free.', o: menu() }; },
+    help: function () { if (onLab) return { t: 'Here in the lab you can ask, for example:\n• Lab today / yesterday\n• LS results (or GM, BW, RW, water…)\n• Lab gaps / missing results\n• Out of limits\n• Who tested what\n\nI work it out from the lab records, for free.', o: menu() }; return { t: 'Tap a topic, or type a question like:\n• What did we produce yesterday?\n• Line 2 yesterday stoppages\n• When does salt run out?\n• What should I order?\n• Deliveries coming\n• Raw materials for tomorrow\n• Plan next week\n• GM recipe\n• Lot for tomorrow' + (labAllowed() ? '\n• Lab LS results\n• Lab gaps\n• Out of limits' : '') + '\n\nEverything is worked out from the website\'s own numbers, for free.', o: menu() }; },
     prod: function () { return { t: 'Production: what do you want to see?', o: [['Yesterday, both lines', 'q:what did we produce yesterday'], ['Today\'s forecast', 'f:today'], ['This week', 'q:cartons this week'], ['Last week', 'q:produced last week'], ['This month', 'f:month'], ['Top stop reasons (30 days)', 'f:stops'], ['Forecast accuracy', 'f:acc'], ['Pick a day…', 'pday'], HOME] }; },
     pday: function () { var o = []; for (var i = 1; o.length < 6 && i < 14; i++) { var d = addD(DATA.today, -i); if (wd(d) !== 5) o.push([nice(d), 'q:produced on ' + d.slice(8) + '/' + d.slice(5, 7)]); } o.push(HOME); return { t: 'Which day?', o: o }; },
     mat: function () { return { t: 'Raw materials: what do you want to see?', o: [['What to order now', 'q:what should i order'], ['Run-out dates', 'f:runout'], ['Deliveries coming', 'q:deliveries coming'], ['One material…', 'mlist'], ['Raw materials for today', 'q:raw materials for today'], ['Raw materials for tomorrow', 'q:raw materials for tomorrow'], ['Recipes…', 'rlist'], HOME] }; },
@@ -309,6 +309,7 @@
   }
   async function run(act) {
     await context();
+    if (onLab && !/^(l:|lp:|lab$|lprod$|menu$|help$)/.test(act)) return { t: 'Here in the lab I can help with lab records. Production and stock are on the production pages.', o: menu() };
     if (NODES[act]) { if (/^(lab|lprod)$/.test(act) && labAllowed()) await labLoad(); return NODES[act](); }
     var k = act.slice(0, act.indexOf(':')), v = act.slice(act.indexOf(':') + 1), t;
     if (k === 'q') t = localAnswer(v);
@@ -319,11 +320,44 @@
     return { t: t || 'Nothing to show for that yet.', o: follow(act) };
   }
   function prevWork(d) { var x = addD(d, -1); if (wd(x) === 5) x = addD(x, -1); return x; }
+  /* ---------- conversation: small talk, typos, follow-ups ---------- */
+  var MEM = { last: null };
+  var VOCAB = ['produce', 'produced', 'production', 'yesterday', 'tomorrow', 'today', 'order', 'deliveries', 'delivery', 'coming', 'sugar', 'salt', 'citric', 'iraqi', 'irani', 'caramel', 'pomegranate', 'sorbate', 'acetic', 'turbid', 'recipe', 'plan', 'lab', 'stoppage', 'stoppages', 'cartons', 'materials', 'material', 'section', 'line', 'week', 'month', 'forecast', 'results', 'missing', 'grenadine', 'lemon', 'blossom', 'vinegar', 'water', 'research', 'stock', 'runs', 'when', 'what', 'should', 'prepare', 'raw', 'accuracy', 'reasons'];
+  function lev(a, b) { var m = a.length, n2 = b.length, d = []; for (var i = 0; i <= m; i++) { d[i] = [i]; } for (var j = 1; j <= n2; j++) d[0][j] = j; for (i = 1; i <= m; i++) for (j = 1; j <= n2; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n2]; }
+  function fixTypos(q) { return q.replace(/[a-z]{4,}/g, function (w) { if (VOCAB.indexOf(w) >= 0) return w; var best = null, bd = 9; VOCAB.forEach(function (v) { if (Math.abs(v.length - w.length) > 2) return; var dd = lev(w, v); if (dd < bd) { bd = dd; best = v; } }); return best && bd <= (w.length >= 7 ? 2 : 1) ? best : w; }); }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function first() { return (((A.profile || {}).full_name || '').split(' ')[0]) || ''; }
+  function smalltalk(q, ar) {
+    var nm = first(), h = new Date().getHours(), tod = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    if (/^(hi|hello|hey|hii+|yo|salam|salaam|good (morning|afternoon|evening)|morning)\b|^(مرحبا|السلام|هلا|اهلا|أهلا|صباح|مساء)/.test(q)) return { t: ar ? 'أهلا ' + nm + '! 👋 كيف فيني ساعدك اليوم؟' : pick([tod + ', ' + nm + '! 👋 What do you want to know today?', 'Hello ' + nm + '! 😊 What can I check for you?', 'Hi ' + nm + '! Ready when you are. Pick a topic or just ask.']), o: menu() };
+    if (/how are you|how r u|how's it going|كيفك|كيف حالك|شو الاخبار/.test(q)) return { t: ar ? 'تمام الحمدلله! وانت؟ شو بدك تعرف اليوم؟' : pick(['All good, thanks for asking! 😊 How about you? What shall we look at?', 'Doing great, the numbers are fresh. What do you need?']), o: menu() };
+    if (/^(thanks|thank you|thx|ty|great|perfect|nice|good job|bravo|awesome|cool|ok(ay)?|شكرا|يسلمو|تسلم|ممتاز)\b/.test(q)) return { t: ar ? 'العفو! 🙏 بدك شي تاني؟' : pick(['You\'re welcome! 🙌 Anything else?', 'Anytime! Want to check something else?', 'Glad it helps. What next?']), o: [HOME] };
+    if (/who are you|what are you|your name|شو اسمك|مين انت/.test(q)) return { t: 'I\'m Ask ATIC, the website\'s own assistant. I read the same numbers as the pages (' + (onLab ? 'the lab records' : 'stock, forecast, factory plan, Line Planner, recipes' + (labAllowed() ? ', the lab' : '')) + ') and answer instantly, for free, without sending anything outside.', o: menu() };
+    if (/what can you do|help|what can i ask|options|ساعدني|شو بتعرف/.test(q)) return NODES.help();
+    if (/^(bye|goodbye|see you|later|باي|مع السلامة)/.test(q)) return { t: pick(['Bye ' + nm + '! 👋', 'See you, ' + nm + '!', 'Take care! I\'m here whenever you need me.']), o: null };
+    return null;
+  }
+  function followUp(q) {
+    if (!MEM.last || q.split(/\s+/).length > 6 || !/^(and|what about|how about|same for|also|و|وال|طيب)/.test(q) && !/^(line|section|tomorrow|yesterday|today|next week|this week)\b/.test(q)) return null;
+    var last = MEM.last, rest = q.replace(/^(and|what about|how about|same for|also|طيب|و)\s*/, '');
+    if (DATA && findMats(rest).length && /run|stock|order|use|now|have|deliver|much/.test(last)) return rest + ' stock';
+    var out = last;
+    var ln = rest.match(/(line|section|sec)\s*[12]/); if (ln) out = out.replace(/(line|section|sec)\s*[12]/g, '').trim() + ' ' + ln[0];
+    var dy = rest.match(/today|tomorrow|yesterday|next week|this week|last week|\d{1,2}\s*[\/.-]\s*\d{1,2}/); if (dy) out = out.replace(/today|tomorrow|yesterday|next week|this week|last week|\d{1,2}\s*[\/.-]\s*\d{1,2}/g, '').trim() + ' ' + dy[0];
+    if (LAB && /lab|results/.test(last)) { var pp = (LAB.cfg.products || []).filter(function (p) { return rest.indexOf(p.id.toLowerCase()) >= 0 || rest.indexOf(p.name.toLowerCase().split(' ')[0]) >= 0; })[0]; if (pp) out = 'lab ' + pp.id.toLowerCase() + ' results'; }
+    return out !== last || ln || dy ? out : null;
+  }
   async function typed(q0) {
     await context();
-    var q = q0.toLowerCase().trim();
-    if (/^(hi|hello|hey|salam|مرحبا|السلام|هلا)\b/.test(q)) return NODES.menu();
-    if (/\blab\b|مختبر|sample|عينة|results? (for|of)|out of (spec|limit)|validat/.test(q)) {
+    var raw = q0.toLowerCase().trim().replace(/[?!.،]+$/, ''), ar = /[؀-ۿ]/.test(q0);
+    var greet = /^(hi|hello|hey|salam|good (morning|afternoon|evening)|مرحبا|هلا|اهلا)[\s,!]+/;
+    if (raw.split(/\s+/).length > 3 && greet.test(raw)) raw = raw.replace(greet, '').replace(/^(claude|atic|ask atic)[\s,]*/, '');
+    var st = raw.split(/\s+/).length <= 5 ? smalltalk(raw, ar) : null; if (st) return st;
+    var q = fixTypos(raw), fu = followUp(q); if (fu) q = fu;
+    if (q !== raw) q0 = q;
+    MEM.last = q;
+    if (onLab) { if (!labAllowed()) return { t: 'Not available here.', o: null }; if (!/\blab\b|مختبر/.test(q)) q = 'lab ' + q; }
+    if (/\blab\b|مختبر|sample|عينة|results?\b|out of (spec|limit)|validat/.test(q)) {
       if (!labAllowed()) return { t: 'The lab topics are for the doctor and the admins.', o: menu() };
       await labLoad();
       var pid = (LAB.cfg.products || []).filter(function (p) { return q.indexOf(p.id.toLowerCase()) >= 0 || q.indexOf(p.name.toLowerCase()) >= 0 || (p.id === 'GM' && /grenadine|دبس/.test(q)) || (p.id === 'LS' && /lemon/.test(q)) || (p.id === 'WTR' && /water\b/.test(q) && !/rose|blossom/.test(q)); })[0];
@@ -332,7 +366,8 @@
       if (/who|tested by/.test(q)) return run('l:who');
       if (pid) return run('lp:' + pid.id);
       if (/yesterday|امس/.test(q)) return run('l:yday');
-      return run('l:today');
+      if (/today|now|اليوم/.test(q) || q === 'lab') return run('l:today');
+      return { t: onLab ? 'I didn\'t catch that. Here is what I can show you in the lab:' : 'Here is what I can show you about the lab:', o: NODES.lab().o };
     }
     if (/research|trial|experiment|بحث/.test(q)) return run('r:list');
     if (/forecast/.test(q) && /today|اليوم/.test(q)) return run('f:today');
