@@ -310,7 +310,7 @@
   /* ---------- rich answers: cards, tables and coloured chips instead of long text ---------- */
   var PCOL = { GM: '#b42318', LS: '#c99a06', BW: '#e07b39', RW: '#d6578a', WV: '#6b7a73', FC: '#7c5cd6' };
   function chip(p, size, b, extra) { var c = PCOL[p] || '#5c6e66'; return '<span class="rc-chip" style="--c:' + c + '"><b>' + esc(p) + '</b>' + (size ? ' ' + esc(String(size).replace('ml', ' ml')) : '') + (b != null ? '<i>' + (b === 0 ? 'from tank' : '×' + n(b)) + '</i>' : '') + (extra ? '<i>' + esc(extra) + '</i>' : '') + '</span>'; }
-  function head(t, sub) { return '<div class="rc-h">' + t + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; }
+  function head(t, sub) { return '<div class="rc-h"><span>' + t + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; }
   function stat(label, val, cls) { return '<div class="rc-st' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span><b>' + val + '</b></div>'; }
   function badge(t, cls) { return '<span class="rc-b ' + (cls || '') + '">' + t + '</span>'; }
   function more(label, inner) { return inner ? '<details class="rc-more"><summary>' + label + '</summary>' + inner + '</details>' : ''; }
