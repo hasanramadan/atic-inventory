@@ -572,6 +572,7 @@
     '.rc-bar{display:grid;grid-template-columns:minmax(90px,40%) 1fr auto;gap:8px;align-items:center;font-size:12.5px;margin:5px 0}.rc-bar i{height:9px;border-radius:5px;background:var(--brand);display:block}.rc-bar b{font-size:12.5px;white-space:nowrap}' +
     '.rc-note{font-size:11.5px;color:var(--muted);margin-top:6px}.rc-mut{color:var(--muted);font-size:12px}.rc-empty{color:var(--muted);font-size:13.5px;padding:6px 0}.rc-chips{margin:4px 0 6px}.rc-sub{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:8px 0 2px}' +
     '.rc-more{margin-top:8px;font-size:13px}.rc-more summary{cursor:pointer;color:var(--brand);font-weight:600;font-size:12.5px}.rc-ul{margin:4px 0;padding-left:18px}.rc-ul li{margin:2px 0}.rc-p{margin:4px 0;font-size:12.5px;line-height:1.45}.rc-tag{display:inline-block;background:var(--amber-soft);color:var(--amber);border-radius:6px;padding:0 6px;margin:2px 2px 0 0;font-size:11.5px}' +
+    '.rc-t td .rc-chip{display:flex;width:max-content;margin:2px 0}.rc-t td{min-width:0}.asst .m.rc{overflow-x:auto}.rc-t{table-layout:auto}' +
     '.rc .neg{color:var(--red);font-weight:600}.rc .pos{color:var(--green)}.rc-scroll{overflow-x:auto}' +
     '@media print{.asst,.asst-btn{display:none!important}}';
   var LOG = [];
