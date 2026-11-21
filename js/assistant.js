@@ -59,7 +59,7 @@
   function dayOf(q) {
     var t = DATA.today, w = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     if (/tomorrow|بكرا|بكرة|غدا|غداً/.test(q)) return addD(t, 1);
-    if (/yesterday|امس|أمس/.test(q)) return addD(t, -1);
+    if (/yesterday|امس|أمس/.test(q)) { var yd = addD(t, -1); return new Date(yd + 'T00:00:00Z').getUTCDay() === 5 ? addD(yd, -1) : yd; }
     var m = q.match(/(\d{1,2})\s*[\/.-]\s*(\d{1,2})/); if (m) return t.slice(0, 4) + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
     var m2 = q.match(/(\d{1,2})\s*(nov|dec|jan|feb|mar|apr|may|jun|jul|aug|sep|oct)/); if (m2) { var mo = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(m2[2]) + 1; return t.slice(0, 4) + '-' + ('0' + mo).slice(-2) + '-' + ('0' + m2[1]).slice(-2); }
     for (var i = 0; i < 7; i++) if (q.indexOf(w[i]) >= 0) { var d = t; for (var k = 0; k < 7; k++) { if (new Date(d + 'T00:00:00Z').getUTCDay() === i && (k > 0 || q.indexOf('today') >= 0)) return d; d = addD(d, 1); } }
@@ -184,7 +184,8 @@
   }
   function runOutList() {
     var rs = DATA.fc.results.filter(function (r) { return r.active; }).map(function (r) { return { r: r, ro: runOuts(r) }; }).sort(function (a, b) { return (a.ro.act || '9') < (b.ro.act || '9') ? -1 : 1; });
-    return 'Run-out dates (soonest first):\n' + rs.map(function (x) { var st = x.r.status === 'order' ? '🔴' : x.r.status === 'soon' ? '🟠' : '🟢'; return st + ' ' + x.r.name + ': ' + (x.ro.act ? nice(x.ro.act) : 'not in 26 weeks') + (x.ro.exp && x.ro.exp !== x.ro.act ? ' (' + nice(x.ro.exp) + ' with deliveries)' : ''); }).join('\n') + '\n\n🔴 order now · 🟠 order soon · 🟢 fine';
+    var SUBN = { irani: 'UAE dates', citric: 'Citric acid monohydrate' };
+    return 'Run-out dates (soonest first):\n' + rs.map(function (x) { if (SUBN[x.r.id] && nowOf(x.r) <= 0.5) return '⚪ ' + x.r.name + ': finished, ' + SUBN[x.r.id] + ' used instead'; var st = x.r.status === 'order' ? '🔴' : x.r.status === 'soon' ? '🟠' : '🟢'; return st + ' ' + x.r.name + ': ' + (x.ro.act ? nice(x.ro.act) : 'not in 26 weeks') + (x.ro.exp && x.ro.exp !== x.ro.act ? ' (' + nice(x.ro.exp) + ' with deliveries)' : ''); }).join('\n') + '\n\n🔴 order now · 🟠 order soon · 🟢 fine';
   }
 
   /* ---------- lab (doctor and admins only) ---------- */
