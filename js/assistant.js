@@ -1,10 +1,10 @@
-/* ATIC assistant: a chat on every page. The question goes with today's numbers (from the same calculations the pages use)
-   to the Supabase function "ask", which asks Claude and answers in seconds. */
+/* ATIC assistant: a free guided chat on every page. Menus and typed questions are answered here, in the browser,
+   from the website's own numbers (forecast, plan, Line Planner, lab). Nothing is sent to a paid service. */
 (function () {
   var A = window.ATIC; if (!A) return;
   var H = [], busy = false, ctxCache = null, ctxAt = 0, DATA = null;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function n(x) { return x == null || isNaN(x) ? '–' : (Math.round(x * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }); }
+  function n(x) { if (x == null || isNaN(x)) return '–'; var a = Math.abs(x), dp = a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : 3; return Number(x).toLocaleString('en-US', { maximumFractionDigits: dp }); }
   function iso(d) { return new Date(d).toISOString().slice(0, 10); }
   function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
 
@@ -132,7 +132,7 @@
         var ro = runOuts(r), x = m.materials.filter(function (y) { return y.id === r.id; })[0] || {}, k = x.recipeFactor > 1 ? x.recipeFactor : null, lines = [];
         lines.push(r.name + ' (' + r.unit + (k ? ', 1 ' + r.unit + ' = ' + k + ' ' + x.recipeUnit : '') + ')');
         lines.push('• Now ≈ ' + n(nowOf(r)) + ' ' + r.unit + (k ? ' = ' + n(nowOf(r) * k) + ' ' + x.recipeUnit : '') + ' (counted ' + n(r.stockCounted) + ' on ' + nice((m.stock[r.id] || {}).asOf) + ')');
-        lines.push('• Use ≈ ' + n(r.perDay) + ' ' + r.unit + ' a working day');
+        lines.push('• Normal use ≈ ' + n(r.perDay) + ' ' + r.unit + ' per working day (' + n(r.weekly) + ' a week, average of recent production)');
         lines.push('• Runs out ' + (ro.act ? nice(ro.act) : 'not in 26 weeks') + (ro.exp && ro.exp !== ro.act ? ' (' + nice(ro.exp) + ' if the deliveries arrive)' : ''));
         (r.openOrders || []).filter(function (o) { return o.eta >= DATA.today; }).forEach(function (o) { lines.push('• Delivery: +' + n(o.qty) + ' ' + r.unit + ' on ' + nice(o.eta)); });
         lines.push('• ' + (r.status === 'order' ? 'Order NOW' : r.orderBy ? 'Order by ' + nice(r.orderBy) : 'No order needed') + ' · lead time ' + (x.leadMinDays || '–') + ' days' + (x.orderVia ? ' · ordered through ' + x.orderVia : ''));
@@ -143,50 +143,244 @@
     return null;
   }
 
+  /* ---------- extra answers: production analysis ---------- */
+  function wd(d) { return new Date(d + 'T00:00:00Z').getUTCDay(); }
+  function secName(s) { return s === 'S1' || s === 'SEC-1' ? 'Line 1' : 'Line 2'; }
+  function todayForecast(day) {
+    var d = day || DATA.today, ps = (DATA.plans || []).filter(function (x) { return x.date === d; }).sort(function (a, b) { return a.sec < b.sec ? -1 : 1; });
+    if (!ps.length) return 'No forecast saved in the Line Planner for ' + nice(d) + ' yet. Open the Line Planner and press "Save forecast" for each section.';
+    var out = ['Forecast for ' + nice(d) + ':'];
+    ps.forEach(function (p) { var o = p.out || {}, ins = (p.inputs && p.inputs.runs) || [];
+      out.push('\n' + secName(p.sec).toUpperCase());
+      ins.forEach(function (r) { out.push('• ' + r.product + ' ' + (r.size || '') + ': ' + n(r.batches || 0) + ' batches prepared + ' + n(r.openingResolved != null ? r.openingResolved : r.opening) + ' in the tank'); });
+      out.push('• Expected ≈ ' + n(o.boxesP50) + ' cartons (range ' + n(o.boxesP10) + '–' + n(o.boxesP90) + ')');
+      out.push('• Filling ' + n(o.fillMin) + ' min · stops ' + n(o.stopMin) + ' min · last carton ' + (o.finish || '–') + ' · left in tank ' + n(o.closingBatches) + ' batches');
+    });
+    var acts = DATA.acts.filter(function (a) { return a.date === d; }); if (acts.length) out.push('\nActual so far: ' + acts.map(function (a) { return secName(a.sec) + ' ' + n(a.boxes) + ' cartons'; }).join(' · '));
+    return out.join('\n');
+  }
+  function stopReasons(days) {
+    var from = addD(DATA.today, -days), agg = {}, tot = 0, nd = 0;
+    DATA.acts.filter(function (a) { return a.date >= from && a.date <= DATA.today && a.reasons; }).forEach(function (a) { nd++;
+      String(a.reasons).split(/;\s*/).forEach(function (part) { var m = part.match(/^\s*(.+?)\s+(\d+)\s*min/i); if (!m) return; var k = m[1].trim().replace(/^[a-z]/, function (c) { return c.toUpperCase(); }); if (/arrangement|start-?up|cleaning|cip/i.test(k)) k = /clean|cip/i.test(k) ? 'Cleaning / CIP' : 'Start-up & arrangement'; agg[k] = agg[k] || { min: 0, n: 0 }; agg[k].min += +m[2]; agg[k].n++; tot += +m[2]; }); });
+    var ks = Object.keys(agg).sort(function (a, b) { return agg[b].min - agg[a].min; }).slice(0, 10);
+    if (!ks.length) return 'No stop reasons written in the actuals of the last ' + days + ' days.';
+    return 'Top stop reasons, last ' + days + ' days (' + nd + ' line-days, ' + n(tot) + ' min in total):\n' + ks.map(function (k, i) { return (i + 1) + '. ' + k + ': ' + n(agg[k].min) + ' min (' + agg[k].n + '×, ' + Math.round(agg[k].min / tot * 100) + '%)'; }).join('\n') + '\n\nPlanned stops (start-up, cleaning, CIP) are grouped; the rest are machine stops worth fixing first.';
+  }
+  function accuracy(days) {
+    var from = addD(DATA.today, -days), rows = [];
+    DATA.acts.filter(function (a) { return a.date >= from && a.date < DATA.today && a.boxes > 0; }).forEach(function (a) { var p = (DATA.plans || []).filter(function (x) { return x.date === a.date && x.sec === a.sec; })[0]; if (p && p.out && p.out.boxesP50) rows.push({ d: a.date, s: a.sec, act: a.boxes, fc: p.out.boxesP50, lo: p.out.boxesP10, hi: p.out.boxesP90 }); });
+    if (!rows.length) return 'No days in the last ' + days + ' days have both a saved forecast and an actual.';
+    var err = rows.reduce(function (s, r) { return s + Math.abs(r.act - r.fc) / r.act; }, 0) / rows.length, inR = rows.filter(function (r) { return r.act >= r.lo && r.act <= r.hi; }).length;
+    rows.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+    return 'Forecast vs actual, last ' + days + ' days (' + rows.length + ' line-days):\n• Average miss: ' + Math.round(err * 100) + '% (' + Math.round((1 - err) * 100) + '% accurate)\n• Inside the forecast range: ' + inR + ' of ' + rows.length + '\n\n' + rows.slice(0, 8).map(function (r) { return nice(r.d) + ' ' + secName(r.s) + ': ' + n(r.act) + ' vs ' + n(Math.round(r.fc)) + ' (' + (r.act >= r.fc ? '+' : '') + Math.round((r.act - r.fc) / r.fc * 100) + '%)'; }).join('\n');
+  }
+  function monthSummary() {
+    var m0 = DATA.today.slice(0, 7) + '-01', tot = {}, nd = {}, st = 0, wk = 0, best = null;
+    DATA.acts.filter(function (a) { return a.date >= m0 && a.date <= DATA.today; }).forEach(function (a) { nd[a.date] = 1; st += +a.stopMin || 0; wk += +a.workMin || 0; ((a.runs && a.runs.length) ? a.runs : [a]).forEach(function (r) { if (r.prepOnly) return; var k = r.product + ' ' + (r.size || ''); tot[k] = tot[k] || { c: 0, b: 0 }; tot[k].c += +r.boxes || 0; tot[k].b += +r.batches || 0; }); if (!best || a.boxes > best.boxes) best = a; });
+    var ks = Object.keys(tot); if (!ks.length) return 'No actuals entered this month yet.';
+    var all = ks.reduce(function (s, k) { return s + tot[k].c; }, 0);
+    return 'This month so far (' + Object.keys(nd).length + ' working days):\n' + ks.sort(function (a, b) { return tot[b].c - tot[a].c; }).map(function (k) { return '• ' + k + ': ' + n(tot[k].c) + ' cartons'; }).join('\n') + '\n• Total: ' + n(all) + ' cartons\n• Stops: ' + n(st) + ' min (' + (wk ? Math.round(st / wk * 100) : 0) + '% of working time)' + (best ? '\n• Best line-day: ' + nice(best.date) + ' ' + secName(best.sec) + ', ' + n(best.boxes) + ' cartons' : '');
+  }
+  function runOutList() {
+    var rs = DATA.fc.results.filter(function (r) { return r.active; }).map(function (r) { return { r: r, ro: runOuts(r) }; }).sort(function (a, b) { return (a.ro.act || '9') < (b.ro.act || '9') ? -1 : 1; });
+    return 'Run-out dates (soonest first):\n' + rs.map(function (x) { var st = x.r.status === 'order' ? '🔴' : x.r.status === 'soon' ? '🟠' : '🟢'; return st + ' ' + x.r.name + ': ' + (x.ro.act ? nice(x.ro.act) : 'not in 26 weeks') + (x.ro.exp && x.ro.exp !== x.ro.act ? ' (' + nice(x.ro.exp) + ' with deliveries)' : ''); }).join('\n') + '\n\n🔴 order now · 🟠 order soon · 🟢 fine';
+  }
+
+  /* ---------- lab (doctor and admins only) ---------- */
+  var LAB = null;
+  function labAllowed() { var p = A.profile || {}, ar = p.areas || []; return !!(p.is_owner || p.role === 'admin' || (ar.indexOf('lab') >= 0 && ar.indexOf('production') >= 0)); }
+  async function labLoad() {
+    if (LAB && Date.now() - LAB.at < 60000) return LAB;
+    var r = await Promise.all([A.planner.list('lab_sessions'), A.planner.list('lab_samples'), A.sb.from('planner_docs').select('data').eq('coll', 'lab_config').eq('id', 'main').single(), A.planner.list('lab_people').catch(function () { return []; }), A.planner.list('lab_daybatch').catch(function () { return []; })]);
+    var cfg = (r[2].data && r[2].data.data) || { products: [] }, people = {}; r[3].forEach(function (x) { people[x.id] = (x.data && x.data.name) || x.id; });
+    var ses = r[0].map(function (x) { var d = x.data || {}; d.id = x.id; return d; }), sam = r[1].map(function (x) { var d = x.data || {}; d.id = x.id; return d; });
+    var db = {}; r[4].forEach(function (x) { db[x.id] = (x.data && x.data.items) || {}; });
+    LAB = { at: Date.now(), cfg: cfg, ses: ses, sam: sam, people: people, db: db, prod: {} }; (cfg.products || []).forEach(function (p) { LAB.prod[p.id] = p; });
+    return LAB;
+  }
+  function fx(src, sc) { /* small safe formula reader: + - * / ^ ( ) and names */
+    var t = String(src || '').match(/\d+\.?\d*|[A-Za-z_]\w*|[-+*/^()]/g) || [], p = 0;
+    function e() { var a = tm(); while (t[p] === '+' || t[p] === '-') { var o = t[p++], b = tm(); a = o === '+' ? a + b : a - b; } return a; }
+    function tm() { var a = pw(); while (t[p] === '*' || t[p] === '/') { var o = t[p++], b = pw(); a = o === '*' ? a * b : a / b; } return a; }
+    function pw() { var a = un(); if (t[p] === '^') { p++; return Math.pow(a, pw()); } return a; }
+    function un() { if (t[p] === '-') { p++; return -un(); } return pr(); }
+    function pr() { var k = t[p++]; if (k === '(') { var v = e(); p++; return v; } if (/^\d/.test(k)) return parseFloat(k); var v2 = sc[k]; if (v2 == null || v2 === '' || isNaN(v2)) throw 0; return Number(v2); }
+    try { var v = e(); return isFinite(v) ? v : null; } catch (x) { return null; }
+  }
+  function sampleOuts(test, res) {
+    if (!res) return null;
+    if (test.kind === 'org' || !test.outputs) return res.value != null ? [{ label: test.name, v: res.value, txt: true, bad: /not|reject|fail/i.test(res.value) }] : null;
+    var sc = {}; (test.consts || []).forEach(function (c) { sc[c.key] = res.k && res.k[c.key] != null ? res.k[c.key] : c.value; }); Object.keys(res.in || {}).forEach(function (k) { sc[k] = res.in[k]; });
+    var out = []; test.outputs.forEach(function (o) { if (o.grp && test.pick && res.pick && o.grp !== res.pick) return; var v = fx(o.formula, sc); sc[o.key] = v; if (v == null) return; var mn = o.min === '' || o.min == null ? null : +o.min, mx = o.max === '' || o.max == null ? null : +o.max; out.push({ label: o.label, unit: o.unit || '', v: v, dp: o.dp == null ? 2 : o.dp, bad: (mn != null && v < mn) || (mx != null && v > mx), lim: (mn != null ? '≥' + mn : '') + (mx != null ? ' ≤' + mx : '') }); });
+    return out.length ? out : null;
+  }
+  function fmtV(o) { return o.txt ? o.v : Number(o.v).toLocaleString('en-US', { maximumFractionDigits: o.dp }) + (o.unit ? ' ' + o.unit : ''); }
+  function labToday(day) {
+    var d = day || DATA.today, ss = LAB.ses.filter(function (s) { return s.date === d; }), sent = LAB.db[d] || {};
+    var out = ['Lab on ' + nice(d) + ':'];
+    if (Object.keys(sent).length) out.push('Batches sent to the lab: ' + Object.keys(sent).map(function (k) { var a = k.split('|'); return a[0] + ' ' + (a[1] === 'SEC-1' ? 'L1' : 'L2') + ' ×' + sent[k]; }).join(', '));
+    if (!ss.length) { out.push('No lab sessions opened yet.'); return out.join('\n'); }
+    ss.forEach(function (s) { var p = LAB.prod[s.productId] || { name: s.productId, tests: [] }, sm = LAB.sam.filter(function (x) { return x.sessionId === s.id; }), done = sm.filter(function (x) { return x.testedAt; }).length, bad = 0;
+      sm.forEach(function (x) { (p.tests || []).forEach(function (t) { (sampleOuts(t, (x.results || {})[t.id]) || []).forEach(function (o) { if (o.bad) bad++; }); }); });
+      out.push('• ' + p.name + ' · ' + (s.section === 'Lab' ? 'lab' : secName(s.section)) + ': ' + (s.batches || 0) + ' batches · ' + sm.length + ' samples · ' + done + ' tested' + (bad ? ' · ⚠ ' + bad + ' result(s) out of limits' : '') + (s.validated ? ' · ✔ validated' : ' · not validated yet')); });
+    return out.join('\n');
+  }
+  function labProduct(pid) {
+    var p = LAB.prod[pid]; if (!p) return 'Unknown product.';
+    var ss = LAB.ses.filter(function (s) { return s.productId === pid; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 6);
+    if (!ss.length) return 'No lab records for ' + p.name + ' yet.';
+    var out = [p.name + ': last ' + ss.length + ' sessions'];
+    ss.forEach(function (s) {
+      var sm = LAB.sam.filter(function (x) { return x.sessionId === s.id; }), rng = {}, bad = 0, miss = 0;
+      sm.forEach(function (x) { (p.tests || []).forEach(function (t) { var o = sampleOuts(t, (x.results || {})[t.id]); if (!o) { if (t.kind !== 'micro' && !t.optional) miss++; return; } o.forEach(function (q) { if (q.bad) bad++; if (q.txt) { (rng[q.label] = rng[q.label] || { txt: {} }).txt[q.v] = 1; return; } var r = rng[q.label] = rng[q.label] || { lo: q.v, hi: q.v, unit: q.unit, dp: q.dp }; r.lo = Math.min(r.lo, q.v); r.hi = Math.max(r.hi, q.v); }); }); });
+      out.push('\n' + nice(s.date) + ' · ' + (s.section === 'Lab' ? 'lab' : secName(s.section)) + (s.lot ? ' · lot ' + s.lot : '') + ' · ' + sm.length + '/' + (s.batches || 0) + ' samples' + (s.validated ? ' · ✔' : ' · not validated'));
+      Object.keys(rng).forEach(function (k) { var r = rng[k]; out.push('  ' + k + ': ' + (r.txt ? Object.keys(r.txt).join(', ') : (r.lo === r.hi ? fmtV({ v: r.lo, unit: r.unit, dp: r.dp }) : fmtV({ v: r.lo, unit: '', dp: r.dp }) + '–' + fmtV({ v: r.hi, unit: r.unit, dp: r.dp })))); });
+      if (bad) out.push('  ⚠ ' + bad + ' result(s) out of limits'); if (miss) out.push('  ⏳ ' + miss + ' result(s) still missing');
+    });
+    return out.join('\n');
+  }
+  function labOut(days) {
+    var from = addD(DATA.today, -days), rows = [];
+    LAB.sam.filter(function (x) { return (x.date || '') >= from; }).forEach(function (x) { var p = LAB.prod[x.productId]; if (!p) return; (p.tests || []).forEach(function (t) { (sampleOuts(t, (x.results || {})[t.id]) || []).forEach(function (o) { if (o.bad) rows.push(nice(x.date) + ' · ' + p.name + ' ' + (x.code || '') + ' · ' + o.label + ' ' + fmtV(o) + (o.lim ? ' (limit ' + o.lim.trim() + ')' : '')); }); }); });
+    return rows.length ? 'Results out of limits, last ' + days + ' days (' + rows.length + '):\n' + rows.join('\n') : 'No results out of limits in the last ' + days + ' days. ✔';
+  }
+  function labGaps() {
+    var out = [], from = addD(DATA.today, -14);
+    LAB.ses.filter(function (s) { return s.date >= from; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (s) {
+      var p = LAB.prod[s.productId]; if (!p) return; var sm = LAB.sam.filter(function (x) { return x.sessionId === s.id; }), gaps = [];
+      if ((s.batches || 0) > sm.length && s.section !== 'Lab') gaps.push((s.batches - sm.length) + ' sample(s) not taken');
+      var missT = {}; sm.forEach(function (x) { (p.tests || []).forEach(function (t) { if (t.optional) return; var r = (x.results || {})[t.id], has = r && (r.value != null || (r.in && Object.keys(r.in).some(function (k) { return r.in[k] !== '' && r.in[k] != null; }))); if (has) return; if (t.kind === 'micro') { if (addD(s.date, t.incubDays || 0) >= DATA.today) return; missT[t.name + ' (overdue)'] = (missT[t.name + ' (overdue)'] || 0) + 1; } else missT[t.name] = (missT[t.name] || 0) + 1; }); });
+      Object.keys(missT).forEach(function (k) { gaps.push(k + ' ×' + missT[k]); });
+      if (!s.validated && s.date < DATA.today) gaps.push('not validated');
+      if (gaps.length) out.push('• ' + nice(s.date) + ' ' + p.name + ' ' + (s.section === 'Lab' ? '(lab)' : secName(s.section)) + ': ' + gaps.join(', '));
+    });
+    Object.keys(LAB.db).filter(function (d) { return d >= from && d < DATA.today; }).forEach(function (d) { Object.keys(LAB.db[d]).forEach(function (k) { var a = k.split('|'); if (!LAB.ses.some(function (s) { return s.date === d && s.productId === a[0] && s.section === a[1]; })) out.push('• ' + nice(d) + ' ' + ((LAB.prod[a[0]] || {}).name || a[0]) + ' ' + secName(a[1]) + ': ' + LAB.db[d][k] + ' batches sent, no session opened'); }); });
+    var last = function (pid) { var s = LAB.ses.filter(function (x) { return x.productId === pid; }).map(function (x) { return x.date; }).sort().pop(); return s ? nice(s) : 'never'; };
+    out.push('\nLast checks: water ' + last('WTR') + ' · hand swab ' + last('HSW') + ' · surface swab ' + last('SSW'));
+    return out.length > 1 ? 'Lab gaps, last 14 days:\n' + out.join('\n') : 'No gaps in the last 14 days. ✔' + out.join('');
+  }
+  function labWho(days) {
+    var from = addD(DATA.today, -days), c = {};
+    LAB.sam.filter(function (x) { return (x.date || '') >= from && x.testedBy; }).forEach(function (x) { var k = LAB.people[x.testedBy] || x.testedBy; c[k] = (c[k] || 0) + 1; });
+    var ks = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; });
+    return ks.length ? 'Samples tested, last ' + days + ' days:\n' + ks.map(function (k) { return '• ' + k + ': ' + c[k]; }).join('\n') : 'No samples tested in the last ' + days + ' days.';
+  }
+  /* ---------- research ---------- */
+  async function research() {
+    var ps = (await A.planner.list('res_projects').catch(function () { return []; })).map(function (x) { return x.data; }).filter(Boolean);
+    if (!ps.length) return 'No research projects yet. Open Research → + New project.';
+    var L = { idea: 'Idea', planned: 'Planned', running: 'Running', review: 'In review', done: 'Done', stopped: 'Stopped' };
+    return 'Research projects:\n' + ps.sort(function (a, b) { return (b.updatedAt || '') < (a.updatedAt || '') ? -1 : 1; }).slice(0, 10).map(function (p) { return '• ' + p.code + ' ' + p.title + ' — ' + (L[p.status] || p.status) + ' · ' + (p.owner || '') + (p.due ? ' · due ' + nice(p.due) + (p.due < DATA.today && ['done', 'stopped'].indexOf(p.status) < 0 ? ' ⚠ overdue' : '') : ''); }).join('\n');
+  }
+
+  /* ---------- the guided menu (free: everything is worked out here, nothing is sent outside) ---------- */
+  var onLab = /lab/.test(location.pathname);
+  function menu() {
+    var lab = labAllowed(), o = [];
+    if (onLab && lab) o.push(['🧪 Lab', 'lab']);
+    o.push(['🏭 Production', 'prod'], ['📦 Raw materials', 'mat'], ['🗓 Factory plan', 'plan']);
+    if (!onLab && lab) o.push(['🧪 Lab', 'lab']);
+    o.push(['🔬 Research', 'res'], ['❓ What can I ask?', 'help']);
+    return o;
+  }
+  var HOME = ['🏠 Menu', 'menu'];
+  var NODES = {
+    menu: function () { return { t: 'What do you want to know?', o: menu() }; },
+    help: function () { return { t: 'Tap a topic, or type a question like:\n• What did we produce yesterday?\n• Line 2 yesterday stoppages\n• When does salt run out?\n• What should I order?\n• Deliveries coming\n• Raw materials for tomorrow\n• Plan next week\n• GM recipe\n• Lot for tomorrow' + (labAllowed() ? '\n• Lab LS results\n• Lab gaps\n• Out of limits' : '') + '\n\nEverything is worked out from the website\'s own numbers, for free.', o: menu() }; },
+    prod: function () { return { t: 'Production: what do you want to see?', o: [['Yesterday, both lines', 'q:what did we produce yesterday'], ['Today\'s forecast', 'f:today'], ['This week', 'q:cartons this week'], ['Last week', 'q:produced last week'], ['This month', 'f:month'], ['Top stop reasons (30 days)', 'f:stops'], ['Forecast accuracy', 'f:acc'], ['Pick a day…', 'pday'], HOME] }; },
+    pday: function () { var o = []; for (var i = 1; o.length < 6 && i < 14; i++) { var d = addD(DATA.today, -i); if (wd(d) !== 5) o.push([nice(d), 'q:produced on ' + d.slice(8) + '/' + d.slice(5, 7)]); } o.push(HOME); return { t: 'Which day?', o: o }; },
+    mat: function () { return { t: 'Raw materials: what do you want to see?', o: [['What to order now', 'q:what should i order'], ['Run-out dates', 'f:runout'], ['Deliveries coming', 'q:deliveries coming'], ['One material…', 'mlist'], ['Raw materials for today', 'q:raw materials for today'], ['Raw materials for tomorrow', 'q:raw materials for tomorrow'], ['Recipes…', 'rlist'], HOME] }; },
+    mlist: function () { return { t: 'Which material?', o: DATA.fc.results.filter(function (r) { return r.active; }).map(function (r) { return [r.name, 'm:' + r.id]; }).concat([HOME]) }; },
+    rlist: function () { return { t: 'Which product?', o: Object.keys(PNAME).map(function (p) { return [PNAME[p], 'q:' + p.toLowerCase() + ' recipe']; }).concat([HOME]) }; },
+    plan: function () { return { t: 'Factory plan: which period?', o: [['Today', 'q:plan today'], ['Tomorrow', 'q:plan tomorrow'], ['This week', 'q:plan this week'], ['Next week', 'q:plan next week'], ['Line 1 next week', 'q:line 1 plan next week'], ['Line 2 next week', 'q:line 2 plan next week'], ['Lot number for today', 'q:lot today'], HOME] }; },
+    lab: function () { return labAllowed() ? { t: 'Lab: what do you want to see?', o: [['Today in the lab', 'l:today'], ['Yesterday in the lab', 'l:yday'], ['Records for a product…', 'lprod'], ['Gaps and missing results', 'l:gaps'], ['Out of limits (14 days)', 'l:out'], ['Who tested what (7 days)', 'l:who'], HOME] } : { t: 'The lab topics are for the doctor and the admins.', o: menu() }; },
+    lprod: function () { return { t: 'Which product?', o: (LAB.cfg.products || []).map(function (p) { return [p.name, 'lp:' + p.id]; }).concat([HOME]) }; },
+    res: function () { return { t: 'Research', o: [['Projects and status', 'r:list'], HOME] }; }
+  };
+  function follow(act) {
+    if (/^q:.*(produc|cartons|stop)/.test(act) || /^f:(today|month|stops|acc)/.test(act)) return [['Stop reasons', 'f:stops'], ['Forecast accuracy', 'f:acc'], ['This month', 'f:month'], ['🏭 Production', 'prod'], HOME];
+    if (/^(m:|q:what should|q:deliver|f:runout)/.test(act)) return [['What to order now', 'q:what should i order'], ['Run-out dates', 'f:runout'], ['One material…', 'mlist'], HOME];
+    if (/^q:.*(plan|lot)/.test(act)) return [['Raw materials for tomorrow', 'q:raw materials for tomorrow'], ['🗓 Factory plan', 'plan'], HOME];
+    if (/^q:.*(raw materials|recipe)/.test(act)) return [['📦 Raw materials', 'mat'], HOME];
+    if (/^(l:|lp:)/.test(act)) return [['Gaps', 'l:gaps'], ['Out of limits', 'l:out'], ['Another product…', 'lprod'], ['🧪 Lab', 'lab'], HOME];
+    return [HOME];
+  }
+  async function run(act) {
+    await context();
+    if (NODES[act]) { if (/^(lab|lprod)$/.test(act) && labAllowed()) await labLoad(); return NODES[act](); }
+    var k = act.slice(0, act.indexOf(':')), v = act.slice(act.indexOf(':') + 1), t;
+    if (k === 'q') t = localAnswer(v);
+    else if (k === 'm') { var r = DATA.fc.results.filter(function (x) { return x.id === v; })[0]; t = r ? localAnswer(r.name.toLowerCase()) : null; }
+    else if (k === 'f') t = v === 'today' ? todayForecast() : v === 'month' ? monthSummary() : v === 'stops' ? stopReasons(30) : v === 'acc' ? accuracy(21) : runOutList();
+    else if (k === 'l' || k === 'lp') { if (!labAllowed()) return NODES.lab(); await labLoad(); t = k === 'lp' ? labProduct(v) : v === 'today' ? labToday() : v === 'yday' ? labToday(prevWork(DATA.today)) : v === 'gaps' ? labGaps() : v === 'out' ? labOut(14) : labWho(7); }
+    else if (k === 'r') t = await research();
+    return { t: t || 'Nothing to show for that yet.', o: follow(act) };
+  }
+  function prevWork(d) { var x = addD(d, -1); if (wd(x) === 5) x = addD(x, -1); return x; }
+  async function typed(q0) {
+    await context();
+    var q = q0.toLowerCase().trim();
+    if (/^(hi|hello|hey|salam|مرحبا|السلام|هلا)\b/.test(q)) return NODES.menu();
+    if (/\blab\b|مختبر|sample|عينة|results? (for|of)|out of (spec|limit)|validat/.test(q)) {
+      if (!labAllowed()) return { t: 'The lab topics are for the doctor and the admins.', o: menu() };
+      await labLoad();
+      var pid = (LAB.cfg.products || []).filter(function (p) { return q.indexOf(p.id.toLowerCase()) >= 0 || q.indexOf(p.name.toLowerCase()) >= 0 || (p.id === 'GM' && /grenadine|دبس/.test(q)) || (p.id === 'LS' && /lemon/.test(q)) || (p.id === 'WTR' && /water\b/.test(q) && !/rose|blossom/.test(q)); })[0];
+      if (/gap|missing|pending|overdue|ناقص/.test(q)) return run('l:gaps');
+      if (/out of|limit|spec|fail|bad/.test(q)) return run('l:out');
+      if (/who|tested by/.test(q)) return run('l:who');
+      if (pid) return run('lp:' + pid.id);
+      if (/yesterday|امس/.test(q)) return run('l:yday');
+      return run('l:today');
+    }
+    if (/research|trial|experiment|بحث/.test(q)) return run('r:list');
+    if (/forecast/.test(q) && /today|اليوم/.test(q)) return run('f:today');
+    if (/stop reason|top stop|why.*stop|most stop/.test(q)) return run('f:stops');
+    if (/accura|how good|forecast vs/.test(q)) return run('f:acc');
+    if (/month|شهر/.test(q) && /produc|carton|كرتون/.test(q)) return run('f:month');
+    if (/run.?out|ينفذ|يخلص/.test(q) && !findMats(q).length) return run('f:runout');
+    var a = localAnswer(q0);
+    if (a) return { t: a, o: follow('q:' + q) };
+    /* not matched: never a dead end, show the closest topics */
+    var guess = /produc|carton|line|stop|كرتون|انتاج/.test(q) ? 'prod' : /order|stock|material|مواد|طلب/.test(q) ? 'mat' : /plan|خطة/.test(q) ? 'plan' : 'menu';
+    var nd = NODES[guess]();
+    return { t: 'I don\'t have an exact answer for that, but here is what I can show you. Tap one:', o: nd.o };
+  }
+
   /* ---------- the chat window ---------- */
   var css = '.asst-btn{position:fixed;left:18px;bottom:18px;z-index:60;border:0;border-radius:999px;padding:12px 18px;font:600 15px var(--f-body);color:#fff;background:linear-gradient(135deg,#0f4c3a,#2a7a5b);box-shadow:0 10px 24px rgba(8,42,32,.35);cursor:pointer}' +
-    '.asst{position:fixed;left:18px;bottom:76px;z-index:61;width:min(420px,calc(100vw - 36px));height:min(560px,calc(100vh - 110px));background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}' +
-    '.asst header{padding:12px 14px;background:linear-gradient(135deg,#0f4c3a,#2a7a5b);color:#fff;display:flex;justify-content:space-between;align-items:center}.asst header b{font:600 15px var(--f-display)}.asst header button{background:none;border:0;color:#fff;font-size:20px;cursor:pointer}' +
-    '.asst .log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}.asst .m{max-width:88%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap}.asst .u{align-self:flex-end;background:var(--brand);color:var(--brand-ink)}.asst .a{align-self:flex-start;background:var(--surface-2)}.asst .e{align-self:flex-start;background:var(--red-soft);color:var(--red)}' +
-    '.asst .sug{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px}.asst .sug button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 10px;font-size:12.5px;cursor:pointer;color:var(--ink)}' +
+    '.asst{position:fixed;left:18px;bottom:76px;z-index:61;width:min(440px,calc(100vw - 36px));height:min(600px,calc(100vh - 110px));background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}' +
+    '.asst header{padding:12px 14px;background:linear-gradient(135deg,#0f4c3a,#2a7a5b);color:#fff;display:flex;justify-content:space-between;align-items:center}.asst header b{font:600 15px var(--f-display)}.asst header button{background:none;border:0;color:#fff;font-size:20px;cursor:pointer;margin-left:6px}' +
+    '.asst .log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}.asst .m{max-width:90%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap}.asst .u{align-self:flex-end;background:var(--brand);color:var(--brand-ink)}.asst .a{align-self:flex-start;background:var(--surface-2)}.asst .e{align-self:flex-start;background:var(--red-soft);color:var(--red)}' +
+    '.asst .opts{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start;max-width:96%}.asst .opts button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px;cursor:pointer;color:var(--ink)}.asst .opts button:hover{border-color:var(--brand);color:var(--brand)}.asst .opts.old button{opacity:.55}' +
     '.asst form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}.asst input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:15px var(--f-body)}.asst form button{border:0;border-radius:12px;padding:0 16px;background:var(--brand);color:var(--brand-ink);font-weight:600;cursor:pointer}' +
     '@media print{.asst,.asst-btn{display:none!important}}';
-  var SUG = ['What did we produce yesterday?', 'What should I order now?', 'When does salt run out?', 'How much sugar do we have now?', 'What runs on Line 2 next week?', 'Raw materials for tomorrow?'];
+  var LOG = [];
   function mount() {
     if (document.querySelector('.asst-btn')) return;
+    if (onLab && !labAllowed()) return; /* the lab account does not get the assistant */
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
-    var b = document.createElement('button'); b.className = 'asst-btn'; b.type = 'button'; b.innerHTML = '✦ Ask ATIC'; b.title = 'Ask about stock, forecast, plan, recipes'; document.body.appendChild(b);
+    var b = document.createElement('button'); b.className = 'asst-btn'; b.type = 'button'; b.innerHTML = '✦ Ask ATIC'; b.title = 'Ask about production, stock, the plan' + (labAllowed() ? ', the lab' : ''); document.body.appendChild(b);
     var w = null;
     b.onclick = function () {
       if (w) { w.remove(); w = null; return; }
       w = document.createElement('div'); w.className = 'asst'; w.setAttribute('role', 'dialog'); w.setAttribute('aria-label', 'Ask ATIC');
-      w.innerHTML = '<header><b>✦ Ask ATIC</b><button type="button" aria-label="Close">×</button></header><div class="log" id="asLog"></div>' +
-        (H.length ? '' : '<div class="sug">' + SUG.map(function (q) { return '<button type="button">' + esc(q) + '</button>'; }).join('') + '</div>') +
-        '<form><input id="asIn" placeholder="Ask about stock, forecast, plan…" autocomplete="off"><button>Send</button></form>';
+      w.innerHTML = '<header><b>✦ Ask ATIC</b><span><button type="button" data-h title="Menu" aria-label="Menu">⌂</button><button type="button" data-x aria-label="Close">×</button></span></header><div class="log" id="asLog"></div><form><input id="asIn" placeholder="Type a question or tap a button…" autocomplete="off"><button>Send</button></form>';
       document.body.appendChild(w);
       var log = w.querySelector('#asLog');
-      if (!H.length) log.innerHTML = '<div class="m a">Hi ' + esc(((A.profile || {}).full_name || '').split(' ')[0]) + '! Ask me anything about the stock, run-out dates, orders, the factory plan, recipes or the batches made. I answer from today\'s numbers.</div>';
-      H.forEach(function (m) { log.insertAdjacentHTML('beforeend', '<div class="m ' + (m.role === 'user' ? 'u' : 'a') + '">' + esc(m.content) + '</div>'); });
-      log.scrollTop = 1e9;
-      w.querySelector('header button').onclick = function () { w.remove(); w = null; };
-      w.querySelectorAll('.sug button').forEach(function (s) { s.onclick = function () { ask(s.textContent); }; });
-      var f = w.querySelector('form'), inp = w.querySelector('#asIn'); inp.focus();
-      f.onsubmit = function (e) { e.preventDefault(); var q = inp.value.trim(); if (q) { inp.value = ''; ask(q); } };
-      async function ask(q) {
-        if (busy) return; busy = true; var sg = w.querySelector('.sug'); if (sg) sg.remove();
-        log.insertAdjacentHTML('beforeend', '<div class="m u">' + esc(q) + '</div><div class="m a" id="asWait">…</div>'); log.scrollTop = 1e9;
-        try {
-          var ctx = await context(), loc = localAnswer(q);
-          if (loc && !(window.ATIC_CONFIG && window.ATIC_CONFIG.aiFirst)) { var w0 = w.querySelector('#asWait'); if (w0) w0.remove(); H.push({ role: 'user', content: q }, { role: 'assistant', content: loc }); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(loc) + '</div>'); busy = false; log.scrollTop = 1e9; return; }
-          var r = await A.sb.functions.invoke('ask', { body: { question: q, context: ctx, history: H.slice(-6) } });
-          if (r.error || (r.data && r.data.error)) { var wx = w.querySelector('#asWait'); if (wx) wx.remove(); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(loc || 'I can answer questions about: a material (stock now, use per day, run-out, deliveries, order by), what to order, deliveries coming, the plan for a day or a line, raw materials for a day, recipes and lot numbers. Try: "What did we produce yesterday?", "Stoppages on Line 2 yesterday", "Cartons this week", "When does salt run out?", "What should I order?", "Line 2 tomorrow", "Raw materials for tomorrow", "GM recipe".') + '</div>'); busy = false; log.scrollTop = 1e9; return; }
-          var wt = w.querySelector('#asWait'); if (wt) wt.remove();
-          var err = r.error ? ((r.error.context && r.error.context.status === 404) || /Failed to send/i.test(r.error.message || '') ? 'The assistant is not switched on yet (the "ask" function is not set up in Supabase).' : (r.data && r.data.error) || r.error.message) : (r.data && r.data.error);
-          if (err) { log.insertAdjacentHTML('beforeend', '<div class="m e">' + esc(err) + '</div>'); }
-          else { var ans = (r.data && r.data.answer) || '(no answer)'; H.push({ role: 'user', content: q }, { role: 'assistant', content: ans }); log.insertAdjacentHTML('beforeend', '<div class="m a">' + esc(ans) + '</div>'); }
-        } catch (e) { var wt2 = w.querySelector('#asWait'); if (wt2) wt2.remove(); log.insertAdjacentHTML('beforeend', '<div class="m e">' + esc(e.message || String(e)) + '</div>'); }
-        busy = false; log.scrollTop = 1e9;
+      function draw() { log.innerHTML = LOG.map(function (m, i) { return m.o ? '<div class="opts' + (i < LOG.length - 1 ? ' old' : '') + '">' + m.o.map(function (o) { return '<button type="button" data-act="' + esc(o[1]) + '">' + esc(o[0]) + '</button>'; }).join('') + '</div>' : '<div class="m ' + m.c + '">' + esc(m.t) + '</div>'; }).join(''); log.scrollTop = 1e9; log.querySelectorAll('[data-act]').forEach(function (x) { x.onclick = function () { go(x.textContent, function () { return run(x.dataset.act); }); }; }); }
+      async function go(label, fn) {
+        if (busy) return; busy = true; LOG.push({ c: 'u', t: label }, { c: 'a', t: '…' }); draw();
+        try { var r = await fn(); LOG.pop(); LOG.push({ c: 'a', t: r.t }); if (r.o && r.o.length) LOG.push({ o: r.o }); }
+        catch (e) { LOG.pop(); LOG.push({ c: 'e', t: 'Something went wrong: ' + (e.message || e) }, { o: [HOME] }); }
+        busy = false; draw();
       }
+      if (!LOG.length) { var first = (((A.profile || {}).full_name || '').split(' ')[0]) || ''; LOG.push({ c: 'a', t: 'Hi ' + first + '! 👋 What do you want to know today?' }, { o: menu() }); }
+      draw();
+      w.querySelector('[data-x]').onclick = function () { w.remove(); w = null; };
+      w.querySelector('[data-h]').onclick = function () { go('🏠 Menu', function () { return run('menu'); }); };
+      var f = w.querySelector('form'), inp = w.querySelector('#asIn'); inp.focus();
+      f.onsubmit = function (e) { e.preventDefault(); var q = inp.value.trim(); if (q) { inp.value = ''; go(q, function () { return typed(q); }); } };
     };
   }
   (function wait() { if (A.profile) mount(); else setTimeout(wait, 400); })();
