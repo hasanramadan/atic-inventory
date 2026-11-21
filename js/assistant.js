@@ -233,7 +233,7 @@
     var out = [p.name + ': last ' + ss.length + ' sessions'];
     ss.forEach(function (s) {
       var sm = LAB.sam.filter(function (x) { return x.sessionId === s.id; }), rng = {}, bad = 0, miss = 0;
-      sm.forEach(function (x) { (p.tests || []).forEach(function (t) { var o = sampleOuts(t, (x.results || {})[t.id]); if (!o) { if (t.kind !== 'micro' && !t.optional) miss++; return; } o.forEach(function (q) { if (q.bad) bad++; if (q.txt) { (rng[q.label] = rng[q.label] || { txt: {} }).txt[q.v] = 1; return; } var r = rng[q.label] = rng[q.label] || { lo: q.v, hi: q.v, unit: q.unit, dp: q.dp }; r.lo = Math.min(r.lo, q.v); r.hi = Math.max(r.hi, q.v); }); }); });
+      sm.forEach(function (x) { (p.tests || []).forEach(function (t) { var o = sampleOuts(t, (x.results || {})[t.id]); if (!o) { if (t.kind !== 'micro' && !t.optional && !x.pairOf) miss++; return; } o.forEach(function (q) { if (q.bad) bad++; if (q.txt) { (rng[q.label] = rng[q.label] || { txt: {} }).txt[q.v] = 1; return; } var r = rng[q.label] = rng[q.label] || { lo: q.v, hi: q.v, unit: q.unit, dp: q.dp }; r.lo = Math.min(r.lo, q.v); r.hi = Math.max(r.hi, q.v); }); }); });
       out.push('\n' + nice(s.date) + ' · ' + (s.section === 'Lab' ? 'lab' : secName(s.section)) + (s.lot ? ' · lot ' + s.lot : '') + ' · ' + sm.length + '/' + (s.batches || 0) + ' samples' + (s.validated ? ' · ✔' : ' · not validated'));
       Object.keys(rng).forEach(function (k) { var r = rng[k]; out.push('  ' + k + ': ' + (r.txt ? Object.keys(r.txt).join(', ') : (r.lo === r.hi ? fmtV({ v: r.lo, unit: r.unit, dp: r.dp }) : fmtV({ v: r.lo, unit: '', dp: r.dp }) + '–' + fmtV({ v: r.hi, unit: r.unit, dp: r.dp })))); });
       if (bad) out.push('  ⚠ ' + bad + ' result(s) out of limits'); if (miss) out.push('  ⏳ ' + miss + ' result(s) still missing');
@@ -250,7 +250,7 @@
     LAB.ses.filter(function (s) { return s.date >= from; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (s) {
       var p = LAB.prod[s.productId]; if (!p) return; var sm = LAB.sam.filter(function (x) { return x.sessionId === s.id; }), gaps = [];
       if ((s.batches || 0) > sm.length && s.section !== 'Lab') gaps.push((s.batches - sm.length) + ' sample(s) not taken');
-      var missT = {}; sm.forEach(function (x) { (p.tests || []).forEach(function (t) { if (t.optional) return; var r = (x.results || {})[t.id], has = r && (r.value != null || (r.in && Object.keys(r.in).some(function (k) { return r.in[k] !== '' && r.in[k] != null; }))); if (has) return; if (t.kind === 'micro') { if (addD(s.date, t.incubDays || 0) >= DATA.today) return; missT[t.name + ' (overdue)'] = (missT[t.name + ' (overdue)'] || 0) + 1; } else missT[t.name] = (missT[t.name] || 0) + 1; }); });
+      var missT = {}; sm.forEach(function (x) { (p.tests || []).forEach(function (t) { if (t.optional || x.pairOf) return; var r = (x.results || {})[t.id], has = r && (r.value != null || (r.in && Object.keys(r.in).some(function (k) { return r.in[k] !== '' && r.in[k] != null; }))); if (has) return; if (t.kind === 'micro') { if (addD(s.date, t.incubDays || 0) >= DATA.today) return; missT[t.name + ' (overdue)'] = (missT[t.name + ' (overdue)'] || 0) + 1; } else missT[t.name] = (missT[t.name] || 0) + 1; }); });
       Object.keys(missT).forEach(function (k) { gaps.push(k + ' ×' + missT[k]); });
       if (!s.validated && s.date < DATA.today) gaps.push('not validated');
       if (gaps.length) out.push('• ' + nice(s.date) + ' ' + p.name + ' ' + (s.section === 'Lab' ? '(lab)' : secName(s.section)) + ': ' + gaps.join(', '));
