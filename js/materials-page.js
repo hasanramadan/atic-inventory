@@ -1496,7 +1496,7 @@ function seedManualPace() {
 function usedLines(model, d, matId) {
   var x = dcDay(d), out = [];
   Object.keys(x.batches || {}).forEach(function (k) {
-    var q = k.split('|'), b = Number(x.batches[k]) || 0, per = Number((((model.recipes[q[0]] || {})[q[1]]) || {})[matId]) || 0;
+    var q = k.split('|'), b = Number(x.batches[k]) || 0, vn = ((model.plan && model.plan.recipeOf && model.plan.recipeOf[d]) || {})[k], vr = vn && model.variants && model.variants[q[0]] && model.variants[q[0]][vn], per = Number(((vr ? vr[q[1]] : (model.recipes[q[0]] || {})[q[1]]) || {})[matId]) || 0;
     if (b && per) out.push({ p: q[0], s: q[1] === 'SEC-1' ? 'S1' : 'S2', b: b, q: b * per });
   });
   var a = Number((x.adj || {})[matId]) || 0; if (a) out.push({ hand: true, q: a });
@@ -1519,7 +1519,7 @@ function usedLines(model, d, matId) {
   card = function (r) {
     var h = _cardR(r); if (!r || !r.replacedBy) return h;
     var note = '<div class="small" style="margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:var(--idle-soft);color:var(--ink)"><b>Finished · ' + esc(r.replacedByName || r.replacedBy) + ' used instead.</b> Nothing to order for this one.</div>';
-    h = h.replace(/Runs out [0-9]{1,2} [A-Z][a-z]{2}/g, 'Finished').replace(/Order now|Not in use \(set by you\)/g, 'Replaced by ' + esc(r.replacedByName || r.replacedBy));
+    h = h.replace(/(<dt[^>]*>Runs out<\/dt><dd[^>]*>)[\s\S]*?(<\/dd>)/, '$1Finished$2').replace(/Runs out [0-9]{1,2} [A-Z][a-z]{2}/g, 'Finished').replace(/Order now|Not in use \(set by you\)/g, 'Replaced by ' + esc(r.replacedByName || r.replacedBy));
     return h.replace(/(<\/h3>|<\/h2>)/, '$1' + note);
   };
 })();
