@@ -4,7 +4,7 @@
 <title>ATIC Forecast Results</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611221123">
+<link rel="stylesheet" href="css/app.css?v=202611221126">
 <style>
 .sec2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .fc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
@@ -27,14 +27,14 @@
 <main id="main"><div class="boot"><div><i></i>Loading Forecast Results…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611221123"></script>
-<script src="js/shell.js?v=202611221123"></script>
-<script src="js/backup.js?v=202611221123" defer></script>
-<script src="js/assistant.js?v=202611221123" defer></script>
-<script src="js/io.js?v=202611221123"></script>
-<script src="js/line-engine.js?v=202611221123"></script>
-<script src="js/materials-engine.js?v=202611221123"></script>
-<script src="js/supply-engine.js?v=202611221123"></script>
+<script src="config.js?v=202611221126"></script>
+<script src="js/shell.js?v=202611221126"></script>
+<script src="js/backup.js?v=202611221126" defer></script>
+<script src="js/assistant.js?v=202611221126" defer></script>
+<script src="js/io.js?v=202611221126"></script>
+<script src="js/line-engine.js?v=202611221126"></script>
+<script src="js/materials-engine.js?v=202611221126"></script>
+<script src="js/supply-engine.js?v=202611221126"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, SP = window.ATICSupply, ME = window.ATICEngine;
@@ -116,7 +116,7 @@ function supplyCard(s) {
     D.lpDays = {}; D.lpSecs = {}; D.actuals.forEach(function (a) { var s = a.sec === 'S1' ? 'SEC-1' : 'SEC-2'; (D.lpSecs[a.date] = D.lpSecs[a.date] || {})[s] = 1; (a.runs || []).forEach(function (x) { if (x.batches > 0) { D.lpDays[a.date] = D.lpDays[a.date] || {}; var k = x.product + '|' + s; D.lpDays[a.date][k] = (D.lpDays[a.date][k] || 0) + x.batches; } }); });
   } catch (e) { $('#main').innerHTML = '<div class="panel noacc"><h2>Could not load</h2><p class="muted">' + esc(e.message || e) + '</p></div>'; return; }
   render();
-  A.planner.subscribe(function () { setTimeout(function () { location.reload(); }, 400); });
+  A.planner.subscribe(function (p) { var c = p && ((p.new && p.new.coll) || (p.old && p.old.coll)); if (c && !/^(plans|actuals|config)$/.test(c)) return; clearTimeout(window.__rl); window.__rl = setTimeout(function () { location.reload(); }, 800); });
 })();
 })();
 </script>

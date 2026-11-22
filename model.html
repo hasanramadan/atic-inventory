@@ -4,7 +4,7 @@
 <title>ATIC BETA 2.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202611221123">
+<link rel="stylesheet" href="css/app.css?v=202611221126">
 <style>
 .hero{background:#0c1512;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(6,30,22,.28);color:#e7efeb;display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:560px;position:relative}
 .hero .stage{position:relative;min-height:560px;cursor:grab;touch-action:none}
@@ -56,12 +56,12 @@ tr.cur td{background:var(--gold-soft)}
 <main id="main"><div class="boot"><div><i></i>Loading ATIC BETA 2.0…</div></div></main></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=202611221123"></script>
-<script src="js/shell.js?v=202611221123"></script>
-<script src="js/backup.js?v=202611221123" defer></script>
-<script src="js/assistant.js?v=202611221123" defer></script>
-<script src="js/io.js?v=202611221123"></script>
-<script src="js/line-engine.js?v=202611221123"></script>
+<script src="config.js?v=202611221126"></script>
+<script src="js/shell.js?v=202611221126"></script>
+<script src="js/backup.js?v=202611221126" defer></script>
+<script src="js/assistant.js?v=202611221126" defer></script>
+<script src="js/io.js?v=202611221126"></script>
+<script src="js/line-engine.js?v=202611221126"></script>
 <script>
 (function () {
 var A, E = window.ATIC_LINE_ENGINE, P0, BT, ACT = [], PLANS = [], STEPS = [], CMP = null;
@@ -288,7 +288,7 @@ async function loadAll() {
   ST.step = STEPS.length - 1;
   render();
   // live: a new actual animates in
-  A.planner.subscribe(async function () { var n = STEPS.length; await loadAll(); if (STEPS.length !== n || true) { if (ST.step >= n - 1) ST.step = STEPS.length - 1; syncTimeline(); } });
+  A.planner.subscribe(async function (p) { var c = p && ((p.new && p.new.coll) || (p.old && p.old.coll)); if (c && !/^(plans|actuals|config)$/.test(c)) return; var n = STEPS.length; await loadAll(); if (STEPS.length !== n || true) { if (ST.step >= n - 1) ST.step = STEPS.length - 1; syncTimeline(); } });
 })();
 })();
 </script>
