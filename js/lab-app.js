@@ -177,8 +177,8 @@ function restoreLogin(){
   else S.error='You are not in the lab team yet. Ask the lab admin to add you in Lab → People (link your website account '+(me.full_name||me.username||'')+').';
 }
 function patchWatch(){if(S.view!=='overview')return;const box=$('#watchBox');if(!box)return;const t=document.createElement('div');t.innerHTML=overviewView();const n=t.querySelector('#watchBox');if(n){box.innerHTML=n.innerHTML;bindCommon()}}
-function changed(){ if(!S.ready)return; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.dirty=true;patchWatch();return} if($('.modal-bg')){S.dirty=true;return} render()}
-document.addEventListener('focusout',()=>setTimeout(()=>{if(S.dirty&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))&&!$('.modal-bg')){S.dirty=false;render()}},50));
+function changed(){ if(!S.ready)return; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.dirty=true;patchWatch();return} if($('.modal-bg')){S.dirty=true;return} S._soft=true;render()}
+document.addEventListener('focusout',()=>setTimeout(()=>{if(S.dirty&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))&&!$('.modal-bg')){S.dirty=false;S._soft=true;render()}},50));
 setInterval(()=>{if(S.ready&&S.view==='overview'&&!S.dirty)changed()},15000);
 
 /* ---------- derived ---------- */
@@ -231,10 +231,16 @@ function render(){
   if(isAdmin())tabs.push(['people','People','']);
   if(S.view==='session'&&!S.sessions[S.sessionId])S.view='today';
   const cur=S.view==='session'?(S.back||'today'):S.view;
-  root.innerHTML='<div class="app"><nav class="rail" aria-label="Sections"><div class="brand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div>ATIC Lab<small>Quality control · '+niceDate(today())+'</small></div>'+
+  const __html='<div class="app"><nav class="rail" aria-label="Sections"><div class="brand"><div class="flask3d" aria-hidden="true"><i></i><b></b><b></b><b></b></div>ATIC Lab<small>Quality control · '+niceDate(today())+'</small></div>'+
     ((isDoctor()||isAdmin())?'<form id="railFind" style="margin:0 0 8px"><input id="railFindQ" type="search" placeholder="🔎 Find lot, sample, test…" aria-label="Find anything in the lab" value="'+esc(S.view==='find'?(S.fq||''):'')+'" style="width:100%;box-sizing:border-box;padding:9px 10px;border-radius:10px;border:1px solid rgba(15,110,140,.25)"></form>':'')+
     tabs.map(t=>'<button class="tab'+(cur===t[0]?' on':'')+'" data-tab="'+t[0]+'"><span>'+t[1]+'</span>'+(t[2]?'<span class="badge">'+t[2]+'</span>':'')+'</button>').join('')+
     '<div class="me"><div><div class="label">Signed in</div><b>'+esc(S.me.name)+'</b> <span class="muted small">'+esc(roleName(S.me.role))+'</span></div></div></nav><main id="main">'+viewHTML()+'</main></div>';
+  /* live updates: skip if nothing on screen changed; otherwise keep scroll, open sections and expanded rows */
+  const soft=S._soft;S._soft=false;
+  if(soft&&__html===S._lastHTML&&root.querySelector('.app'))return;
+  let keep=null;if(soft&&root.querySelector('.app')){keep={y:window.scrollY,sc:[],det:[]};root.querySelectorAll('*').forEach((el,i)=>{if(el.scrollTop||el.scrollLeft)keep.sc.push([el.tagName+'.'+el.className,el.scrollTop,el.scrollLeft])});root.querySelectorAll('details').forEach((d,i)=>keep.det.push(d.open))}
+  S._lastHTML=__html;root.innerHTML=__html;
+  if(keep){const seen={};keep.sc.forEach(k=>{const els=[...root.querySelectorAll(k[0].split('.')[0])].filter(el=>(el.tagName+'.'+el.className)===k[0]);const n=seen[k[0]]=(seen[k[0]]||0);const el=els[n];seen[k[0]]++;if(el){el.scrollTop=k[1];el.scrollLeft=k[2]}});root.querySelectorAll('details').forEach((d,i)=>{if(keep.det[i]!=null)d.open=keep.det[i]});window.scrollTo(0,keep.y)}
   root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{S.view=b.dataset.tab;render()});
   const rf=$('#railFind');rf&&(rf.onsubmit=e=>{e.preventDefault();S.fq=$('#railFindQ').value.trim();S.view='find';render();const n=$('#fq');n&&n.focus()});
   bindView();presence();
