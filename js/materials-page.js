@@ -1138,11 +1138,12 @@ S.dc = { month: null };
 function dcDoc() { return (S.saved.daily && S.saved.daily.days) || {}; }
 function dcDay(date) { // effective batches + adjustments for one day
   var o = dcDoc()[date], lp = LP.days[date] || {};
-  return { batches: o && o.batches ? o.batches : lp, adj: (o && o.adj) || {}, edited: !!o, note: o ? o.note : '', by: o ? o.by : '', at: o ? o.at : '', fromLP: !!LP.days[date] || !!LP.secs[date] };
+  return { date: date, batches: o && o.batches ? o.batches : lp, adj: (o && o.adj) || {}, edited: !!o, note: o ? o.note : '', by: o ? o.by : '', at: o ? o.at : '', fromLP: !!LP.days[date] || !!LP.secs[date] };
 }
 function dcUse(model, d, by) { // { matId: qty in app units }; by (optional) gets { matId: { GM: qty, LS: qty, hand: qty } }
   var out = {};
-  Object.keys(d.batches || {}).forEach(function (k) { var p = k.split('|'), r = (model.recipes[p[0]] || {})[p[1]] || {}, b = Number(d.batches[k]) || 0; Object.keys(r).forEach(function (m) { var q = (Number(r[m]) || 0) * b; if (q) { out[m] = (out[m] || 0) + q; if (by) { by[m] = by[m] || {}; by[m][p[0]] = (by[m][p[0]] || 0) + q; } } }); });
+  var ro = (d.date && model.plan && model.plan.recipeOf && model.plan.recipeOf[d.date]) || {};
+  Object.keys(d.batches || {}).forEach(function (k) { var p = k.split('|'), vn = ro[k], vr = vn && model.variants && model.variants[p[0]] && model.variants[p[0]][vn], r = (vr ? vr[p[1]] : (model.recipes[p[0]] || {})[p[1]]) || {}, b = Number(d.batches[k]) || 0; Object.keys(r).forEach(function (m) { var q = (Number(r[m]) || 0) * b; if (q) { out[m] = (out[m] || 0) + q; if (by) { by[m] = by[m] || {}; by[m][p[0]] = (by[m][p[0]] || 0) + q; } } }); });
   Object.keys(d.adj || {}).forEach(function (m) { var a = Number(d.adj[m]) || 0; out[m] = (out[m] || 0) + a; if (by && a) { by[m] = by[m] || {}; by[m].hand = (by[m].hand || 0) + a; } });
   return out;
 }
@@ -1509,5 +1510,16 @@ function usedLines(model, d, matId) {
     var sp = '<span class="bysplit">' + ls.map(function (l) { return '<span>' + (l.hand ? 'by hand ' + (l.q > 0 ? '+' : '') + fmtN(l.q) : esc(l.p) + ' ' + l.s + ' · ' + fmtN(l.b) + ' batches → ' + fmtN(l.q)) + '</span>'; }).join('') + '</span>';
     // replace whatever split was there with the full lines
     return h.replace(/(<dt[^>]*>Used on [^<]*<\/dt><dd>[^<]*)(?:<span class="bysplit">[\s\S]*?<\/span><\/span>)?(<\/dd>)/, '$1' + sp + '$2');
+  };
+})();
+
+/* a finished material replaced by its substitute (Irani → UAE, citric anhydrous → monohydrate): say so on the card */
+(function () {
+  var _cardR = card;
+  card = function (r) {
+    var h = _cardR(r); if (!r || !r.replacedBy) return h;
+    var note = '<div class="small" style="margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:var(--idle-soft);color:var(--ink)"><b>Finished · ' + esc(r.replacedByName || r.replacedBy) + ' used instead.</b> Nothing to order for this one.</div>';
+    h = h.replace(/Runs out [0-9]{1,2} [A-Z][a-z]{2}/g, 'Finished').replace(/Order now|Not in use \(set by you\)/g, 'Replaced by ' + esc(r.replacedByName || r.replacedBy));
+    return h.replace(/(<\/h3>|<\/h2>)/, '$1' + note);
   };
 })();

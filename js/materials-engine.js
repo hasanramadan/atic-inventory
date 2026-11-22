@@ -298,6 +298,15 @@
       if (total) { (m.substituted = m.substituted || {})[a] = { to: b, qty: total, asQty: total * f, factor: f }; SUBW[b] = (SUBW[b] || 0) + (Number(ra.weekly) || 0) * f; }
     });
     if (moved) results = runAll();
+    /* a material that is finished and fully replaced by its substitute is not "order now": show it as replaced */
+    Object.keys(SUBS).forEach(function (a) {
+      var sb = typeof SUBS[a] === 'string' ? { to: SUBS[a], f: 1 } : SUBS[a], ra = results.filter(function (x) { return x.id === a; })[0], rb = results.filter(function (x) { return x.id === sb.to; })[0];
+      if (!ra || !rb || (Number(ra.stockNow) || 0) > 0.5) return;
+      var coming = (m.orders || []).some(function (o) { return o.material === a && o.status !== 'closed' && o.status !== 'received'; });
+      if (coming) return;
+      ra.replacedBy = sb.to; ra.replacedByName = rb.name; ra.status = 'idle'; ra.runOut = null; ra.daysToOrder = null; ra.orderBy = null; ra.suggestedQty = 0;
+      ra.why = ['Finished: ' + rb.name + ' is used instead in the recipes (' + fmt(sb.f || 1) + ' for each 1), so nothing needs ordering for ' + ra.name + '.'];
+    });
     var dayBatches = {};
     for (var q = 0; q < HORIZON; q++) { var dq = addDays(start, q), bt = {}; items(dq).forEach(function (it) { bt[it.product] = (bt[it.product] || 0) + it.batches; }); dayBatches[dq] = bt; }
     var paceBt = function (d) { var o = {}; paceItems(m, d, avg, sc).forEach(function (it) { o[it.product] = (o[it.product] || 0) + it.batches; }); return o; };
