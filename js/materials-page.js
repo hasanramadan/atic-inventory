@@ -1519,7 +1519,7 @@ function usedLines(model, d, matId) {
   card = function (r) {
     var h = _cardR(r); if (!r || !r.replacedBy) return h;
     var note = '<div class="small" style="margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:var(--idle-soft);color:var(--ink)"><b>Finished · ' + esc(r.replacedByName || r.replacedBy) + ' used instead.</b> Nothing to order for this one.</div>';
-    h = h.replace(/(<dt[^>]*>Runs out<\/dt><dd[^>]*>)[\s\S]*?(<\/dd>)/, '$1Finished$2').replace(/Runs out [0-9]{1,2} [A-Z][a-z]{2}/g, 'Finished').replace(/Order now|Not in use \(set by you\)/g, 'Replaced by ' + esc(r.replacedByName || r.replacedBy));
+    h = h.replace(/(<dt[^>]*>Runs out<\/dt><dd[^>]*>)[\s\S]*?(<\/dd>)/, '$1Finished$2').replace(/Runs out [0-9]{1,2} [A-Z][a-z]{2}/g, 'Finished').replace(/Order now|Not in use \(set by you\)|Enough stock/g, 'Replaced by ' + esc(r.replacedByName || r.replacedBy));
     return h.replace(/(<\/h3>|<\/h2>)/, '$1' + note);
   };
 })();

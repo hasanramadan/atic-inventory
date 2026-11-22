@@ -113,6 +113,7 @@ function runOutBoth(r) {
   return { actual: act, expected: r.runOut, orders: due };
 }
 function runOutParts(r) {
+  if (r && r.replacedBy) return { date: 'Finished · ' + (r.replacedByName || r.replacedBy) + ' used instead', extra: '' };
   var b = runOutBoth(r), unit = r.unit || '', many = b.orders.length > 1;
   var a = b.actual ? U.nice(b.actual) : 'not in 26 weeks', e = b.expected ? U.nice(b.expected) : 'not in 26 weeks';
   var extra = [];
