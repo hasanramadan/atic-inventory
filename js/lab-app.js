@@ -78,7 +78,6 @@ function product(id){return (S.cfg&&S.cfg.products||[]).find(p=>p.id===id)}
 function role(){return S.me&&S.me.role}
 const isDoctor=()=>role()==='doctor'||role()==='admin';
 const isAdmin=()=>role()==='admin';
-const isOwner=()=>!!(window.LAB_ME||{}).is_owner; /* only the website's creator can undo a validation */
 const isStation=()=>role()==='station';
 const canValidateHere=()=>isDoctor()||isStation()||(S.me&&S.me.canValidate);
 const canBuild=()=>isStation()||isDoctor();
@@ -531,16 +530,16 @@ function signoffHTML(ss,smp){
   const can=canValidateHere();const cs=chemState(ss);const mg=microGroups(ss);
   let h='<div class="signoff"><div class="sgrp"><h3>Chemical</h3><div class="small muted">'+cs.done+' of '+cs.need+' results entered</div>';
   const repBtns='<div class="row"><button data-rep="chem" data-fmt="pdf">Report · PDF</button><button data-rep="chem" data-fmt="doc">Report · Word</button></div>';
-  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+(isOwner()?'<button class="ghost" id="unvalidate" title="Only you (the website creator) see this">Unvalidate</button>':'')+'</div>'+repBtns;
+  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+(isDoctor()?'<button class="ghost" id="unvalidate">Reopen</button>':'')+'</div>'+repBtns;
   else{if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';if(cs.done)h+=repBtns+'<span class="small muted">Report of the results so far. It says "Not validated yet" until it is validated.</span>'}
   h+='</div>';
   if(mg.length){h+='<div class="sgrp"><h3>Microbiology</h3>';
     mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>'+esc(g.name)+'</b><div class="small muted">Read on '+[...g.days].sort().map(niceDate).join(', ')+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
-      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isOwner()?'<button class="ghost" data-unmv="'+g.day+'">Unvalidate</button>':''):((g.done?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
+      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):((g.done?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
     h+='</div>'}
   {const ready=allValidated(ss);const fb='<div class="row"><button data-rep="all" data-fmt="pdf">Full report · PDF</button><button data-rep="all" data-fmt="doc">Full report · Word</button></div>';
    h+='<div class="sgrp final"><h3>Final validation</h3>';
-   if(ss.finalVal)h+='<div class="row">'+valLine(ss.finalVal)+(isOwner()?'<button class="ghost" id="unfinal">Unvalidate</button>':'')+'</div>'+fb;
+   if(ss.finalVal)h+='<div class="row">'+valLine(ss.finalVal)+(isDoctor()?'<button class="ghost" id="unfinal">Reopen</button>':'')+'</div>'+fb;
    else if(ready)h+='<div class="small muted">Chemical and every microbiology test are validated. Check everything once more and close the record.</div>'+(can?'<button class="primary" data-val="final">Final validation</button>':'')+fb;
    else h+='<div class="small muted">After chemical and every microbiology test are validated, the whole record is validated one last time here.</div>';
    h+='</div>'}
@@ -560,11 +559,11 @@ function bindSession(){
   
   document.querySelectorAll('[data-val]').forEach(b=>b.onclick=()=>validateModal(ss,b.dataset.val,b.dataset.day));
   document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>report(ss,b.dataset.rep,b.dataset.day,b.dataset.fmt));
-  document.querySelectorAll('[data-unmv]').forEach(b=>b.onclick=()=>{if(!isOwner())return;const m=Object.assign({},ss.microVal);delete m[b.dataset.unmv];ss.microVal=m;ss.finalVal=null;saveSession(ss);render()});
+  document.querySelectorAll('[data-unmv]').forEach(b=>b.onclick=()=>{const m=Object.assign({},ss.microVal);delete m[b.dataset.unmv];ss.microVal=m;ss.finalVal=null;saveSession(ss);render()});
   const dss=$('#delSess');dss&&(dss.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again: delete this record and its '+sessionSamples(ss.id).length+' samples';return}
     Promise.all(sessionSamples(ss.id).map(x=>S.db.doc('samples/'+x.id).delete().then(()=>delete S.samples[x.id]))).then(()=>S.db.doc('sessions/'+ss.id).delete()).then(()=>{delete S.sessions[ss.id];S.view='today';render();logAct('deleted the record <b>'+esc((product(ss.productId)||{}).name||'')+'</b> '+esc(ss.section||'')+(ss.lot?' lot '+esc(ss.lot):''));toast('Record deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
-  const uv=$('#unvalidate');uv&&(uv.onclick=()=>{if(!isOwner()||!confirm('Unvalidate this record so results can be entered again?'))return;ss.unvalidatedLog=(ss.unvalidatedLog||[]).concat([{at:Date.now(),by:(window.LAB_ME||{}).id,was:ss.validated,wasFinal:ss.finalVal||null}]);ss.validated=null;ss.finalVal=null;saveSession(ss);render()});
-  const uf=$('#unfinal');uf&&(uf.onclick=()=>{if(!isOwner())return;ss.finalVal=null;saveSession(ss);render()});
+  const uv=$('#unvalidate');uv&&(uv.onclick=()=>{ss.validated=null;ss.finalVal=null;saveSession(ss);render()});
+  const uf=$('#unfinal');uf&&(uf.onclick=()=>{ss.finalVal=null;saveSession(ss);render()});
   const s=S.samples[S.sampleId]; if(!s)return;
   const live=(testId,key)=>{s.live={by:S.me.id,testId,key,at:Date.now()};presence()};
   document.querySelectorAll('[data-in]').forEach(inp=>{
