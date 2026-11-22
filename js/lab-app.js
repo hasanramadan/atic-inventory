@@ -192,7 +192,10 @@ function sampleChemDone(s,p){const ts=testsOf(p).filter(t=>t.kind!=='micro'&&!op
 /* tests done every N days (water micro: weekly): only due when N days passed since the last time it was done */
 function lastDoneBefore(pid,tid,date){let L='';Object.values(S.samples).forEach(x=>{if(x.productId!==pid||x.date>=date)return;const p=product(pid);const t=p&&p.tests.find(y=>y.id===tid);if(t&&testDone(x,t)&&x.date>L)L=x.date});return L}
 function nextDue(s,t){if(t.weekday!=null&&t.weekday!==''){let d=s.date;for(let i=0;i<7&&wday(d)!==Number(t.weekday);i++)d=addDays(d,1);if(d===s.date&&!testActive(s,t))d=addDays(d,7);return d}if(!t.everyDays)return s.date;const L=lastDoneBefore(s.productId,t.id,s.date);return L?addDays(L,Number(t.everyDays)):s.date}
-function perBatch(t){return !!(t&&(t.perBatch||/brix/i.test(t.name||'')))}
+/* "Done for": per pair (default), every batch, or every batch on one section only. Brix stays every batch unless set to per pair. */
+let CURSEC=null;
+function perBatch(t,s){if(!t)return false;const f=t.perBatch;const sec=(s&&s.sessionId&&S.sessions[s.sessionId]&&S.sessions[s.sessionId].section)||CURSEC||(S.sessions[S.sessionId]||{}).section;
+  if(f===true||f==='all')return true;if(f==='SEC-1'||f==='SEC-2')return sec===f;if(f==='pair')return false;return /brix/i.test(t.name||'')}
 function groupTest(t){return !!(t&&t.kind==='chem'&&(t.grouped||/salin/i.test(t.name||'')))}
 function grpKey(x,m){if(m&&m[x.id])return 'g:'+m[x.id];if(x.pairOf){const h=S.samples[x.pairOf];if(h)return m&&m[h.id]?'g:'+m[h.id]:'self:'+h.id}return 'self:'+x.id}
 function grpMembers(s,t){const ss=S.sessions[s.sessionId];if(!ss)return [s];const m=(ss.groups||{})[t.id]||{};const k=grpKey(s,m);return sessionSamples(ss.id).filter(x=>grpKey(x,m)===k).sort((a,b)=>(a.n||0)-(b.n||0))}
@@ -206,7 +209,7 @@ function isMate(s){return !!(s&&s.pairOf)}
 function pairSkip(s){if(s&&s.pairOf)return true;const p=product(s.productId);return !!(p&&p.microPair&&s.n%2===0)}
 function pairMate(s){return Object.values(S.samples).find(x=>x.sessionId===s.sessionId&&x.n===s.n+1)}
 function microCode(s){if(String(s.code).includes('+'))return s.code;const p=product(s.productId);if(p&&p.microPair&&s.n%2===1){const ss=S.sessions[s.sessionId]||{};const m=pairMate(s);return (m||(Number(ss.batches)||0)>=s.n+1)?s.code+'+'+(s.n+1):s.code}return s.code}
-function testActive(s,t){if(groupTest(t))return grpLead(s,t).id===s.id;if(isMate(s)&&!perBatch(t))return false;if(t.weekday!=null&&t.weekday!==''){if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return wday(s.date)===Number(t.weekday)}if(t.kind==='micro'&&pairSkip(s))return false;if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
+function testActive(s,t){if(groupTest(t))return grpLead(s,t).id===s.id;if(isMate(s)&&!perBatch(t,s))return false;if(t.weekday!=null&&t.weekday!==''){if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return wday(s.date)===Number(t.weekday)}if(t.kind==='micro'&&pairSkip(s))return false;if(!t.everyDays)return true;if(s.on&&s.on[t.id])return true;if(s.off&&s.off[t.id])return false;if(testDone(s,t))return true;return nextDue(s,t)<=s.date}
 function sampleMicroPending(s,p){return testsOf(p,'micro').filter(t=>testActive(s,t)&&!testDone(s,t))}
 function sessionProgress(ss){const p=product(ss.productId);const smp=sessionSamples(ss.id);const target=Math.max(Number(ss.batches)||0,smp.length);const done=smp.filter(s=>sampleChemDone(s,p)).length;return{target,added:smp.length,done,bad:smp.reduce((a,s)=>a+sampleFlags(s,p),0),micro:smp.reduce((a,s)=>a+sampleMicroPending(s,p).length,0)}}
 function myTasks(){return Object.values(S.tasks).filter(t=>!t.done&&(!t.to||t.to===S.me.id))}
@@ -470,7 +473,7 @@ function sampleForm(s,p,ss){
       if(mt&&groupTest(t)){const lh=grpLead(s,t),lm=grpLead(mt,t);
         if(lh.id===lm.id){h+=lh.id===mt.id?'<div data-sid="'+mt.id+'">'+testRow(mt,t)+'</div>':testRow(s,t)}
         else{h+=testRow(s,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(batchLbl(s))+'</b>');h+='<div data-sid="'+mt.id+'">'+testRow(mt,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(batchLbl(mt))+'</b>')+'</div>'}}
-      else if(mt&&perBatch(t)){h+=testRow(s,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(p.code+s.n)+'</b>');h+='<div data-sid="'+mt.id+'">'+testRow(mt,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(mt.code)+'</b>')+'</div>'}
+      else if(mt&&perBatch(t,mt)){h+=testRow(s,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(p.code+s.n)+'</b>');h+='<div data-sid="'+mt.id+'">'+testRow(mt,t).replace('<b>'+esc(t.name)+'</b>','<b>'+esc(t.name)+' · '+esc(mt.code)+'</b>')+'</div>'}
       else h+=testRow(s,t)})});
   if(!testsOf(p).length)h+='<p class="muted">No tests are set up for this product yet. A lab manager can add them under Tests &amp; limits.</p>';
   if(!s.testedBy&&!isAdmin()&&sampleChemDone(s,p))h+='<div class="finishbar"><span>All tests of <b>'+esc(s.code)+'</b> are filled in.</span><button class="primary" id="finishS">Finish sample</button></div>';
@@ -676,7 +679,7 @@ function openPrint(title,body,css){const w=window.open('','_blank');if(!w){toast
   w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');w.document.close()}
 function saveWord(name,title,body,css){const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+(css||DOCCSS)+'</style></head><body>'+body+'</body></html>';
   const blob=new Blob(['﻿'+html],{type:'application/msword'});S.downloads.save({filename:name+'.doc',data:blob});toast('Saved '+name+'.doc')}
-function reportBody(ss,kind,day){const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);const only=kind==='sample'?day:null;
+function reportBody(ss,kind,day){CURSEC=ss&&ss.section;const p=product(ss.productId)||{};const smp=sessionSamples(ss.id);const only=kind==='sample'?day:null;
   const tests=kind==='sample'?testsOf(p).filter(t=>t.kind!=='micro'||smp.some(x=>x.id===only&&testActive(x,t))):kind==='micro'?testsOf(p,'micro').filter(t=>t.id===day):kind==='all'?testsOf(p).filter(t=>t.kind!=='micro'||smp.some(x=>testActive(x,t))):testsOf(p).filter(t=>t.kind!=='micro');
   const v=kind==='micro'?(ss.microVal||{})[day]:kind==='all'?ss.finalVal:kind==='sample'?null:ss.validated;
   const cols=[];tests.forEach(t=>{if(t.kind==='org')cols.push({t,o:null,label:t.name});else (t.outputs||[]).forEach(o=>cols.push({t,o,label:o.label+(o.unit?' ('+o.unit+')':'')}))});
@@ -822,7 +825,7 @@ function periodReport(fmtx){const L=(S._perList||[]).map(id=>S.sessions[id]).fil
   let h='<h1>ATIC Oman · Laboratory report · '+esc(per)+'</h1><div class="muted">'+L.length+' record'+(L.length>1?'s':'')+' · '+esc(catLabel(catSel()))+(F.product?' · '+esc((product(F.product)||{}).name||''):'')+' · made '+niceDate(today())+'</div>';
   h+='<h2>Summary</h2><table><tr><th>Date</th><th>Product</th><th>Section</th><th>Lot</th><th>Samples</th><th>Out of limit</th><th>Micro waiting</th><th>Status</th></tr>'+L.map(s=>{const p=product(s.productId)||{};const pr=sessionProgress(s);return '<tr><td>'+niceDate(s.date)+'</td><td>'+esc(p.name||'')+'</td><td>'+esc(s.section||'')+'</td><td>'+esc(s.lot||'–')+'</td><td>'+pr.done+'/'+pr.target+'</td><td'+(pr.bad?' class="bad"':'')+'>'+pr.bad+'</td><td>'+pr.micro+'</td><td>'+(s.finalVal?'Fully validated':s.validated?'Chemical validated':'Not validated')+'</td></tr>'}).join('')+'</table>';
   [...new Set(L.map(s=>s.productId))].forEach(pid=>{const p=product(pid);if(!p)return;const stat={};const ts=testsOf(p).filter(t=>t.kind!=='org');
-    L.filter(s=>s.productId===pid).forEach(ss=>sessionSamples(ss.id).forEach(x=>ts.forEach(t=>{if(groupTest(t)){if(grpLead(x,t).id!==x.id)return}else{if(isMate(x)&&!perBatch(t))return;if(t.kind==='micro'&&(pairSkip(x)||!testActive(x,t)))return}
+    L.filter(s=>s.productId===pid).forEach(ss=>sessionSamples(ss.id).forEach(x=>ts.forEach(t=>{if(groupTest(t)){if(grpLead(x,t).id!==x.id)return}else{if(isMate(x)&&!perBatch(t,x))return;if(t.kind==='micro'&&(pairSkip(x)||!testActive(x,t)))return}
       resOuts(t,resultOf(x,t)).forEach(o=>{const oc=(t.outputs||[]).find(y=>y.key===o.key);if(!oc||o.value==null||isNaN(o.value))return;const k=t.id+'|'+o.key;(stat[k]=stat[k]||{c:{t,o:oc,label:oc.label+(oc.unit?' ('+oc.unit+')':'')},v:[],lab:[]});stat[k].v.push(Number(o.value));stat[k].lab.push(x.code)})})));
     const sh=statsHTML(stat);if(sh)h+='<h2 style="margin-top:18px">'+esc(p.name)+'</h2>'+sh.replace('<h2>Descriptive statistics</h2>','<h3>Descriptive statistics · all '+esc(p.name)+' results in this period</h3>')});
   h+='<h2 style="margin-top:18px">Details of every record</h2>'+L.map(s=>'<div style="page-break-before:always;margin-top:16px">'+reportBody(s,'all')+'</div>').join('');
@@ -941,6 +944,8 @@ function setupView(){
     (t.kind==='org'?'<span class="muted small">Acceptable / not acceptable</span>':
       '<label class="small">Min <input class="num" data-tl="min" value="'+esc(o.min==null?'':o.min)+'"></label><label class="small">Max <input class="num" data-tl="max" value="'+esc(o.max==null?'':o.max)+'"></label>')+
     (t.kind==='micro'?'<label class="small">Read after <input class="num" data-tm="incubDays" type="number" value="'+esc(t.incubDays||'')+'" style="width:52px"> days</label><select data-tm="everyDays" class="small">'+[['','Every sample'],['7','Once a week'],['14','Every 2 weeks'],['30','Once a month']].map(x=>'<option value="'+x[0]+'"'+(String(t.everyDays||'')===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select>':'')+
+    (p.microPair&&t.kind!=='micro'&&!groupTest(t)?'<label class="small">Done for <select data-tpb class="small">'+[['','Each pair (1+2)'+(/brix/i.test(t.name||'')?' · Brix default: every batch':'')],['pair','Each pair (1+2)'],['all','Every batch'],['SEC-1','Every batch on Section 1 only'],['SEC-2','Every batch on Section 2 only']].filter((x,i)=>!(i===1&&!/brix/i.test(t.name||''))).map(x=>'<option value="'+x[0]+'"'+(String(t.perBatch===true?'all':(t.perBatch||''))===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></label>':'')+
+    (p.microPair&&groupTest(t)?'<span class="small muted">Combined (1+2) as now</span>':'')+
     (t.kind!=='org'?'<button class="ghost" data-rule="'+t.id+'">Edit rule</button>':'')+'<button class="ghost danger" data-tdel title="Remove test">×</button></div>'};
   h+='<div class="card stack" style="gap:8px">'+((p.tests||[]).length?(p.tests||[]).map(row).join(''):'<p class="muted">No tests yet.</p>')+'</div>';
   h+='<div class="row"><button data-addtest="chem">+ Chemical test</button><button data-addtest="micro">+ Micro test</button><button data-addtest="org">+ Taste / smell check</button></div>';
@@ -965,6 +970,7 @@ function bindSetup(){
     r.querySelector('[data-tn]').addEventListener('change',e=>{const old=t.name;t.name=e.target.value.trim()||old;(t.outputs||[]).forEach(o=>{if(o.label===old||t.kind==='micro')o.label=t.name});rerender()});
     r.querySelectorAll('[data-tl]').forEach(i=>i.addEventListener('change',()=>{const o=(t.outputs||[])[0];if(o)o[i.dataset.tl]=i.value.trim().replace(',','.');rerender()}));
     r.querySelectorAll('[data-tm]').forEach(i=>i.addEventListener('change',()=>{t[i.dataset.tm]=Number(i.value)||0;rerender()}));
+    const pb=r.querySelector('[data-tpb]');pb&&pb.addEventListener('change',()=>{if(pb.value)t.perBatch=pb.value;else delete t.perBatch;rerender()});
     const er=r.querySelector('[data-rule]');er&&(er.onclick=()=>{if(JSON.stringify(c)!==JSON.stringify(S.cfg)){toast('Press Save first');return}S.fb={pid:p.id,tid:t.id,kind:t.kind};S.chemTab='fb';S.view='chem';render()});
     r.querySelector('[data-tdel]').onclick=function(){if(this.dataset.armed){p.tests.splice(Number(r.dataset.ti),1);rerender()}else{this.dataset.armed=1;this.textContent='Remove?'}};
   });
