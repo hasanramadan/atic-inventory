@@ -539,16 +539,16 @@ function signoffHTML(ss,smp){
   const can=canValidateHere();const cs=chemState(ss);const mg=microGroups(ss);
   let h='<div class="signoff"><div class="sgrp"><h3>Chemical</h3><div class="small muted">'+cs.done+' of '+cs.need+' results entered</div>';
   const repBtns='<div class="row"><button data-rep="chem" data-fmt="pdf">Report · PDF</button><button data-rep="chem" data-fmt="doc">Report · Word</button></div>';
-  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+(isDoctor()?'<button class="ghost" id="unvalidate">Reopen</button>':'')+'</div>'+repBtns;
+  if(ss.validated)h+='<div class="row">'+valLine(ss.validated)+(isDoctor()?'<button class="ghost" id="unvalidate">Unvalidate</button>':'')+'</div>'+repBtns;
   else{if(can)h+='<button class="primary" data-val="chem"'+(cs.need&&cs.done<cs.need?' title="Some results are missing"':'')+'>Validate chemical</button>';if(cs.done)h+=repBtns+'<span class="small muted">Report of the results so far. It says "Not validated yet" until it is validated.</span>'}
   h+='</div>';
   if(mg.length){h+='<div class="sgrp"><h3>Microbiology</h3>';
     mg.forEach(g=>{const v=(ss.microVal||{})[g.day];h+='<div class="mrow"><div><b>'+esc(g.name)+'</b><div class="small muted">Read on '+[...g.days].sort().map(niceDate).join(', ')+' · '+g.done+' of '+g.need+' entered</div></div><div class="row">'+
-      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Reopen</button>':''):((g.done?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
+      (v?valLine(v)+'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>'+(isDoctor()?'<button class="ghost" data-unmv="'+g.day+'">Unvalidate</button>':''):((g.done?'<button data-rep="micro" data-day="'+g.day+'" data-fmt="pdf">PDF</button><button data-rep="micro" data-day="'+g.day+'" data-fmt="doc">Word</button>':'')+(can?'<button class="primary"'+(g.done<g.need?' disabled title="Enter all results first"':'')+' data-val="micro" data-day="'+g.day+'">Validate</button>':'<span class="pill">Waiting</span>')))+'</div></div>'});
     h+='</div>'}
   {const ready=allValidated(ss);const fb='<div class="row"><button data-rep="all" data-fmt="pdf">Full report · PDF</button><button data-rep="all" data-fmt="doc">Full report · Word</button></div>';
    h+='<div class="sgrp final"><h3>Final validation</h3>';
-   if(ss.finalVal)h+='<div class="row">'+valLine(ss.finalVal)+(isDoctor()?'<button class="ghost" id="unfinal">Reopen</button>':'')+'</div>'+fb;
+   if(ss.finalVal)h+='<div class="row">'+valLine(ss.finalVal)+(isDoctor()?'<button class="ghost" id="unfinal">Unvalidate</button>':'')+'</div>'+fb;
    else if(ready)h+='<div class="small muted">Chemical and every microbiology test are validated. Check everything once more and close the record.</div>'+(can?'<button class="primary" data-val="final">Final validation</button>':'')+fb;
    else h+='<div class="small muted">After chemical and every microbiology test are validated, the whole record is validated one last time here.</div>';
    h+='</div>'}
