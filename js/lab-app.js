@@ -583,15 +583,17 @@ function bindSession(){
       row.querySelector('.outs').replaceWith(tmp.querySelector('.outs'));
       const outs=resOuts(t,r);if(t.inputs.length===1&&t.outputs.length===1)inp.classList.toggle('bad',outs[0].state==='bad');
       liveSave(s)});
-    inp.addEventListener('focus',()=>{live(inp.dataset.in,inp.dataset.key);liveSave(s,300)});
+    inp.addEventListener('focus',()=>{live(inp.dataset.in,inp.dataset.key);const sb=inp.closest('[data-sid]');liveSave((sb&&S.samples[sb.dataset.sid])||s,300)});
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const all=[...document.querySelectorAll('[data-in]')];const i=all.indexOf(inp);if(all[i+1])all[i+1].focus();else inp.blur()}});
   });
-  document.querySelectorAll('[data-org]').forEach(sel=>sel.onchange=()=>{s.results=s.results||{};const r=s.results[sel.dataset.org]=s.results[sel.dataset.org]||{};r.value=sel.value;r.by=S.me.id;if(s.date<today())r.late=true;r.at=Date.now();live(sel.dataset.org,'result');saveSample(s);S.dirty=true});
-  document.querySelectorAll('[data-orgc]').forEach(inp=>inp.addEventListener('input',()=>{s.results=s.results||{};const r=s.results[inp.dataset.orgc]=s.results[inp.dataset.orgc]||{};r.comment=inp.value;live(inp.dataset.orgc,'comment');liveSave(s)}));
+  /* a test row of the paired sample (GM2 inside GM1's screen) sits in [data-sid]: save to THAT sample */
+  const sOf=el=>{const b=el&&el.closest('[data-sid]');return (b&&S.samples[b.dataset.sid])||s};
+  document.querySelectorAll('[data-org]').forEach(sel=>sel.onchange=()=>{const x=sOf(sel);x.results=x.results||{};const r=x.results[sel.dataset.org]=x.results[sel.dataset.org]||{};r.value=sel.value;r.by=S.me.id;if(x.date<today())r.late=true;r.at=Date.now();live(sel.dataset.org,'result');saveSample(x);S.dirty=true});
+  document.querySelectorAll('[data-orgc]').forEach(inp=>inp.addEventListener('input',()=>{const x=sOf(inp);x.results=x.results||{};const r=x.results[inp.dataset.orgc]=x.results[inp.dataset.orgc]||{};r.comment=inp.value;live(inp.dataset.orgc,'comment');liveSave(x)}));
   const sc=$('#sm-code');sc&&sc.addEventListener('change',()=>{const v=sc.value.trim();if(!v){sc.value=s.code;return}s.code=v;saveSample(s);render();toast('Sample renamed')});
   const tk=$('#sm-tank');tk.addEventListener('input',()=>{s.tank=tk.value.trim();liveSave(s)});
-  document.querySelectorAll('[data-mby]').forEach(i=>i.onchange=()=>{s.microBy=Object.assign({},s.microBy,{[i.dataset.mby]:i.value});saveSample(s);toast('Saved')});
-  document.querySelectorAll('[data-mst]').forEach(i=>i.onchange=()=>{s.microStart=Object.assign({},s.microStart,{[i.dataset.mst]:i.value});saveSample(s);render();toast('Start date saved · read date updated')});
+  document.querySelectorAll('[data-mby]').forEach(i=>i.onchange=()=>{const x=sOf(i);x.microBy=Object.assign({},x.microBy,{[i.dataset.mby]:i.value});saveSample(x);toast('Saved')});
+  document.querySelectorAll('[data-mst]').forEach(i=>i.onchange=()=>{const x=sOf(i);x.microStart=Object.assign({},x.microStart,{[i.dataset.mst]:i.value});saveSample(x);render();toast('Start date saved · read date updated')});
   const md=$('#sm-mdate');md&&(md.onchange=()=>{s.microDate=md.value&&md.value!==s.date?md.value:'';s.microStart={};saveSample(s);render();toast('Micro read dates updated')});
   const peSet=(k,v,own)=>{[s].concat(Object.values(S.samples).filter(x=>x.pairOf===s.id)).forEach(x=>{x[k]=v;x.peOwn=Object.assign({},x.peOwn,{[k]:own});saveSample(x)})};
   document.querySelectorAll('[data-pe]').forEach(i=>i.onchange=()=>{const k=i.dataset.pe,own=!!i.value&&i.value!==(ss[k]||'');peSet(k,i.value||ss[k]||'',own);render();toast(own?'Changed for this sample only':'Same as start date')});
@@ -605,11 +607,11 @@ function bindSession(){
         freezeSample(s);s.testedBy=pid;s.testedAt=Date.now();saveSample(s);ss.tested=(ss.tested||[]).concat([{by:pid,samples:[s.id],at:Date.now()}]);saveSession(ss);close();
         const next=sessionSamples(ss.id).find(x=>!x.testedBy&&x.id!==s.id);if(next)S.sampleId=next.id;render();toast(s.code+' finished')}})});
   document.querySelectorAll('[data-srep]').forEach(b=>b.onclick=()=>report(ss,'sample',s.id,b.dataset.srep));
-  document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{s.results=s.results||{};const r=s.results[b.dataset.pick]=s.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(s);render()});
+  document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const x=sOf(b);x.results=x.results||{};const r=x.results[b.dataset.pick]=x.results[b.dataset.pick]||{};r.pick=b.dataset.v;r.by=S.me.id;r.at=Date.now();saveSample(x);render()});
   const dsm=$('#delSample');dsm&&(dsm.onclick=function(){if(!this.dataset.armed){this.dataset.armed=1;this.textContent='Press again to delete '+s.code;return}S.db.doc('samples/'+s.id).delete().then(()=>{delete S.samples[s.id];S.sampleId=null;render();logAct('deleted sample <b class="mono">'+esc(s.code)+'</b> of <b>'+esc((product(s.productId)||{}).name||'')+'</b>');toast('Sample deleted')},e=>toast('Could not delete: '+(e.code||e.message)))});
-  document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{s.on=Object.assign({},s.on,{[b.dataset.mon]:true});if(s.off)delete s.off[b.dataset.mon];saveSample(s);render()});
-  document.querySelectorAll('[data-moff]').forEach(b=>b.onclick=()=>{s.off=Object.assign({},s.off,{[b.dataset.moff]:true});if(s.on)delete s.on[b.dataset.moff];saveSample(s);render()});
-  document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>retestModal(s,p.tests.find(x=>x.id===b.dataset.retest)));
+  document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{const x=sOf(b);x.on=Object.assign({},x.on,{[b.dataset.mon]:true});if(x.off)delete x.off[b.dataset.mon];saveSample(x);render()});
+  document.querySelectorAll('[data-moff]').forEach(b=>b.onclick=()=>{const x=sOf(b);x.off=Object.assign({},x.off,{[b.dataset.moff]:true});if(x.on)delete x.on[b.dataset.moff];saveSample(x);render()});
+  document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>retestModal(sOf(b),p.tests.find(x=>x.id===b.dataset.retest)));
   /* notes */
   let chosen=[];const fi=$('#nt-files');fi.onchange=()=>{chosen=[...fi.files];$('#nt-chosen').textContent=chosen.map(f=>f.name).join(', ')};
   $('#nt-add').onclick=async()=>{const text=$('#nt-text').value.trim();if(!text&&!chosen.length){toast('Write a note or choose a file first.');return}
